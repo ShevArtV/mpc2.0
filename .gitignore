@@ -28,3 +28,6 @@
 /.idea/modules.xml
 /.idea/php.xml
 /.idea/vcs.xml
+/public_html/core/components/translitor/
+/public_html/core/components/console/
+/public_html/core/components/controlerrorlog/
