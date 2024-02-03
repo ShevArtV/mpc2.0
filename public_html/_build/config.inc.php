@@ -11,7 +11,7 @@ if (!defined('MODX_CORE_PATH')) {
 return [
     'name' => 'MigxPageConfigurator',
     'name_lower' => 'migxpageconfigurator',
-    'version' => '1.1.4',
+    'version' => '2.0.0',
     'release' => 'pl',
     // Install package to site right after build
     'install' => false,
