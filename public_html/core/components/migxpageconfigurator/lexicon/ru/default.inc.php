@@ -1,0 +1,57 @@
+<?php
+
+$_lang['setting_mpc_base_section_name'] = 'Имя базовой секции';
+$_lang['setting_mpc_base_section_name_desc'] = 'значение по умолчанию base. задается при установке';
+$_lang['setting_mpc_base_tpl_id'] = 'ID базового шаблона';
+$_lang['setting_mpc_base_tpl_id_desc'] = 'задается при установке. пример в core/components/migxpageconfigurator/elements/templates/base.tpl';
+$_lang['setting_mpc_common_config_name'] = 'Имя общей конфигурации в интерфейсе MIGX';
+$_lang['setting_mpc_common_config_name_desc'] = 'значение по умолчанию config. должно совпадать с именем TV';
+$_lang['setting_mpc_config_tv_id'] = 'ID TV c общей конфигурацией страницы';
+$_lang['setting_mpc_config_tv_id_desc'] = 'значение по умолчанию задается при установке';
+$_lang['setting_mpc_contacts_page_id'] = 'ID страницы Контакты';
+$_lang['setting_mpc_contacts_page_id_desc'] = 'значение по умолчанию задается при установке';
+$_lang['setting_mpc_contacts_tvname'] = 'Имя TV для контактов';
+$_lang['setting_mpc_contacts_tvname_desc'] = 'значение по умолчанию contacts';
+$_lang['setting_mpc_email'] = 'Общий email для форм';
+$_lang['setting_mpc_email_desc'] = 'если нужно указать один email для всех форм, указывайте тут';
+$_lang['setting_mpc_fake_img_path'] = 'Путь к изображению-заглушке';
+$_lang['setting_mpc_fake_img_path_desc'] = 'изображение заполнитель для lazyload';
+$_lang['setting_mpc_lazyload_attr'] = 'Атрибут для LazyLoad';
+$_lang['setting_mpc_lazyload_attr_desc'] = 'если оставить пустым, lazyload работать не будет';
+$_lang['setting_mpc_path_to_calls'] = 'Путь к вызовам форм';
+$_lang['setting_mpc_path_to_calls_desc'] = 'значение по умолчанию calls/. Задается относительно пути в настройке pdotools_elements_path.';
+$_lang['setting_mpc_path_to_chunks'] = 'Путь к чанкам';
+$_lang['setting_mpc_path_to_chunks_desc'] = 'значение по умолчанию chunks/. Задается относительно пути в настройке pdotools_elements_path.';
+$_lang['setting_mpc_path_to_dist'] = 'Путь к распарсенным страницам';
+$_lang['setting_mpc_path_to_dist_desc'] = 'значение по умолчанию parsed/. Задается относительно пути в настройке pdotools_elements_path.';
+$_lang['setting_mpc_path_to_forms'] = 'Путь к чанкам форм';
+$_lang['setting_mpc_path_to_forms_desc'] = 'значение по умолчанию chunks/forms/. Задается относительно пути в настройке pdotools_elements_path.';
+$_lang['setting_mpc_path_to_presets'] = 'Путь к пресетам';
+$_lang['setting_mpc_path_to_presets_desc'] = 'значение по умолчанию components/migxpageconfigurator/elements/presets/';
+$_lang['setting_mpc_path_to_sections'] = 'Путь к секциям';
+$_lang['setting_mpc_path_to_sections_desc'] = 'значение по умолчанию sections/. Задается относительно пути в настройке pdotools_elements_path.';
+$_lang['setting_mpc_path_to_src'] = 'Путь к размеченной верстке';
+$_lang['setting_mpc_path_to_src_desc'] = 'значение по умолчанию elements/templates/. Задается относительно папки core/ сайта.';
+$_lang['setting_mpc_phone_format'] = 'Формат номера телефона';
+$_lang['setting_mpc_phone_format_desc'] = 'значение по умолчанию 8 (\2) \3-\4-\5';
+$_lang['setting_mpc_phone_regexp'] = 'Формат регулярка для форматирования телефона';
+$_lang['setting_mpc_phone_regexp_desc'] = 'значение по умолчанию /(\d)(\d{3})(\d{3})(\d{2})(\d{2})$/';
+$_lang['setting_mpc_static_block_page_id'] = 'ID страницы с Типами страниц';
+$_lang['setting_mpc_static_block_page_id_desc'] = 'значение по умолчанию задается при установке';
+$_lang['setting_mpc_thumb_format'] = 'Формат генерируемого для lazyload изображения';
+$_lang['setting_mpc_thumb_format_desc'] = 'значение по умолчанию png';
+$_lang['setting_mpc_tmplvar_ids'] = 'Список ID TV для добавления создаваемым шаблонам';
+$_lang['setting_mpc_tmplvar_ids_desc'] = 'значение по умолчанию задается при установке';
+$_lang['setting_mpc_tpl_file_extension'] = 'Расширение файлов с вёрсткой';
+$_lang['setting_mpc_tpl_file_extension_desc'] = 'значение по умолчанию .tpl';
+$_lang['setting_mpc_copy_config_tvname'] = 'Имя TV отвечающего за копирование конфигурции';
+$_lang['setting_mpc_copy_config_tvname_desc'] = 'значение по умолчанию copy_sections';
+
+$_lang['setting_mpc_dev_mode'] = 'Включить режим разработки?';
+$_lang['setting_mpc_dev_mode_desc'] = 'в этом режиме при каждом запуске mgr_tpl.php будет очищаться кэш компонента';
+$_lang['setting_mpc_path_to_create'] = 'Путь к создаваемым элементам';
+$_lang['setting_mpc_path_to_create_desc'] = 'путь к папке с файлами в которых есть описание элементов, которые нужно создать.';
+$_lang['setting_mpc_wrapper_name'] = 'Имя секции-обёртки';
+$_lang['setting_mpc_wrapper_name_desc'] = 'это базовая секция в которую заворачиваются все остальные секции.';
+
+$_lang['mpc_pls_no_choose'] = 'Выбрать';

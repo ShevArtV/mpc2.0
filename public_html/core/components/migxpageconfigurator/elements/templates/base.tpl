@@ -1,0 +1,1 @@
+{include 'file:pages/index.tpl'}
