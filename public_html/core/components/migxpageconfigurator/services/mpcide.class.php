@@ -4,6 +4,7 @@ require_once dirname(__FILE__, 2) . '/handlers/mpctemplatehandler.class.php';
 require_once dirname(__FILE__, 2) . '/handlers/mpcresourcehandler.class.php';
 require_once dirname(__FILE__, 2) . '/handlers/mpcgrabhandler.class.php';
 require_once dirname(__FILE__, 2) . '/handlers/mpcfileshandler.class.php';
+require_once dirname(__FILE__, 2) . '/handlers/mpcwraphandler.class.php';
 require_once dirname(__FILE__) . '/logging.class.php';
 
 class MpcIde
@@ -21,18 +22,30 @@ class MpcIde
             'fileName' => $fileName,
             'updContent' => $updContent
         ];
-        $MpcTemplateHandler = new MpcTemplateHandler($this->modx, $properties);
-        $result = $MpcTemplateHandler->handle();
-        if (!$result['success']) {
-            $this->logging->log(implode(' ', $result['errors']), $result['object']);
-            return false;
-        }
-        $properties['html'] = $result['object']['html'];
-        $MpcResourceHandler = new MpcResourceHandler($this->modx, $result['object']);
-        $result = $MpcResourceHandler->handle();
-        if (!$result['success']) {
-            $this->logging->log(implode(' ', $result['errors']), $result['object']);
-            return false;
+
+        if($fileName === 'wrapper.tpl'){
+            $MpcWrapHandler = new MpcWrapHandler($this->modx, $properties);
+            $result = $MpcWrapHandler->handle();
+            if (!$result['success']) {
+                $this->logging->log(implode(' ', $result['errors']), $result['object']);
+                return false;
+            }
+            $properties['html'] = $result['object']['html'];
+        }else{
+            $MpcTemplateHandler = new MpcTemplateHandler($this->modx, $properties);
+            $result = $MpcTemplateHandler->handle();
+            if (!$result['success']) {
+                $this->logging->log(implode(' ', $result['errors']), $result['object']);
+                return false;
+            }
+
+            $properties['html'] = $result['object']['html'];
+            $MpcResourceHandler = new MpcResourceHandler($this->modx, $result['object']);
+            $result = $MpcResourceHandler->handle();
+            if (!$result['success']) {
+                $this->logging->log(implode(' ', $result['errors']), $result['object']);
+                return false;
+            }
         }
 
         $properties['rid'] = $this->modx->resource ? $this->modx->resource->get('id') : $result['object']['rid'];

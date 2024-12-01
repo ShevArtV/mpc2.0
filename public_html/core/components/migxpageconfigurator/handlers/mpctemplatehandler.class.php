@@ -82,7 +82,7 @@ class MpcTemplateHandler extends MpcBaseHandler
             $this->modx->error->addError('[MpcTemplateHandler::manageTemplate] Не удалось сохранить шаблон.');
             return $this->modx->error->failure('', $data);
         }
-        $this->addTemplateVariables($template->get('id'), $data['template_var_ids']);
+        $this->addTemplateVariables($template->get('id'), $data['template_var_ids']?:'');
         $data = array_merge($template->toArray(), $data);
         $data['template'] = $data['id'];
         unset($data['id']);

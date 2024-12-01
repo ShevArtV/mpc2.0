@@ -7,6 +7,9 @@ require_once dirname(__FILE__) . '/mpcbasehandler.class.php';
  */
 class MpcGrabHandler extends MpcBaseHandler
 {
+
+    private array $resourceValues = [];
+
     /**
      * @param $properties
      * @return void
@@ -33,65 +36,98 @@ class MpcGrabHandler extends MpcBaseHandler
      */
     public function handle()
     {
-        if (empty($this->properties['rid'])) {
-            $this->modx->error->addError('[MpcGrabHandler::handle] Не передан ID ресурса.');
-            return $this->modx->error->failure('', $this->properties);
-        }
+        if($this->properties['fileName'] !== 'wrapper.tpl'){
+            if (empty($this->properties['rid'])) {
+                $this->modx->error->addError('[MpcGrabHandler::handle] Не передан ID ресурса.');
+                return $this->modx->error->failure('', $this->properties);
+            }
 
-        if (!$this->properties['resource'] = $this->modx->getObject('modResource', $this->properties['rid'])) {
-            $this->modx->error->addError('[MpcGrabHandler::handle] Не удалось получить ресурс с ID=' . $this->properties['rid']);
-            return $this->modx->error->failure('', $this->properties);
-        }
+            if (!$this->properties['resource'] = $this->modx->getObject('modResource', $this->properties['rid'])) {
+                $this->modx->error->addError('[MpcGrabHandler::handle] Не удалось получить ресурс с ID=' . $this->properties['rid']);
+                return $this->modx->error->failure('', $this->properties);
+            }
 
-        if (empty($this->properties['html'])) {
-            $this->modx->error->addError('[MpcGrabHandler::handle] Не передан HTML.');
-            return $this->modx->error->failure('', $this->properties);
-        }
+            if (empty($this->properties['html'])) {
+                $this->modx->error->addError('[MpcGrabHandler::handle] Не передан HTML.');
+                return $this->modx->error->failure('', $this->properties);
+            }
 
-        $sections = $this->findByAttribute($this->properties['html'], '[data-mpc-section]');
-        if (empty($sections)) {
-            $this->modx->error->addError('[MpcGrabHandler::handle] Не найдено ни одной секции.');
-            return $this->modx->error->failure();
-        }
+            $sections = $this->findByAttribute($this->properties['html'], '[data-mpc-section]');
+            if (empty($sections)) {
+                $this->modx->error->addError('[MpcGrabHandler::handle] Не найдено ни одной секции.');
+                return $this->modx->error->failure();
+            }
 
-        $sbpResource = $this->modx->getObject('modResource', $this->properties['sbpId']);
-        $sbpResourceConfig = $sbpResource->getTVValue($this->properties['commonConfigName']);
-        $this->properties['sbpSectionValues'] = json_decode($sbpResourceConfig, true) ?: [];
+            $sbpResource = $this->modx->getObject('modResource', $this->properties['sbpId']);
+            $sbpResourceConfig = $sbpResource->getTVValue($this->properties['commonConfigName']);
+            $this->properties['sbpSectionValues'] = json_decode($sbpResourceConfig, true) ?: [];
 
-        $result = $this->getObjectData('migxConfig', array('name' => $this->properties['baseSectionName']));
-        if (!$result['success']) {
-            return $this->modx->error->failure('', $result['object']);
-        }
-        //$this->modx->log(1, print_r($result['object'], 1));
-        $defaultFormTabs = json_decode($result['object']['formtabs'], true); // базовая вкладка формы
-        if (!$commonConfig = $this->modx->getObject('migxConfig', array('name' => $this->properties['commonConfigName']))) {
-            $this->modx->error->addError('[MpcGrabHandler::handle] Не удалось получить конфигурацию с именем ' . $this->properties['commonConfigName']);
-            return $this->modx->error->failure('', $this->properties);
-        }
-        $commonConfigData = $commonConfig->toArray(); // получаем конфигурацию конфигураций
-        $this->properties['multipleFormtabs'] = explode('||', $commonConfigData['extended']['multiple_formtabs']);
+            $result = $this->getObjectData('migxConfig', array('name' => $this->properties['baseSectionName']));
+            if (!$result['success']) {
+                return $this->modx->error->failure('', $result['object']);
+            }
 
-        $i = 0;
-        $sectionValues = [];
-        $this->resourceValues = [];
-        foreach ($sections as $section) {
-            $i++;
-            $values = $this->grabSection($section, $defaultFormTabs, $i);
-            $sectionValues[$i] = $values;
-        }
+            $defaultFormTabs = json_decode($result['object']['formtabs'], true); // базовая вкладка формы
+            if (!$commonConfig = $this->modx->getObject('migxConfig', array('name' => $this->properties['commonConfigName']))) {
+                $this->modx->error->addError('[MpcGrabHandler::handle] Не удалось получить конфигурацию с именем ' . $this->properties['commonConfigName']);
+                return $this->modx->error->failure('', $this->properties);
+            }
+            $commonConfigData = $commonConfig->toArray(); // получаем конфигурацию конфигураций
+            $this->properties['multipleFormtabs'] = explode('||', $commonConfigData['extended']['multiple_formtabs']);
 
-        // обновляем или заполняем контент типовой страницы.
-        if ($this->properties['updContent'] && !empty($sectionValues)) {
-            $this->properties['resource']->setTVValue($this->properties['commonConfigName'], json_encode($sectionValues, JSON_UNESCAPED_UNICODE));
-            if (!$this->properties['resource']->save()) {
-                $this->modx->error->addError('[MpcGrabHandler::handle] Не удалось сохранить ресурс с ID ' . $this->properties['resource']->get('id'));
+            $i = 0;
+            $sectionValues = [];
+            foreach ($sections as $section) {
+                $i++;
+                $sectionName = trim($section->getAttribute('data-mpc-section'));
+                $fileName = $sectionName . $this->properties['extension'];
+                $fileNameVis = $this->properties['pdotoolsElementsPath'] . $this->properties['pathToSections'] . $fileName;
+                $properties = [
+                    'defaultFormTabs' => $defaultFormTabs,
+                    'sectionName' => $sectionName,
+                    'isCopy' => $section->hasAttribute('data-mpc-copy'),
+                    'fileNameVis' => $fileNameVis,
+                    'fileName' => $fileName
+                ];
+
+                if (!$properties['isCopy'] && !empty($defaultFormTabs)) {
+                    // обновляем или создаём конфигурацию для секции.
+                    $result = $this->createSectionConfig($section, $properties);
+                    if($result['success']){
+                        $this->properties['multipleFormtabs'][] = $result['object']['id'];
+                    }
+                }
+
+                $values = $this->grabSection($section, $properties, $i);
+                $sectionValues[$i] = $values;
+            }
+
+            // обновляем или заполняем контент типовой страницы.
+            if ($this->properties['updContent'] && !empty($sectionValues)) {
+                $this->properties['resource']->setTVValue($this->properties['commonConfigName'], json_encode($sectionValues, JSON_UNESCAPED_UNICODE));
+                if (!$this->properties['resource']->save()) {
+                    $this->modx->error->addError('[MpcGrabHandler::handle] Не удалось сохранить ресурс с ID ' . $this->properties['resource']->get('id'));
+                    return $this->modx->error->failure('', $result);
+                }
+                $sbpResource->setTVValue($this->properties['commonConfigName'], json_encode($this->properties['sbpSectionValues'], JSON_UNESCAPED_UNICODE));
+                if (!$sbpResource->save()) {
+                    $this->modx->error->addError('[MpcGrabHandler::handle] Не удалось сохранить ресурс с ID ' . $sbpResource->get('id'));
+                    return $this->modx->error->failure('', $result);
+                }
+            }
+
+            $commonConfigData['extended']['multiple_formtabs'] = implode('||', array_unique($this->properties['multipleFormtabs']));
+            $commonConfig->fromArray($commonConfigData);
+            if (!$commonConfig->save()) {
+                $this->modx->error->addError('[MpcGrabHandler::handle] Не удалось сохранить общую конфигурацию.');
                 return $this->modx->error->failure('', $result);
             }
-            $sbpResource->setTVValue($this->properties['commonConfigName'], json_encode($this->properties['sbpSectionValues'], JSON_UNESCAPED_UNICODE));
-            if (!$sbpResource->save()) {
-                $this->modx->error->addError('[MpcGrabHandler::handle] Не удалось сохранить ресурс с ID ' . $sbpResource->get('id'));
-                return $this->modx->error->failure('', $result);
+        }else{
+            if(empty($this->properties['html'])){
+                $this->modx->error->addError('[MpcGrabHandler::handle] Не передан HTML обёртки.');
+                return $this->modx->error->failure('', $this->properties);
             }
+            $this->getFieldsValues($this->properties['html']);
         }
 
         if ($this->properties['updContent'] && !empty($this->resourceValues)) {
@@ -100,49 +136,67 @@ class MpcGrabHandler extends MpcBaseHandler
             }
         }
 
-        $commonConfigData['extended']['multiple_formtabs'] = implode('||', array_unique($this->properties['multipleFormtabs']));
-        $commonConfig->fromArray($commonConfigData);
-        if (!$commonConfig->save()) {
-            $this->modx->error->addError('[MpcGrabHandler::handle] Не удалось сохранить общую конфигурацию.');
-            return $this->modx->error->failure('', $result);
+        return $this->modx->error->success();
+    }
+
+    /**
+     *
+     * @param DOMElement $section
+     * @param array $properties
+     * @return array|object|string
+     */
+    private function createSectionConfig(DOMElement $section, array $properties)
+    {
+        $properties['defaultFormTabs'][1]['fields'] = $this->getSectionFields($section, $properties['defaultFormTabs'][1]['fields']);
+        $properties['defaultFormTabs'][0]['fields'][2]['default'] = $properties['fileNameVis']; // устанавливаем имя файла секции
+        $properties['defaultFormTabs'][0]['fields'][2]['useDefaultIfEmpty'] = 1;
+        $properties['defaultFormTabs'][0]['fields'][1]['default'] = $section->getAttribute('data-mpc-name'); // устанавливаем имя секции
+        $properties['defaultFormTabs'][0]['fields'][1]['useDefaultIfEmpty'] = 1;
+        $properties['defaultFormTabs'][0]['fields'][0]['default'] = $properties['sectionName']; // устанавливаем id секции
+        $properties['defaultFormTabs'][0]['fields'][0]['useDefaultIfEmpty'] = 1;
+
+        $defaultConfigData['formtabs'] = json_encode($properties['defaultFormTabs']);
+        $defaultConfigData['name'] = $properties['sectionName'];
+        $defaultConfigData['extended']['multiple_formtabs_optionstext'] = $section->getAttribute('data-mpc-name');
+        $defaultConfigData['editedon'] = date('Y-m-d H:i:s');
+
+        if (!$config = $this->modx->getObject('migxConfig', array('name' => $properties['sectionName']))) {
+            $config = $this->modx->newObject('migxConfig');
         }
-        return $this->modx->error->success('', $commonConfig);
+
+        $config->fromArray($defaultConfigData);
+        if (!$config->save()) {
+            $this->modx->error->addError('[MpcGrabHandler::createSectionConfig] Не удалось сохранить конфигурацию секции с именем ' . $properties['sectionName']);
+            return $this->modx->error->failure('', $defaultConfigData);
+        }
+
+        return $this->modx->error->success('', $config);
     }
 
     /**
      * @param DOMElement $section
-     * @param array $defaultFormTabs
+     * @param array $properties
      * @param int $i
      * @return array
      */
-    private function grabSection(DOMElement $section, array $defaultFormTabs, int $i = 1): array
+    private function grabSection(DOMElement $section, array $properties, int $i = 1): array
     {
-        $sectionName = trim($section->getAttribute('data-mpc-section'));
-        $isCopy = $section->hasAttribute('data-mpc-copy');
-
         $sectionIsStatic = $section->hasAttribute('data-mpc-static');
-        $sectionId = $sectionName . '_' . str_replace(['.', ',', ' '], '', microtime(true));
-        $fileName = $sectionName . $this->properties['extension'];
-        $fileNameVis = $this->properties['pdotoolsElementsPath'] . $this->properties['pathToSections'] . $fileName;
+        $sectionId = $properties['sectionName'] . '_' . str_replace(['.', ',', ' '], '', microtime(true));
 
         // заполняем содержимое полей
-        $fieldsValues = $this->getFieldsValues($section);
+        $fieldsValues = $this->getFieldsValues($this->getHTMLString($section));
         $fieldsValues['is_static'] = $sectionIsStatic;
         $fieldsValues = array_merge([
             'MIGX_id' => $i,
-            'MIGX_formname' => $sectionName,
+            'MIGX_formname' => $properties['sectionName'],
             'id' => $sectionId,
             'section_name' => trim($section->getAttribute('data-mpc-name')),
-            'file_name' => $fileNameVis,
+            'file_name' => $properties['fileNameVis'],
         ], $fieldsValues);
 
-        if ($sectionIsStatic && !$isCopy) {
-            $this->updateStaticSectionValues($fieldsValues, $sectionName);
-        }
-
-        if (!$isCopy) {
-            // обновляем или создаём конфигурацию для секции.
-            $this->properties['multipleFormtabs'][] = $this->createSectionConfig($section, $defaultFormTabs, $fileNameVis, $sectionName);
+        if ($sectionIsStatic && !$properties['isCopy']) {
+            $this->updateStaticSectionValues($fieldsValues, $properties['sectionName']);
         }
 
         return $fieldsValues;
@@ -150,12 +204,12 @@ class MpcGrabHandler extends MpcBaseHandler
 
     /**
      *
-     * @param DOMElement $section
+     * @param string $html
      * @return array
      */
-    private function getFieldsValues(DOMElement $section): array
+    private function getFieldsValues(string $html): array
     {
-        $fields = $this->parseHTML($this->getHTMLString($section));
+        $fields = $this->parseHTML($html);
         foreach ($fields as $k => $v) {
             if (is_array($v)) {
                 $fields[$k] = json_encode($v);
@@ -216,10 +270,7 @@ class MpcGrabHandler extends MpcBaseHandler
                 if ($fieldName === 'img') {
                     $fields['img_w'] = $row->getAttribute('width');
                     $fields['img_h'] = $row->getAttribute('height');
-                }
-                if ($fieldName === 'img_mob') {
-                    $fields['img_mob_w'] = $row->getAttribute('width');
-                    $fields['img_mob_h'] = $row->getAttribute('height');
+                    $fields['img_a'] = $row->getAttribute('alt');
                 }
             }
             if ($table !== 'config') {
@@ -345,41 +396,6 @@ class MpcGrabHandler extends MpcBaseHandler
         }
     }
 
-    /**
-     *
-     * @param DOMElement $section
-     * @param array $defaultFormTabs
-     * @param string $fileNameVis
-     * @param string $sectionName
-     * @return int
-     */
-    private function createSectionConfig(DOMElement $section, array $defaultFormTabs, string $fileNameVis, string $sectionName): int
-    {
-        $defaultFormTabs[1]['fields'] = $this->getSectionFields($section, $defaultFormTabs[1]['fields']);
-        $defaultFormTabs[0]['fields'][2]['default'] = $fileNameVis; // устанавливаем имя файла секции
-        $defaultFormTabs[0]['fields'][2]['useDefaultIfEmpty'] = 1;
-        $defaultFormTabs[0]['fields'][1]['default'] = $section->getAttribute('data-mpc-name'); // устанавливаем имя секции
-        $defaultFormTabs[0]['fields'][1]['useDefaultIfEmpty'] = 1;
-        $defaultFormTabs[0]['fields'][0]['default'] = $sectionName; // устанавливаем id секции
-        $defaultFormTabs[0]['fields'][0]['useDefaultIfEmpty'] = 1;
-
-        $defaultConfigData['formtabs'] = json_encode($defaultFormTabs);
-        $defaultConfigData['name'] = $sectionName;
-        $defaultConfigData['extended']['multiple_formtabs_optionstext'] = $section->getAttribute('data-mpc-name');
-        $defaultConfigData['editedon'] = date('Y-m-d H:i:s');
-
-        if (!$config = $this->modx->getObject('migxConfig', array('name' => $sectionName))) {
-            $config = $this->modx->newObject('migxConfig');
-        }
-
-        $config->fromArray($defaultConfigData);
-        if (!$config->save()) {
-            $this->modx->error->addError('[MpcGrabHandler::createSectionConfig] Не удалось сохранить конфигурацию секции с именем ' . $sectionName);
-            return $this->modx->error->failure('', $defaultConfigData);
-        }
-
-        return (int)$config->get('id');
-    }
 
     /**
      * @param int $rid

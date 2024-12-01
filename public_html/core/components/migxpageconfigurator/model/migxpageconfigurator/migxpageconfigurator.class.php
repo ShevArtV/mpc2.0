@@ -638,7 +638,6 @@ class MigxPageConfigurator
      */
     private function runTemplateProcessor($file_name)
     {
-        $base_tpl_data = $this->getObjectData('modTemplate', array('id' => $this->base_tpl_id)); // получаем базовый шаблон
         $path_to_file = $this->core_path . $this->path_to_src . $file_name;
         $template_html = phpQuery::newDocument(file_get_contents($path_to_file));
         preg_match('/<!--##(.*?)##-->/', $template_html, $tpl_data_json);
@@ -647,6 +646,7 @@ class MigxPageConfigurator
             return false;
         }
         $tpl_data = json_decode($tpl_data_json[1], 1);
+        $base_tpl_data = $this->getObjectData('modTemplate', array('id' => ($tpl_data['extends'] ?: $this->base_tpl_id))); // получаем базовый шаблон
         $tpl_data = array_merge($base_tpl_data, $tpl_data);
         $template_var_ids = $tpl_data['template_var_ids'] ? array_merge($this->template_var_ids, explode(',', $tpl_data['template_var_ids'])) : $this->template_var_ids;
         $template_var_ids = array_unique($template_var_ids);
@@ -1086,7 +1086,7 @@ class MigxPageConfigurator
             }
         }
         $html = preg_replace($this->pattern, '', $html);
-        if ($section_name === $this->wrapper_name) {
+        if (strpos($section_name, $this->wrapper_name) !== false) {
             $file_name = $section_name . $this->extension;
             $path_to_tpl = $this->core_path . $this->path_to_src . $file_name;
             $content = file_get_contents($path_to_tpl);

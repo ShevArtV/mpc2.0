@@ -69,7 +69,6 @@ class MpcFilesHandler extends MpcBaseHandler
 
             // если секция НЕ является копией аналогичной из другого шаблона - создаем для неё файлы return !empty($newResourceData[$key][0]) ? count($newResourceData[$key]) : 0;
             $this->createSectionFiles($section);
-            break;
         }
 
         return $this->modx->error->success();
@@ -216,10 +215,13 @@ class MpcFilesHandler extends MpcBaseHandler
         $itemAttrName = $properties['level'] ? $properties['itemAttrName'] . '-' . $properties['level'] : $properties['itemAttrName'];
         $fields = $this->findByAttribute($properties['html'], '[' . $fieldAttrName . ']');
         $firstSymbol = $properties['isStatic'] ? '##' : '{';
-
+        $lists = [];
         foreach ($fields as $field) {
+            $rid = (int)$field->getAttribute('data-mpc-rid') ?: '';
             $table = $field->getAttribute('data-mpc-table');
-            $fieldName = !$table ? $field->getAttribute($fieldAttrName) : "{$table}.{$field->getAttribute($fieldAttrName)}";
+            $fieldName = !$table ? $field->getAttribute($fieldAttrName) : "{$table}{$rid}.{$field->getAttribute($fieldAttrName)}";
+            if (!isset($lists['list_images']) && strpos($fieldName, 'list_images') !== false) $lists['list_images'] = true;
+            if (!isset($lists['list_pictures']) && strpos($fieldName, 'list_pictures') !== false) $lists['list_pictures'] = true;
             $fieldHTML = $this->getHTMLString($field);
             $items = $this->findByAttribute($fieldHTML, '[' . $itemAttrName . ']');
 
@@ -233,12 +235,25 @@ class MpcFilesHandler extends MpcBaseHandler
                 $fieldHTMLNew .= $props['html'] . PHP_EOL;
                 $fieldHTMLNew .= '{/foreach}' . PHP_EOL;
             } else {
+                $properties['level'] = $rid ? 0 : $properties['level'];
                 $fieldHTMLNew = $this->getPlaceholder($field, $fieldName, $firstSymbol, $properties['level']);
             }
 
+            if ($rid) {
+                if ($items->count() && strpos($fieldName, 'list') !== false) {
+                    $fieldHTMLNew = "{$firstSymbol}set \${$fieldName} = {$rid} | resource: '{$field->getAttribute($fieldAttrName)}' | fromJSON}\n" . $fieldHTMLNew;
+                } else {
+                    $fieldHTMLNew = "{$firstSymbol}set \${$fieldName} = {$rid} | resource: '{$field->getAttribute($fieldAttrName)}'}\n" . $fieldHTMLNew;
+                }
+            }
             $properties['html'] = str_replace($fieldHTML, $fieldHTMLNew, $properties['html']);
         }
 
+        if (isset($lists['list_images']) && $lists['list_images']) {
+            $complexName = $properties['level'] > 0 ? "\$item{$properties['level']}.list_images" : "\$list_images";
+            $properties['html'] = "{$firstSymbol}set {$complexName} = {$complexName} | fromJSON}\n" . $properties['html'];
+        }
+        /** TODO написать вывод list_pictures */
         return $properties;
     }
 
@@ -251,22 +266,47 @@ class MpcFilesHandler extends MpcBaseHandler
      */
     private function getPlaceholder(DOMElement $row, string $fieldName, string $firstSymbol = '{', int $level = 0): string
     {
-
+        $cond = $row->getAttribute('data-mpc-cond');
         $complexName = $level > 0 ? "\$item{$level}.{$fieldName}" : "\${$fieldName}";
+        $values = $this->findByAttribute($this->getHTMLString($row), '[data-mpc-value]');
 
         if ($row->hasAttribute('src')) {
-            if ($this->properties['lazyloadAttr'] && !$row->hasAttribute('data-mpc-exlazy')) {
-                $row->setAttribute('src', trim($this->properties['fakeImgPath']));
-                $row->setAttribute($this->properties['lazyloadAttr'], "{$firstSymbol}{$complexName}}");
+            if (strpos($fieldName, 'list_images') === false) {
+                $attrs = ['img_a' => 'alt', 'img_w' => 'width', 'img_h' => 'height'];
+                if ($this->properties['lazyloadAttr'] && !$row->hasAttribute('data-mpc-exlazy')) {
+                    $row->setAttribute('src', trim($this->properties['fakeImgPath']));
+                    $row->setAttribute($this->properties['lazyloadAttr'], "{$firstSymbol}{$complexName}}");
+                } else {
+                    $row->setAttribute('src', "{$firstSymbol}{$complexName}}");
+                }
+
+                foreach ($attrs as $fieldName => $attr) {
+                    if ($row->hasAttribute($attr)) {
+                        $complexName = $level > 0 ? "\$item{$level}.{$fieldName}" : "\${$fieldName}";
+                        $row->setAttribute($attr, "{$firstSymbol}{$complexName}}");
+                    }
+                }
             } else {
-                $row->setAttribute('src', "{$firstSymbol}{$complexName}}");
+                $attrs = ['alt', 'width', 'height'];
+                if ($this->properties['lazyloadAttr'] && !$row->hasAttribute('data-mpc-exlazy')) {
+                    $row->setAttribute('src', trim($this->properties['fakeImgPath']));
+                    $row->setAttribute($this->properties['lazyloadAttr'], "{$firstSymbol}{$complexName}.src}");
+                } else {
+                    $row->setAttribute('src', "{$firstSymbol}{$complexName}.src}");
+                }
+
+                foreach ($attrs as $fieldName => $attr) {
+                    if ($row->hasAttribute($attr)) {
+                        $row->setAttribute($attr, "{$firstSymbol}{$complexName}.{$attr}}");
+                    }
+                }
             }
-            return $this->getHTMLString($row);
+            $html = $this->getHTMLString($row);
         } elseif ($fieldName === 'picture' || strpos($fieldName, 'list_pictures') !== false) {
-            return $this->getPicturePlaceholder($row, $complexName, $firstSymbol);
+            $html = $this->getPicturePlaceholder($row, $complexName, $firstSymbol);
         } elseif ($row->hasAttribute('href')) {
             $row->setAttribute('href', "{$firstSymbol}{$complexName}}");
-            return $this->getHTMLString($row);
+            $html = $this->getHTMLString($row);
         } elseif ($style = $row->getAttribute('style')) {
             if ($this->properties['lazyloadAttr'] && !$row->hasAttribute('data-mpc-exlazy')) {
                 $style = preg_replace('/(background|background-image):(\s){0,}url\(\'.*?\'\)(;){0,}/', "", $style);
@@ -275,11 +315,25 @@ class MpcFilesHandler extends MpcBaseHandler
                 $style = preg_replace('/url\(\'(.*?)\'\)/', "url('" . $firstSymbol . $complexName . "}')", $style);
             }
             $row->setAttribute('style', $style);
-            return $this->getHTMLString($row);
+            $html = $this->getHTMLString($row);
+        } elseif ($values->count()) {
+            $values[0]->nodeValue = "{$firstSymbol}\$value}";
+            $value = $this->getHTMLString($values[0]);
+            if ($cond) {
+                $value = "{$firstSymbol}if {$cond}}\n {$value} \n{$firstSymbol}/if}\n";
+            }
+            $html = "{$firstSymbol}foreach {$complexName} as \$value index=\$i last=\$l}\n";
+            $html .= "{$value}\n";
+            $html .= "{$firstSymbol}/foreach}\n";
+            return $html;
         } else {
             $row->nodeValue = "{$firstSymbol}{$complexName}}";
-            return $this->getHTMLString($row);
+            $html = $this->getHTMLString($row);
         }
+        if ($cond) {
+            $html = "{$firstSymbol}if {$cond}}\n {$html}\n {$firstSymbol}/if}\n";
+        }
+        return $html;
     }
 
     /**
