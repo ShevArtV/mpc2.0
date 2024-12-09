@@ -51,6 +51,8 @@ class Parser
      */
     public function getHTMLString($element): string
     {
-        return urldecode(html_entity_decode($element->ownerDocument->saveHTML($element)));
+        $html = urldecode(html_entity_decode($element->ownerDocument->saveHTML($element)));
+        return str_replace(['</source>', '</path>'], '', $html);
+        //return html_entity_decode($element->ownerDocument->saveHTML($element));
     }
 }

@@ -1,7 +1,7 @@
 <?php
 
 /**
- * Сервис для работы извлечения данных из шаблона и записи их в соответствующие конфигурации.
+ * Сервис для извлечения данных из шаблона и записи их в соответствующие конфигурации.
  */
 
 namespace CustomServices\Handlers;
@@ -13,78 +13,34 @@ use CustomServices\Processors\Template;
 /**
  * @author Arthur Shevchenko (https://t.me/ShevArtV)
  */
-class Grabber
+class Grabber extends Base
 {
-    /**
-     * @var Logging
-     */
-    private Logging $logging;
-    /**
-     * @var \modX
-     */
-    public \modX $modx;
-    /**
-     * @var array|mixed
-     */
-    public array $properties = [];
     /**
      * @var array
      */
     public array $resourceValues = [];
     /**
-     * @var Parser
-     */
-    private Parser $parser;
-    /**
      * @var bool
      */
     public bool $updContent = false;
-    /**
-     * @var bool
-     */
-    public bool $debug = true;
-    /**
-     * @var Response
-     */
-    private Response $response;
-
-    /**
-     * @param \modX $modx
-     * @param array|null $properties
-     */
-    public function __construct(\modX $modx, ?array $properties = [])
-    {
-        $this->modx = $modx;
-        $this->properties = $properties;
-        $this->initialize();
-    }
 
     /**
      * @return void
      */
-    private function initialize(): void
+    protected function initialize(): void
     {
-        $this->properties = array_merge($this->properties, [
-            'extension' => $this->modx->getOption('mpc_tpl_file_extension', null, '.tpl'),
-            'pathToSections' => $this->modx->getOption('mpc_path_to_sections', null, 'sections/'),
-            'commonConfigName' => $this->modx->getOption('mpc_common_config_name', null, 'config'),
-            'baseSectionName' => $this->modx->getOption('mpc_base_section_name', null, 'base'),
-            'staticBlocksPageId' => (int)$this->modx->getOption('mpc_static_block_page_id', null, 1),
-            'contactsPageId' => (int)$this->modx->getOption('mpc_contacts_page_id', null, 1),
+        parent::initialize();
+
+        $properties = array_merge($this->properties, [
             'startPageId' => $this->modx->getOption('site_start', null, 1),
-            'serviceInfoTvId' => $this->modx->getOption('mpc_service_info_tv_id', null, 0),
-            'serviceInfoTvName' => $this->modx->getOption('mpc_service_info_tv_name', null, 'service_info'),
-            'contactsTvId' => $this->modx->getOption('mpc_contacts_tv_id', null, 0),
-            'contactsTvName' => $this->modx->getOption('mpc_contacts_tv_name', null, 'contacts'),
-
+            'phoneRegExp' => $this->modx->getOption('mpc_phone_regexp', '', '/(\d)(\d{3})(\d{3})(\d{2})(\d{2})$/'),
+            'phoneFormat' => $this->modx->getOption('mpc_phone_format', '', '8 (\2) \3-\4-\5'),
         ]);
+        $this->properties = array_merge($this->properties, $properties);
         $this->modx->addPackage('migx', $this->properties['corePath'] . 'components/migx/model/');
-
-        $this->logging = new Logging();
-        $logFileName = str_replace('\\', '-', self::class) . '.txt';
-        $this->logging->setPath($logFileName);
-        $this->response = new Response($this->logging);
-        $this->parser = new Parser();
+        if ($this->debug) {
+            $this->logging->write(__METHOD__, "Properties:", $this->properties);
+        }
     }
 
     /**
@@ -95,18 +51,10 @@ class Grabber
     {
         if ($this->debug) {
             $this->logging->write(__METHOD__, "Handle file $fileName");
-            $this->logging->write(__METHOD__, "Properties:", $this->properties);
-        }
-        $filePath = $this->properties['pdotoolsElementsPath'] . $this->properties['pathToSrc'] . $fileName;
-        if ($this->debug) {
-            $this->logging->write(__METHOD__, "Path to file is $filePath");
-        }
-        if (!file_exists($filePath)) {
-            return $this->response->error(__METHOD__, "File not found $filePath");
         }
 
-        if (!$html = file_get_contents($filePath)) {
-            return $this->response->error(__METHOD__, "File $filePath is empty");
+        if (!$html = $this->getFileContent($fileName)) {
+            return $this->response->error(__METHOD__, "File $fileName is empty");
         }
 
         $this->handleInformation($html);
@@ -116,7 +64,7 @@ class Grabber
             $this->handleSections($html);
         }
 
-        return $this->response->success(__METHOD__, "Processing of file $fileName is completed");
+        return $this->response->success(__METHOD__, "Processing of file $fileName is completed", ['resource' => $this->properties['resource']]);
     }
 
     /**
@@ -133,30 +81,67 @@ class Grabber
             return;
         }
 
-        if (!$resource = $this->getResource((int)$this->properties['startPageId'])) {
-            return;
-        }
-
-        $serviceInfo = $resource->getTVValue($this->properties['serviceInfoTvName']);
-        $serviceInfo = $serviceInfo ? json_decode($serviceInfo, true) : [['MIGX_id' => 1]];
         foreach ($items as $item) {
+            $infoKey = $item->getAttribute('data-mpc-info');
+            $ctx = $item->getAttribute('data-mpc-ctx') ?: $this->modx->context->get('key') ?: 'web';
+            if (!$item->hasAttribute('data-mpc-ctx')) {
+                if (!$setting = $this->modx->getObject('modSystemSetting', ['key' => $infoKey])) {
+                    if (!$setting = $this->getClientConfigSetting($infoKey)) {
+                        continue;
+                    }
+                }
+            } else {
+                if (!$setting = $this->modx->getObject('modContextSetting', ['key' => $infoKey, 'context_key' => $ctx])) {
+                    if (!$setting = $this->modx->getObject('modSystemSetting', ['key' => $infoKey])) {
+                        if (!$setting = $this->getClientConfigSetting($infoKey, $ctx)) {
+                            continue;
+                        }
+                    }
+                }
+            }
+            $data = [
+                'context' => $ctx,
+                'context_key' => $ctx,
+                'key' => $infoKey,
+                'value' => ''
+            ];
+
             switch ($item->nodeName) {
                 case 'link':
-                    $serviceInfo[0][$item->getAttribute('data-mpc-info')] = $item->getAttribute('href');
+                    $data['value'] = $item->getAttribute('href');
                     break;
                 case 'img':
-                    $serviceInfo[0][$item->getAttribute('data-mpc-info')] = $item->getAttribute('src');
+                    $data['value'] = $item->getAttribute('src');
                     break;
                 default:
-                    $serviceInfo[0][$item->getAttribute('data-mpc-info')] = $item->nodeValue;
+                    $data['value'] = str_replace('{', '{ ', $item->nodeValue);
                     break;
             }
+            $setting->fromArray($data, '', true);
+            $setting->save();
+            if ($this->debug) {
+                $this->logging->write(__METHOD__, "Info was updated", $data);
+            }
         }
+    }
 
-        $resource->setTVValue($this->properties['serviceInfoTvName'], json_encode($serviceInfo));
-        if ($this->debug) {
-            $this->logging->write(__METHOD__, "Info was updated", $serviceInfo);
+
+    private function getClientConfigSetting($key, $ctx = null): ?object
+    {
+        if ($ctx) {
+            $q = $this->modx->newQuery('cgContextValue');
+            $q->leftJoin('cgSetting', 'Setting');
+            $q->where([
+                'Setting.key' => $key,
+                'cgContextValue.context' => $ctx
+            ]);
+            return $this->modx->getObject('cgContextValue', $q);
         }
+        $q = $this->modx->newQuery('cgSetting');
+        $q->where([
+            '`key`' => $key,
+        ]);
+        return $this->modx->getObject('cgSetting', $q);
     }
 
     /**
@@ -186,20 +171,40 @@ class Grabber
             ];
             foreach ($fields as $field) {
                 $key = $field->getAttribute('data-mpc-cfield');
-                if ($key === 'attributes') {
-                    $str = $this->parser->getHTMLString($field);
-                    $tmp[$key] = str_replace('data-mpc-cfield="attributes"', '', $str);
+                if ($key === 'fvalue') {
+                    continue;
+                }
+
+                if ($key === 'value') {
+                    if ($href = $field->getAttribute('href')) {
+                        $tmp[$key] = $href;
+                    } else {
+                        $tmp[$key] = trim($field->textContent);
+                    }
                 } else {
-                    $tmp[$key] = trim($field->textContent);
+                    $tmp[$key] = $field->getAttribute('src') ?: $this->parser->getHTMLString($field);
                 }
             }
             if (!$tmp['value']) {
                 continue;
             }
+            if(!$tmp['key']){
+                $tmp['key'] = $this->getContactKey($tmp['value']);
+            }
+            if ($tmp['type'] === 'phone') {
+                $tmp['value'] = preg_replace('/[^0-9]/', '', trim($tmp['value']));
+                if (!$tmp['fvalue']) {
+                    $tmp['fvalue'] = preg_replace($this->properties['phoneRegExp'], $this->properties['phoneFormat'], trim($tmp['value']));
+                }
+            }
+
+            /** TODO добавить событие mpcOnGrabContact чтобы можно было форматировать контакты или менять их значения */
 
             $contacts[$tmp['value']]['type'] = $tmp['type'];
+            $contacts[$tmp['value']]['ckey'] = $tmp['key'];
             $contacts[$tmp['value']]['value'] = $tmp['value'];
-            $contacts[$tmp['value']]['contаct_info'][$tmp['placement']] = [
+            $contacts[$tmp['value']]['fvalue'] = $tmp['fvalue'];
+            $contacts[$tmp['value']]['contact_info'][$tmp['placement']] = [
                 'caption' => $tmp['caption'],
                 'attributes' => $tmp['attributes'],
                 'placement' => $tmp['placement'],
@@ -225,10 +230,10 @@ class Grabber
 
         foreach ($contacts as $value => $item) {
             if ($oldContacts[$value]) {
-                $contactInfo = json_decode($oldContacts[$value]['contаct_info'], true) ?: [];
+                $contactInfo = json_decode($oldContacts[$value]['contact_info'], true) ?: [];
                 $contactInfo = $this->reformatMigx($contactInfo, 'placement');
-                $contactInfo = array_merge($contactInfo, $item['contаct_info']);
-                $oldContacts[$value]['contаct_info'] = $contactInfo;
+                $contactInfo = array_merge($contactInfo, $item['contact_info']);
+                $oldContacts[$value]['contact_info'] = $contactInfo;
             } else {
                 $oldContacts[$value] = $item;
             }
@@ -238,15 +243,15 @@ class Grabber
         $i = 0;
         foreach ($oldContacts as $item) {
             $item['MIGX_id'] = ++$i;
-            if (!empty($item['contаct_info'])) {
-                $item['contаct_info'] = !is_array($item['contаct_info']) ? json_decode($item['contаct_info'], true) : $item['contаct_info'];
+            if (!empty($item['contact_info'])) {
+                $item['contact_info'] = !is_array($item['contact_info']) ? json_decode($item['contact_info'], true) : $item['contact_info'];
                 $j = 0;
                 $contactInfo = [];
-                foreach ($item['contаct_info'] as $info) {
+                foreach ($item['contact_info'] as $info) {
                     $info['MIGX_id'] = ++$j;
                     $contactInfo[] = $info;
                 }
-                $item['contаct_info'] = json_encode($contactInfo, JSON_UNESCAPED_UNICODE);
+                $item['contact_info'] = json_encode($contactInfo, JSON_UNESCAPED_UNICODE);
             }
 
             $newContacts[] = $item;
@@ -280,6 +285,8 @@ class Grabber
         }
 
         $tplData['content'] = $tplData['include'] ? "{include '{$tplData['include']}'}" : "{include 'file:pages/index.tpl'}";
+        $wrapperName = $tplData['wrapper'] ?? 'wrapper';
+        $tplData['description'] = "@FILE {$this->properties['pathToSections']}$wrapperName{$this->properties['extension']}";
 
         if (!$tplData['icon']) {
             $tplData['icon'] = "icon-gears";
@@ -291,11 +298,11 @@ class Grabber
             return;
         }
 
-        if (!$resource = $this->modx->getObject('modResource', ['pagetitle' => $tplData['pagetitle'], 'parent' => $this->properties['staticBlocksPageId']])) {
+        if (!$resource = $this->modx->getObject('modResource', ['pagetitle' => $tplData['templatename'], 'parent' => $this->properties['staticBlocksPageId']])) {
             $resource = $this->modx->newObject('modResource');
         }
         $resource->fromArray([
-            'pagetitle' => $tplData['pagetitle'],
+            'pagetitle' => $tplData['templatename'],
             'parent' => $this->properties['staticBlocksPageId'],
             'template' => $template->get('id'),
             'hidemenu' => 1
@@ -361,7 +368,7 @@ class Grabber
                 // обновляем или создаём конфигурацию для секции.
                 $result = $this->createSectionConfig($section, $properties);
                 if ($result['success']) {
-                    $this->properties['multipleFormtabs'][] = $result['object']['id'];
+                    $this->properties['multipleFormtabs'][] = $result['data']['id'];
                 }
             }
 
@@ -371,7 +378,7 @@ class Grabber
 
         // обновляем или заполняем контент типовой страницы.
         if ($this->updContent && !empty($sectionValues)) {
-            if($this->debug){
+            if ($this->debug) {
                 $this->logging->write(__METHOD__, 'Section values', $sectionValues);
             }
             $this->properties['resource']->setTVValue($this->properties['commonConfigName'], json_encode($sectionValues, JSON_UNESCAPED_UNICODE));
@@ -391,9 +398,10 @@ class Grabber
         }
 
         if ($this->updContent && !empty($this->resourceValues)) {
-            if($this->debug){
+            if ($this->debug) {
                 $this->logging->write(__METHOD__, 'Resource values', $this->resourceValues);
             }
+            $this->modx->log(1, print_r($this->resourceValues, 1));
             foreach ($this->resourceValues as $rid => $data) {
                 $this->updateResourceData((int)$rid, $data);
             }
@@ -414,20 +422,6 @@ class Grabber
             $result[$item[$key]] = $item;
         }
         return $result;
-    }
-
-    /**
-     * @param string $html
-     * @param string $selector
-     * @return \DOMNodeList|null
-     */
-    private function getItems(string $html, string $selector): ?\DOMNodeList
-    {
-        $items = $this->parser->findByAttribute($html, $selector);
-        if (!$items->count()) {
-            return null;
-        }
-        return $items;
     }
 
     /**
@@ -475,7 +469,8 @@ class Grabber
         if (!$config->save()) {
             return $this->response->error(__METHOD__, 'Failed to save configuration.', $properties);
         }
-        return $this->response->success(__METHOD__, 'Configuration saved successfully.');
+
+        return $this->response->success(__METHOD__, 'Configuration saved successfully.', ['id' => $config->get('id')]);
     }
 
     /**
@@ -609,93 +604,80 @@ class Grabber
         $level++;
         $nextFieldAttr = 'data-mpc-field-' . $level;
         $nextItemAttr = 'data-mpc-item-' . $level;
-        $sectionImages = [];
-        $sectionPictures = [];
+        $mediaLists = [];
         foreach ($entries as $key => $row) {
-            $table = $row->getAttribute('data-mpc-table') ?: 'config';
-            $rid = (int)$row->getAttribute('data-mpc-rid') ?: $this->properties['rid'];
-
             $fieldName = $row->getAttribute($fieldAttrName);
-            if (strpos($fieldName, 'list_images') !== false) {
-                $sectionImages[] = $row;
-                continue;
-            }
-            if (strpos($fieldName, 'list_pictures') !== false) {
-                $sectionPictures[] = $row;
-                continue;
-            }
 
-            if ($items = $this->getItems($this->parser->getHTMLString($row), '[' . $itemAttrName . ']')) {
-                if (strpos($fieldName, 'list') !== false) {
-                    foreach ($items as $k => $item) {
-                        $fields[$fieldName][$k]['MIGX_id'] = $k + 1;
-                        $fields[$fieldName][$k] = array_merge(
-                            $fields[$fieldName][$k],
-                            $this->parseHTML($this->parser->getHTMLString($item), $nextFieldAttr, $nextItemAttr, $level)
-                        );
-                    }
+            if ($fieldName === 'img') {
+                $fields[$fieldName] = $this->getImageValue($row);
+            } elseif ($fieldName === 'picture') {
+                $fields[$fieldName] = $this->getPictureValue($row);
+            } elseif ($fieldName === 'bg_img') {
+                $fields[$fieldName] = $this->getBackgroundValue($row);
+            } elseif (in_array($fieldName, ['video', 'audio'])) {
+                $fields[$fieldName] = $this->getMediaValue($row);
+            } elseif (in_array($fieldName, ['list_images', 'list_pictures', 'list_audios', 'list_videos'])) {
+                $mediaLists[$fieldName][] = $row;
+            } elseif ($items = $this->getItems($this->parser->getHTMLString($row), '[' . $itemAttrName . ']')) {
+                foreach ($items as $k => $item) {
+                    $fields[$fieldName][$k]['MIGX_id'] = $k + 1;
+                    $value = $this->parseHTML($this->parser->getHTMLString($item), $nextFieldAttr, $nextItemAttr, $level);
+                    $fields[$fieldName][$k] = array_merge(
+                        $fields[$fieldName][$k],
+                        $value
+                    );
                 }
             } else {
-                if ($values = $this->getItems($this->parser->getHTMLString($row), '[data-mpc-value]')) {
-                    if (strpos($fieldName, 'list') !== false) {
-                        $arr = [];
-                        foreach ($values as $value) {
-                            $arr[] = $value->textContent;
-                        }
-                        $fields[$fieldName] = !empty($arr) ? implode('||', $arr) : '';
-                    }
-                } else {
-                    $fields[$fieldName] = $this->getFieldsData($row, $fieldName);
-                }
-                if ($fieldName === 'img') {
-                    $fields['img_w'] = $row->getAttribute('width');
-                    $fields['img_h'] = $row->getAttribute('height');
-                    $fields['img_a'] = $row->getAttribute('alt');
-                }
-            }
-
-
-            if ($table !== 'config') {
-                $this->resourceValues[$rid][$table][$fieldName] = $fields[$fieldName];
-            }
-        }
-        if (!empty($sectionImages)) {
-            foreach ($sectionImages as $k => $row) {
-                $table = $row->getAttribute('data-mpc-table') ?: 'config';
-                $rid = (int)$row->getAttribute('data-mpc-rid') ?: $this->properties['rid'];
-                $fields['list_images'][$k]['MIGX_id'] = $k + 1;
-                $attrNames = ['src', 'alt', 'width', 'height'];
-                foreach ($attrNames as $attrName) {
-                    $fields['list_images'][$k][$attrName] = $row->getAttribute($attrName);
-                }
-
-                if ($table !== 'config') {
-                    $this->resourceValues[$rid][$table]['list_images'] = $fields['list_images'];
-                }
+                $fields[$fieldName] = $this->getValue($row);
             }
         }
 
-        if (!empty($sectionPictures)) {
-            foreach ($sectionPictures as $k => $row) {
-                $table = $row->getAttribute('data-mpc-table') ?: 'config';
-                $rid = (int)$row->getAttribute('data-mpc-rid') ?: $this->properties['rid'];
-                $img = $row->getElementsByTagName('img')[0];
-
-                $fields['list_pictures'][$k]['MIGX_id'] = $k + 1;
-                $fields['list_pictures'][$k]['picture'] = $this->getPictureSources($row);
-                $attrNames = ['alt', 'width', 'height'];
-                foreach ($attrNames as $attrName) {
-                    $fields['list_pictures'][$k][$attrName] = $img->getAttribute($attrName);
+        foreach ($mediaLists as $fieldName => $items) {
+            switch ($fieldName) {
+                case 'list_images':
+                    $valueKey = 'img';
+                    $previewKey = 'preview';
+                    $pathKey = 'src';
+                    $method = 'getImageValue';
+                    break;
+                case 'list_pictures':
+                    $valueKey = 'picture';
+                    $previewKey = 'preview';
+                    $pathKey = 'preview';
+                    $method = 'getPictureValue';
+                    break;
+                case 'list_audios':
+                    $valueKey = 'audio';
+                    $previewKey = 'path';
+                    $pathKey = 'src';
+                    $method = 'getMediaValue';
+                    break;
+                case 'list_videos':
+                    $valueKey = 'video';
+                    $previewKey = 'path';
+                    $pathKey = 'src';
+                    $method = 'getMediaValue';
+                    break;
+            }
+            foreach ($items as $k => $row) {
+                if (!method_exists($this, $method)) {
+                    continue;
                 }
-
-                if ($table !== 'config') {
-                    $this->resourceValues[$rid][$table]['list_pictures'] = $fields['list_pictures'];
-                }
+                $value = $this->$method($row);
+                $value = !is_array($value) ? json_decode($value, true) : $value;
+                $preview = $value[0][$pathKey];
+                $value = json_encode($value, JSON_UNESCAPED_UNICODE);
+                $fields[$fieldName][$k] = [
+                    'MIGX_id' => $k + 1,
+                    $valueKey => $value,
+                    $previewKey => $preview
+                ];
             }
         }
 
         return $fields;
     }
+
 
     /**
      * @param \DOMElement $row
@@ -707,8 +689,10 @@ class Grabber
         $result = '';
         if ($src = $row->getAttribute('src')) {
             $result = $src;
+        } elseif ($fieldName === 'img') {
+            $result = $this->getImageValue($row);
         } elseif ($fieldName === 'picture') {
-            $result = $this->getPictureSources($row);
+            $result = $this->getPictureValue($row);
         } elseif ($href = $row->getAttribute('href')) {
             $result = $href;
         } elseif ($style = $row->getAttribute('style')) {
@@ -734,24 +718,132 @@ class Grabber
         return $result;
     }
 
+    private function getImageValue(\DOMElement $row)
+    {
+        $attrs = ['src', 'alt', 'width', 'height'];
+        $value[0]['MIGX_id'] = 1;
+        foreach ($attrs as $attr) {
+            $value[0][$attr] = $row->getAttribute($attr);
+        }
+
+        return json_encode($value, JSON_UNESCAPED_UNICODE);
+    }
+
+    private function getSourceValue(\DOMElement $row, ?int $idx = 1, ?bool $isPicture = true)
+    {
+        $attrs = ['type', 'media'];
+        if (!$isPicture) {
+            $attrs[] = 'src';
+        } else {
+            $attrs = array_merge($attrs, ['srcset', 'sizes', 'height', 'width']);
+        }
+
+        $value['MIGX_id'] = $idx;
+        foreach ($attrs as $attr) {
+            $value[$attr] = $row->getAttribute($attr);
+        }
+        return $value;
+    }
+
     /**
-     * @param \DOMElement $picture
+     * @param \DOMElement $element
      * @return string
      */
-    private function getPictureSources(\DOMElement $picture): string
+    private function getPictureValue(\DOMElement $element)
     {
-        $pictures = [];
-        if ($sources = $picture->getElementsByTagName('source')) {
+        $picture[0]['MIGX_id'] = 1;
+        $picture[0]['preview'] = '';
+        $picture[0]['img'] = [];
+        $picture[0]['sources'] = [];
+        if ($img = $element->getElementsByTagName('img')) {
+            $picture[0]['img'] = $this->getImageValue($img[0]);
+            $picture[0]['preview'] = $img[0]->getAttribute('src');
+        }
+        if ($sources = $element->getElementsByTagName('source')) {
             foreach ($sources as $k => $source) {
-                $pictures[] = [
-                    'MIGX_id' => $k + 1,
-                    'srcset' => $source->getAttribute('srcset'),
-                    'type' => $source->getAttribute('type'),
-                    'media' => $source->getAttribute('media'),
-                ];
+                $picture[0]['sources'][$k] = $this->getSourceValue($source, $k + 1);
             }
         }
-        return json_encode($pictures);
+
+        return json_encode($picture);
+    }
+
+    private function getMediaValue(\DOMElement $element)
+    {
+        $media[0]['MIGX_id'] = 1;
+        $attrs = [
+            'src' => 'string',
+            'autoplay' => 'boolean',
+            'controls' => 'boolean',
+            'loop' => 'boolean',
+            'muted' => 'boolean',
+            'preload' => 'boolean',
+        ];
+        if ($element->nodeName === 'video') {
+            $attrs = array_merge($attrs, [
+                'src' => 'string',
+                'width' => 'number',
+                'height' => 'number',
+                'poster' => 'string'
+            ]);
+        }
+
+        $media[0]['sources'] = [];
+        foreach ($attrs as $attr => $type) {
+            if ($type === 'boolean') {
+                $media[0][$attr] = $element->hasAttribute($attr) ? 1 : 0;
+            } else {
+                $media[0][$attr] = $element->getAttribute($attr);
+            }
+        }
+        if ($sources = $element->getElementsByTagName('source')) {
+            foreach ($sources as $k => $source) {
+                $media[0]['sources'][$k] = $this->getSourceValue($source, $k + 1, false);
+            }
+        }
+        if (!$media[0]['src']) {
+            $media[0]['src'] = $media[0]['sources'][0]['src'];
+        }
+        return $media;
+        //return json_encode($media);
+    }
+
+    private function getBackgroundValue(\DOMElement $element): string
+    {
+        if ($style = $element->getAttribute('style')) {
+            if (strpos($style, 'background') !== false) {
+                preg_match('/(background|background\-image):.*?url\(\'(.*?)\'\)/', $style, $matches);
+                return $matches[2];
+            }
+        }
+        return '';
+    }
+
+    private function getValue(\DOMElement $element): string
+    {
+        $result = '';
+        if ($href = $element->getAttribute('href')) {
+            $result = $href;
+        } elseif ($element->childNodes->count()) {
+            foreach ($element->childNodes as $childNode) {
+                $result .= $this->parser->getHTMLString($childNode);
+            }
+        } else {
+            $result = $element->nodeValue;
+        }
+        return $result;
+    }
+
+    private function getMultipleValue(\DOMElement $element): string
+    {
+        if ($values = $this->getItems($this->parser->getHTMLString($element), '[data-mpc-value]')) {
+            $arr = [];
+            foreach ($values as $value) {
+                $arr[] = $value->getAttribute('data-mpc-value') ?? $value->textContent;
+            }
+            return !empty($arr) ? implode('||', $arr) : '';
+        }
+        return '';
     }
 
     /**
