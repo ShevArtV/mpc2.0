@@ -664,6 +664,29 @@ class modExtraPackage
         }
     }
 
+    protected function events(){
+        /** @noinspection PhpIncludeInspection */
+        $events = include($this->config['elements'] . 'events.php');
+        if(!empty($vents)){
+            return;
+        }
+        $attributes = [
+            xPDOTransport::PRESERVE_KEYS => true,
+            xPDOTransport::UPDATE_OBJECT => BUILD_EVENT_UPDATE,
+        ];
+        foreach($events as $name => $data){
+            $event = $this->modx->newObject('modEvent');
+            $event->fromArray([
+                'name' => $name,
+                'service' => 6,
+                'groupname' => PKG_NAME,
+            ], '', true, true);
+            $vehicle = $this->builder->createVehicle($event, $attributes);
+            $this->builder->putVehicle($vehicle);
+        }
+        $this->modx->log(modX::LOG_LEVEL_INFO, 'Packaged in ' . count($events) . ' System Events');
+    }
+
 
     /**
      * @return modPackageBuilder

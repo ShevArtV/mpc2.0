@@ -3,10 +3,10 @@
  * Процессор для работы с объектами modx.
  */
 
-namespace CustomServices\Processors;
+namespace MpcServices\Processors;
 
-use CustomServices\Helpers\Logging;
-use CustomServices\Helpers\Response;
+use MpcServices\Helpers\Logging;
+use MpcServices\Helpers\Response;
 
 /**
  * @author Arthur Shevchenko (https://t.me/ShevArtV)

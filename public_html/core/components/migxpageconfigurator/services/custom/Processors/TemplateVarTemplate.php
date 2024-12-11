@@ -3,7 +3,7 @@
  * Процессор для работы с TemplateVarTemplate.
  */
 
-namespace CustomServices\Processors;
+namespace MpcServices\Processors;
 
 /**
  * @author Arthur Shevchenko (https://t.me/ShevArtV)

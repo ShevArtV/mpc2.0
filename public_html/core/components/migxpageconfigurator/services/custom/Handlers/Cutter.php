@@ -4,7 +4,7 @@
  * Сервис для нарезки шаблона на чанки и секции и расстановки плейсхолдеров.
  */
 
-namespace CustomServices\Handlers;
+namespace MpcServices\Handlers;
 
 use Couchbase\ThresholdLoggingTracer;
 
@@ -25,10 +25,9 @@ class Cutter extends Base
         $properties = [
             'pathToChunks' => $this->modx->getOption('mpc_path_to_chunks', null, 'chunks/'),
             'chunkNames' => [],
-            'pattern' => '/(\s)*?data-mpc-(nolazy|sff|copy|symbol|if|static|name|item|unwrap|section|snippet|chunk|include|parse|remove|attr|field|cfield|contact|ctx|info|lim|off)(-){0,1}([0-9]*)(=".*?"){0,1}(\s)*?/',
+            'pattern' => '/(\s)*?data-mpc-(nolazy|copy|symbol|if|static|name|item|unwrap|section|snippet|chunk|include|parse|remove|attr|field|cfield|contact|ctx|info|lim|off)(-){0,1}([0-9]*)(=".*?"){0,1}(\s)*?/',
             'wrapperName' => $this->modx->getOption('mpc_wrapper_name', null, 'wrapper'),
             'thumbFormat' => $this->modx->getOption('mpc_thumb_format', null, 'png'),
-            'lazyloadAttr' => $this->modx->getOption('mpc_lazyload_attr', null, ''),
             'fakeImgPath' => $this->modx->getOption('mpc_fake_img_path', null, 'assets/components/migxpageconfigurator/images/fake-img.png'),
             'pathToPresets' => $this->modx->getOption('mpc_path_to_presets', null, 'components/migxpageconfigurator/elements/presets/'),
             'pathToSamples' => $this->modx->getOption('mpc_path_to_samples', null, 'components/migxpageconfigurator/elements/samples/'),
@@ -44,7 +43,7 @@ class Cutter extends Base
      */
     private function getPresets()
     {
-        $pathToPresets = $this->properties['corePath'] . $this->properties['pathToPresets'];
+        $pathToPresets = $this->properties['pdotoolsElementsPath'] . $this->properties['pathToPresets'];
         if (file_exists($pathToPresets)) {
             $files = scandir($pathToPresets);
             unset($files[0], $files[1]);
@@ -72,7 +71,7 @@ class Cutter extends Base
         }
     }
 
-    public function handle($fileName): array
+    public function handle(string $fileName): array
     {
         if ($this->debug) {
             $this->logging->write(__METHOD__, "Handle file $fileName");
@@ -149,7 +148,7 @@ class Cutter extends Base
             $placement = $contactAttrValue[1] ?? 'default';
             foreach ($fields as $field) {
                 $fieldName = $field->getAttribute('data-mpc-cfield');
-                $complexName = "{\$contacts['$key']['$placement']['$fieldName']}";
+                $complexName = "{\$contacts['$placement']['$key']['$fieldName']}";
                 $search[] = $this->parser->getHTMLString($field);
                 if ($fieldName === 'value') {
                     if ($field->hasAttribute('href')) {
@@ -161,13 +160,13 @@ class Cutter extends Base
                         }
                         $field->setAttribute('href', $complexName);
                     }
-                    $field->nodeValue = "{\$contacts['$key']['$placement']['fvalue']}";
+                    $field->nodeValue = "{\$contacts['$placement']['$key']['fvalue']}";
                     $replacement[] = $this->parser->getHTMLString($field);
                 } else {
                     if ($field->hasAttribute('src')) {
                         $field->setAttribute('src', $complexName);
                         $replacement[] = $this->parser->getHTMLString($field);
-                    }else{
+                    } else {
                         $replacement[] = $complexName;
                     }
                 }
@@ -258,13 +257,14 @@ class Cutter extends Base
     private function putToFile(\DOMElement $element, string $pathToFile)
     {
         $html = $this->parser->getHTMLString($element);
+        $sectionName = trim($element->getAttribute('data-mpc-name'));
         $properties = [
             'html' => $html,
             'element' => $element,
             'fieldAttrName' => 'data-mpc-field',
             'itemAttrName' => 'data-mpc-item',
             'level' => 0,
-            'isStatic' => $element->hasAttribute('data-mpc-static')
+            'isStatic' => empty($this->staticSectionNames) ? $element->hasAttribute('data-mpc-static') : in_array($sectionName, $this->staticSectionNames)
         ];
         $properties = $this->setPlaceholders($properties);
         $properties = $this->setSnippetTags($properties);
@@ -290,7 +290,6 @@ class Cutter extends Base
                 $attrValue = '';
                 foreach ($attr->childNodes as $childNode) {
                     $attrValue .= $this->parser->getHTMLString($childNode);
-                    $this->modx->log(1, print_r($attrValue, 1));
                 }
                 $search = $this->parser->getHTMLString($attr);
                 $properties['html'] = str_replace($search, $attrValue, $properties['html']);
@@ -590,9 +589,6 @@ class Cutter extends Base
             }
 
             foreach ($preset as $k => $v) {
-                if ($k == 'toPls') {
-                    $firstSymbol = PHP_EOL . $firstSymbol . 'set $' . $v . ' = ';
-                }
                 if (is_array($v)) {
                     $v = json_encode($v);
                     $v = str_replace('{', '{ ', $v);
@@ -602,10 +598,14 @@ class Cutter extends Base
                     $v = str_replace('#/', '@FILE ' . $this->properties['pathToChunks'], $v);
                 }
 
-                if (strpos($v, '$') === 0 || strpos($v, '[') === 0 || strpos($v, '{$') === 0 || strpos($v, '"') === 0) {
+                if (strpos($v, '$') === 0 || strpos($v, '[') === 0 || strpos($v, '"') === 0) {
                     $params .= "'$k' => $v," . PHP_EOL;
                 } else {
                     $params .= "'$k' => '$v'," . PHP_EOL;
+                }
+
+                if ($k == 'toPls') {
+                    $firstSymbol = PHP_EOL . $firstSymbol . 'set $' . $v . ' = ';
                 }
             }
         }
@@ -613,7 +613,8 @@ class Cutter extends Base
 
         if ($params) {
             $call = PHP_EOL . "$firstSymbol'$snippetName' | snippet: [
-                        $params]}" . PHP_EOL;
+                        $params
+                        ]}" . PHP_EOL;
         } else {
             $call = PHP_EOL . "$firstSymbol'$snippetName' | snippet: []}" . PHP_EOL;
         }

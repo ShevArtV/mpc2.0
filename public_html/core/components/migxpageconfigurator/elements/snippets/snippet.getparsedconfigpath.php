@@ -1,11 +1,14 @@
 <?php
-use CustomServices\Mpc;
+use MpcServices\Mpc;
 
-require_once MODX_CORE_PATH . 'components/migxpageconfigurator/services/vendor/autoload.php';
 /**
- * @var \Modx $modx
+ * @author Arthur Shevchenko (https://t.me/ShevArtV)
+ * @var \modX $modx
  * @var int $rid
  */
+$corePath = $modx->getOption('core_path', '', MODX_CORE_PATH);
+require_once $corePath . 'components/migxpageconfigurator/services/vendor/autoload.php';
+
 $mpc = new Mpc($modx);
 $resource = $rid ? $modx->getObject('modResource', $rid) : $modx->resource;
 return $mpc->getParsedConfigPath($resource);

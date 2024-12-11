@@ -6,5 +6,5 @@ $vendorDir = dirname(__DIR__);
 $baseDir = dirname($vendorDir);
 
 return array(
-    'CustomServices\\' => array($baseDir . '/custom'),
+    'MpcServices\\' => array($baseDir . '/custom'),
 );

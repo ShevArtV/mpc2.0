@@ -4,7 +4,7 @@
  * Сервис для отрисовки секций.
  */
 
-namespace CustomServices\Handlers;
+namespace MpcServices\Handlers;
 
 /**
  * @author Arthur Shevchenko (https://t.me/ShevArtV)
@@ -16,6 +16,8 @@ class Render extends Base
      */
     private object $pdo;
     private string $wrapperTpl;
+    private array $contacts;
+    private ?object $polylang = null;
 
     /**
      * @return void
@@ -29,14 +31,19 @@ class Render extends Base
             $this->properties['corePath'] . 'components/migxpageconfigurator/elements/fields/exclude_fields.json'
         );
         $properties = [
-            'defaultLangKey' => $this->modx->getOption('polylang_visitor_default_language', '', false),
+            'defaultLangKey' => $this->modx->getOption('polylang_visitor_default_language', '', ''),
+            'commonConfigTvId' => $this->modx->getOption('mpc_config_tv_id', '', 0),
+            'copyConfigTvName' => $this->modx->getOption('mpc_copy_config_tv_name', '', ''),
+            'extension' => $this->modx->getOption('mpc_tpl_file_extension', '', '.tpl'),
         ];
         $this->properties = array_merge($this->properties, $properties);
         if (file_exists($excludeFieldsPath) && $excludeFields = file_get_contents($excludeFieldsPath)) {
             $this->properties['excludeFields'] = json_decode($excludeFields, 1);
         }
         $this->properties['sectionChunkPrefix'] = '@FILE ' . $this->properties['pathToSections'];
-
+        if (is_dir($this->properties['corePath'] . 'components/polylang')) {
+            $this->polylang = $this->modx->getService('polylang', 'Polylang');
+        }
         $this->pdo = $this->modx->getService('pdoTools') ?? $this->modx;
         $this->pdo->config['elementsPath'] = str_replace('\\', '/', $this->pdo->config['elementsPath']);
     }
@@ -44,6 +51,7 @@ class Render extends Base
     public function handle(\modResource $resource): bool
     {
         $resourceData = $resource->toArray();
+        $this->contacts = $this->getContacts();
         $this->wrapperTpl = $this->getWrapperTpl($resourceData['template']);
         $resourceData['tvs'] = [];
         foreach ($resourceData as $k => $v) {
@@ -56,7 +64,7 @@ class Render extends Base
         $staticConfig = '';
 
         if ($donor = $this->modx->getObject('modResource', ['parent' => $this->properties['staticBlocksPageId'], 'template' => $resourceData['template']])) {
-            $donorConfig = $donor->getTVValue($this->properties['commonConfigName']);
+            $donorConfig = $donor->getTVValue($this->properties['commonConfigTvName']);
             foreach ($resourceData as $k => $v) {
                 if (!$v) {
                     unset($resourceData[$k]);
@@ -66,16 +74,12 @@ class Render extends Base
             $resourceData['tvs'] = $this->getResourceTVs($donor->get('id'));
         }
         if ($staticResource = $this->modx->getObject('modResource', $this->properties['staticBlocksPageId'])) {
-            $staticConfig = $staticResource->getTVValue($this->properties['commonConfigName']);
-        }
-        if ($contactsResource = $this->modx->getObject('modResource', $this->properties['contactsPageId'])) {
-            $contacts = $contactsResource->getTVValue($this->properties['contactsTvName']);
-            //$contacts = $this->getContacts($contacts);
+            $staticConfig = $staticResource->getTVValue($this->properties['commonConfigTvName']);
         }
 
-        $resourceData['tvs'] = array_merge($resourceData['tvs']??[], $this->getResourceTVs($rid));
+        $resourceData['tvs'] = array_merge($resourceData['tvs'] ?? [], $this->getResourceTVs($rid));
         $pathToFile = $this->properties['pdotoolsElementsPath'] . $this->properties['pathToDist'] . $rid . $this->properties['extension'];
-        $config = $resource->getTVValue($this->properties['commonConfigName']) ?: $donorConfig;
+        $config = $resource->getTVValue($this->properties['commonConfigTvName']) ?: $donorConfig;
         if ($config) { // если в ресурсе есть поле с конфигурацией
             $this->parseConfig($config, $rid, $resourceData, $donorConfig, $staticConfig); // парсим её и генерируем файл
         } else { // если конфигурации нет
@@ -117,12 +121,12 @@ class Render extends Base
         }
         if (!$donor_config) {
             if ($donor = $this->modx->getObject('modResource', array('parent' => $this->properties['staticBlocksPageId'], 'template' => $resourceData['template']))) {
-                $donor_config = $donor->getTVValue($this->properties['commonConfigName']);
+                $donor_config = $donor->getTVValue($this->properties['commonConfigTvName']);
             }
         }
         if (!$static_config = $this->getPolylangConfig($this->properties['staticBlocksPageId'], $langKey)) {
             if ($static_resource = $this->modx->getObject('modResource', $this->properties['staticBlocksPageId'])) {
-                $static_config = $static_resource->getTVValue($this->properties['commonConfigName']);
+                $static_config = $static_resource->getTVValue($this->properties['commonConfigTvName']);
             }
         }
 
@@ -176,7 +180,7 @@ class Render extends Base
                     $resourceTvs[$tv['name']] = $tv['value'];
                 }
 
-                if ($this->properties['defaultLangKey'] && $langKey !== $this->properties['defaultLangKey']) {
+                if ($this->properties['defaultLangKey'] && $langKey !== $this->properties['defaultLangKey'] && $this->polylang instanceof \Polylang) {
                     $q = $this->modx->newQuery('modTemplateVar');
                     $q->setClassAlias('TV');
                     $q->leftJoin('PolylangTv', 'PolylangTv', 'TV.id = PolylangTv.tmplvarid');
@@ -208,7 +212,7 @@ class Render extends Base
      */
     private function parseConfig(string $config, int $rid, array $resourceData, string $donorConfig, string $staticConfig, ?string $langKey = '')
     {
-        $config = $this->reformatConfig(json_decode($config, 1)); // декодируем конфиг в массив
+        $config = $this->reformatConfig(json_decode($config, true)); // декодируем конфиг в массив
         if ($staticConfig) {
             $staticConfig = $this->reformatConfig(json_decode($staticConfig, 1)); // декодируем конфиг в массив
         }
@@ -244,16 +248,16 @@ class Render extends Base
                     continue;
                 }
 
-                if ($section['is_static'] && $staticConfig) {
+                if ($section['is_static'] && $staticConfig[$section['section_name']]) {
                     $section = $staticConfig[$section['section_name']];
                 }
-                //$section['contacts'] = $this->getContacts();
+                $section['contacts'] = $this->contacts;
                 $section['rid'] = $rid; // передаем на страницу id текущего ресурса
                 $section['idx'] = $i; // передаем на страницу порядковый номер секции
                 $section['sbp_id'] = $this->properties['staticBlocksPageId']; // передаем на страницу id ресурса со статичными блоками
                 $section['cp_id'] = $this->properties['contactsPageId']; // передаем на страницу id ресурса с контактами
 
-                $sets = PHP_EOL."{set \$section = '!getStaticSection'| snippet:['section_name' => '{$section['MIGX_formname']}', 'lang_key' => '{$langKey}']}{if \$section}";
+                $sets = PHP_EOL . "{set \$section = '!getStaticSection'| snippet:['section_name' => '{$section['MIGX_formname']}', 'lang_key' => '{$langKey}']}{if \$section}";
 
                 foreach ($section as $key => $value) {
                     if (is_string($value) && strpos($value, '[{') !== false) {
@@ -267,9 +271,8 @@ class Render extends Base
                         }
                     }
                 }
-                $sets .= '{/if}'.PHP_EOL;
+                $sets .= '{/if}' . PHP_EOL;
                 $section['resource'] = $resourceData; // передаем на страницу все поля ресурса
-                /** TODO Переключение со статичной на не статичную секции через админку. Сейчас это не работает потому что в разметке есть ## */
                 $chunkName = $section['MIGX_formname']; // получаем имя чанка
                 $chunk = $this->properties['sectionChunkPrefix'] . strtolower($chunkName) . $this->properties['extension']; // получаем путь к чанку
                 $tmp = $this->pdo->parseChunk($chunk, $section); // парсим чанк
@@ -277,13 +280,14 @@ class Render extends Base
                     $tmp = $sets . $tmp;
                 }
                 $sectionsHtml[] = str_replace('##', '{', $tmp); // чтобы на фронте работал парсер pdoTools
-
                 $i++;
             }
 
-
             if ($this->wrapperTpl) {
                 $this->modx->setPlaceholder('mpc_sections', $sectionsHtml);
+                $resourceData['contacts'] = $this->contacts;
+                $resourceData['sbp_id'] = $this->properties['staticBlocksPageId']; // передаем на страницу id ресурса со статичными блоками
+                $resourceData['cp_id'] = $this->properties['contactsPageId']; // передаем на страницу id ресурса с контактами
                 $html = $this->pdo->parseChunk($this->wrapperTpl, $resourceData);
                 $html = str_replace('##', '{', $html);
             } else {
@@ -331,7 +335,7 @@ class Render extends Base
                     if (!is_array($v) && strpos($v, '[{') !== false) {
                         $item[$k] = json_decode($v, 1); // преобразуем поля типа migx в массив
                         $item[$k] = $this->jsonDecodeValue($item[$k]);
-                    }else{
+                    } else {
                         $item[$k] = $this->jsonDecodeValue($v);
                     }
                 }
@@ -343,18 +347,14 @@ class Render extends Base
     }
 
     /**
-     *
-     * @param int|null $rid
-     * @param string|null $tvname
-     * @param string|null $langKey
      * @return array
      */
-    public function getContacts(?int $rid = 0, ?string $tvname = '', ?string $langKey = ''): array
+    public function getContacts(): array
     {
         $output = [];
-        $rid = $rid ?: $this->properties['contactsPageId'];
-
-        $tvname = $tvname ?: $this->properties['configTVName'];
+        $rid = $this->properties['contactsPageId'];
+        $langKey = $this->modx->getOption('cultureKey');
+        $tvname = $this->properties['contactsTvName'];
         if (!$tv = $this->modx->getObject('modTemplateVar', ['name' => $tvname])) {
             $this->response->error(__METHOD__, 'Не удалось получить TV со списком контактов.');
         }
@@ -364,22 +364,23 @@ class Render extends Base
             $contacts = json_decode($contacts, 1);
             if (is_array($contacts) && !empty($contacts)) {
                 foreach ($contacts as $item) {
-                    if ($contactInfo = json_decode($item['contаct_info'], true)) {
+                    $placement = 'default';
+                    if ($contactInfo = json_decode($item['contact_info'], true)) {
                         foreach ($contactInfo as $v) {
-                            $output[$v['placement']][$item['value']] = [
+                            $placement = $v['placement'];
+                            $output[$placement][$item['ckey']] = [
                                 'caption' => $v['caption'],
                                 'fvalue' => $item['fvalue'],
                                 'attributes' => $v['attributes'],
                                 'placement' => $v['placement'],
                                 'value' => $item['value'],
-                                'formattedValue' => $item['formattedValue'],
                                 'type' => $item['type'],
                             ];
                         }
                     } else {
-                        $output[$item['value']] = [
+                        $output[$placement][$item['ckey']] = [
                             'value' => $item['value'],
-                            'formattedValue' => $item['formattedValue'],
+                            'fvalue' => $item['fvalue'],
                             'type' => $item['type'],
                         ];
                     }
@@ -392,6 +393,9 @@ class Render extends Base
 
     public function getPolylangConfig(int $rid, string $langKey, ?int $tvId = 0)
     {
+        if (!$this->polylang instanceof \Polylang) {
+            return '';
+        }
         if ($config_polylang = $this->modx->getObject('PolylangTv', [
             'tmplvarid' => $tvId ?: $this->properties['configTVid'],
             'culture_key' => $langKey,
@@ -400,6 +404,132 @@ class Render extends Base
             return $config_polylang->get('value');
         }
         return '';
+    }
+
+    /**
+     *
+     * @param \modResource $resource
+     */
+    public function copyConfig(\modResource $resource)
+    {
+        $template = $resource->get('template');
+        $parent = $resource->get('parent');
+        if ($parent !== $this->properties['staticBlocksPageId']) {
+            if ($template && $this->modx->getCount('modTemplateVarTemplate', array('tmplvarid' => $this->properties['commonConfigTvId'], 'templateid' => $template))) {
+                if ($donor = $this->modx->getObject('modResource', array('template' => $template, 'parent' => $this->properties['staticBlocksPageId']))) {
+                    if ($donor_config = $donor->getTVValue($this->properties['commonConfigTvName'])) {
+                        $config = $resource->getTVValue($this->properties['commonConfigTvName']);
+                        $copy_all = $resource->getTVValue($this->properties['copyConfigTvName']);
+                        if (!$config && $copy_all) {
+                            $resource->setTVValue($this->properties['commonConfigTvName'], $donor_config); // копируем конфиг полностью
+                            $resource->setTVValue($this->properties['copyConfigTvName'], false);
+                        } else {
+                            // копируем содержимое отдельных секций
+                            $flag = false;
+                            $config = json_decode($config, 1) ?: [];
+                            $donor_config = $this->reformatConfig(json_decode($donor_config, 1));
+                            if (!empty($config)) {
+                                foreach ($config as $key => $item) {
+                                    if ($item['copy_from_origin'] && $donor_config[$item['section_name']]) {
+                                        $flag = true;
+                                        $config[$key] = array_merge($item, $donor_config[$item['section_name']]);
+                                    }
+                                }
+                            }
+                            if ($flag) {
+                                $config = json_encode($config);
+                                $resource->setTVValue($this->properties['commonConfigTvName'], $config);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    public function copyPolylangConfig($rid, $langKey)
+    {
+        if (!$this->polylang instanceof \Polylang) {
+            return;
+        }
+
+        $resource = $this->modx->getObject('modResource', $rid);
+        if ($resource) {
+            $q = $this->modx->newQuery('modTemplateVar');
+            $q->select('name, id');
+            $q->where([
+                'name:IN' => [$this->properties['commonConfigTvName'], $this->properties['copyConfigTvName'], $this->properties['contactsTvName']]
+            ]);
+            if ($data = $this->execute($q, [\PDO::FETCH_KEY_PAIR])) {
+                $polyLangTvParams = [
+                    'culture_key' => $langKey,
+                    'content_id' => $rid
+                ];
+                if ($polylangTvCopyConfig = $this->modx->getObject(
+                    'PolylangTv',
+                    array_merge($polyLangTvParams, ['tmplvarid' => $data[$this->properties['commonConfigTvName']]])
+                )) {
+                    foreach ($data as $name => $id) {
+                        if ($name === $this->properties['copyConfigTvName']) {
+                            continue;
+                        }
+                        if (!$polylangTvConfig = $this->modx->getObject('PolylangTv', array_merge($polyLangTvParams, ['tmplvarid' => $id]))) {
+                            $polylangTvConfig = $this->modx->newObject('PolylangTv');
+                        }
+                        if ($tvValue = $resource->getTVValue($name)) {
+                            $polylangTvConfig->fromArray(array_merge($polyLangTvParams, ['tmplvarid' => $id, 'value' => $tvValue]), '', 1);
+                            $polylangTvConfig->save();
+                        }
+                    }
+                    $polylangTvCopyConfig->set('value', 0);
+                    $polylangTvCopyConfig->save();
+                }
+            }
+        }
+    }
+
+    /**
+     * @param string $ids
+     */
+    public function clearCache(string $ids = '')
+    {
+        $basePath = $this->properties['pdotoolsElementsPath'] . $this->properties['pathToDist'];
+        $this->modx->log(1, print_r($basePath, 1));
+        if ($ids) {
+            $ids = explode(',', $ids);
+            foreach ($ids as $id) {
+                $this->deleteParsedConfigFile($id);
+            }
+        } else {
+            $fileNames = scandir($basePath);
+            unset($fileNames[0], $fileNames[1]);
+            foreach ($fileNames as $fileName) {
+                unlink($basePath . $fileName);
+            }
+        }
+    }
+
+    /**
+     * @param int $rid
+     */
+    public function deleteParsedConfigFile(int $rid)
+    {
+        $basePath = $this->properties['pdotoolsElementsPath'] . $this->properties['pathToDist'];
+        $this->modx->log(1, print_r($basePath . $rid . $this->properties['extension'], 1));
+        if (file_exists($basePath . $rid . $this->properties['extension'])) {
+            unlink($basePath . $rid . $this->properties['extension']);
+        }
+        if ($this->polylang instanceof \Polylang) {
+            $q = $this->modx->newQuery('PolylangLanguage');
+            $q->select('culture_key');
+            if ($langs = $this->execute($q, [\PDO::FETCH_COLUMN])) {
+                foreach ($langs as $lang) {
+                    if (file_exists($basePath . $rid . $lang . $this->properties['extension'])) {
+                        unlink($basePath . $rid . $lang . $this->properties['extension']);
+                    }
+                }
+            }
+        }
     }
 
     /**

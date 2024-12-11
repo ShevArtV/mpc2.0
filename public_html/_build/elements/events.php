@@ -1,0 +1,6 @@
+<?php
+
+return [
+    'mpcOnGetSectionFieldsValues' => [],
+    'mpcOnHandleContacts' => [],
+];

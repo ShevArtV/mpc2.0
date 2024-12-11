@@ -60,13 +60,13 @@ if ($transport->xpdo) {
             ],
             'resources' => ''
         ],
-        'config' => [
+        'mpc_config' => [
             'type' => 'migx',
             'caption' => 'Конфигурация страницы',
             'description' => '',
             'category' => 'MigxPageConfigurator',
             'inputProperties' => [
-                'configs' => 'config',
+                'configs' => 'mpc_config',
             ],
             'templates' => [
                 'Вывод содержимого',
@@ -80,26 +80,13 @@ if ($transport->xpdo) {
             'description' => '',
             'category' => 'MigxPageConfigurator',
             'inputProperties' => [
-                'configs' => 'contacts',
+                'configs' => 'mpc_contacts',
             ],
             'templates' => [
                 'Вывод содержимого'
             ],
             'resources' => ''
         ],
-        'form_list' => [
-            'type' => 'migx',
-            'caption' => 'Список форм',
-            'description' => '',
-            'category' => 'MigxPageConfigurator',
-            'inputProperties' => [
-                'configs' => 'form_list',
-            ],
-            'templates' => [
-                'Вывод содержимого'
-            ],
-            'resources' => ''
-        ]
     ];
 
     $modx =& $transport->xpdo;

@@ -9,9 +9,9 @@ return [
             'OnCacheUpdate' => [],
             'OnResourceUndelete' => [],
             'OnDocFormSave' => [],
-            'OnDocFormPrerender' => [],
             'OnLoadWebDocument' => [],
-            'OnPackageInstall' => [],
+            'OnContextSave' => [],
+            'OnSavePolylangContent' => [],
         ],
     ],
 ];

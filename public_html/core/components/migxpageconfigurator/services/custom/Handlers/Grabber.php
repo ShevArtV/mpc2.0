@@ -4,11 +4,11 @@
  * Сервис для извлечения данных из шаблона и записи их в соответствующие конфигурации.
  */
 
-namespace CustomServices\Handlers;
+namespace MpcServices\Handlers;
 
-use CustomServices\Helpers\Logging;
-use CustomServices\Helpers\Response;
-use CustomServices\Processors\Template;
+use MpcServices\Helpers\Logging;
+use MpcServices\Helpers\Response;
+use MpcServices\Processors\Template;
 
 /**
  * @author Arthur Shevchenko (https://t.me/ShevArtV)
@@ -23,6 +23,9 @@ class Grabber extends Base
      * @var bool
      */
     public bool $updContent = false;
+    private string $fileName = '';
+
+    public bool $fromPlugin = false;
 
     /**
      * @return void
@@ -49,22 +52,23 @@ class Grabber extends Base
      */
     public function handle($fileName): array
     {
+        $this->fileName = $fileName;
         if ($this->debug) {
-            $this->logging->write(__METHOD__, "Handle file $fileName");
+            $this->logging->write(__METHOD__, "Handle file $this->fileName");
         }
 
-        if (!$html = $this->getFileContent($fileName)) {
-            return $this->response->error(__METHOD__, "File $fileName is empty");
+        if (!$html = $this->getFileContent($this->fileName)) {
+            return $this->response->error(__METHOD__, "File $this->fileName is empty");
         }
 
         $this->handleInformation($html);
         $this->handleContacts($html);
-        if (strpos($fileName, 'wrapper') === false) {
+        if (strpos($this->fileName, 'wrapper') === false) {
             $this->handleTemplate($html);
             $this->handleSections($html);
         }
 
-        return $this->response->success(__METHOD__, "Processing of file $fileName is completed", ['resource' => $this->properties['resource']]);
+        return $this->response->success(__METHOD__, "Processing of file $this->fileName is completed", ['resource' => $this->properties['resource']]);
     }
 
     /**
@@ -188,7 +192,7 @@ class Grabber extends Base
             if (!$tmp['value']) {
                 continue;
             }
-            if(!$tmp['key']){
+            if (!$tmp['key']) {
                 $tmp['key'] = $this->getContactKey($tmp['value']);
             }
             if ($tmp['type'] === 'phone') {
@@ -196,9 +200,18 @@ class Grabber extends Base
                 if (!$tmp['fvalue']) {
                     $tmp['fvalue'] = preg_replace($this->properties['phoneRegExp'], $this->properties['phoneFormat'], trim($tmp['value']));
                 }
+            } else {
+                $tmp['fvalue'] = $tmp['value'];
             }
 
-            /** TODO добавить событие mpcOnGrabContact чтобы можно было форматировать контакты или менять их значения */
+            $this->modx->invokeEvent('mpcOnHandleContacts', [
+                'contacts' => $tmp,
+            ]);
+
+            $response = isset($this->modx->event->returnedValues) && !empty($this->modx->event->returnedValues['contacts']) ? $this->modx->event->returnedValues['contacts'] : [];
+            if (!empty($response)) {
+                $tmp = $response;
+            }
 
             $contacts[$tmp['value']]['type'] = $tmp['type'];
             $contacts[$tmp['value']]['ckey'] = $tmp['key'];
@@ -331,7 +344,7 @@ class Grabber extends Base
         }
 
         // получаем список всех секций из ресурса Типы страниц
-        $sbpResourceConfig = $staticBlocksResource->getTVValue($this->properties['commonConfigName']);
+        $sbpResourceConfig = $staticBlocksResource->getTVValue($this->properties['commonConfigTvName']);
         $this->properties['sbpSectionValues'] = json_decode($sbpResourceConfig, true) ?: [];
 
         // получаем базовую конфигурацию mpc_base
@@ -341,7 +354,7 @@ class Grabber extends Base
         }
 
         $defaultFormTabs = json_decode($result['data']['object']['formtabs'], true); // получаем вкладки формы базовой конфигурации
-        $result = $this->getObject('migxConfig', ['name' => $this->properties['commonConfigName']]); // получаем mpc_config
+        $result = $this->getObject('migxConfig', ['name' => $this->properties['commonConfigTvName']]); // получаем mpc_config
         if (!$result['success']) {
             return;
         }
@@ -377,17 +390,20 @@ class Grabber extends Base
         }
 
         // обновляем или заполняем контент типовой страницы.
+        $this->properties['resource']->set('introtext', $this->fileName);
+        $this->properties['resource']->save();
         if ($this->updContent && !empty($sectionValues)) {
             if ($this->debug) {
                 $this->logging->write(__METHOD__, 'Section values', $sectionValues);
             }
-            $this->properties['resource']->setTVValue($this->properties['commonConfigName'], json_encode($sectionValues, JSON_UNESCAPED_UNICODE));
+            $this->properties['resource']->setTVValue($this->properties['commonConfigTvName'], json_encode($sectionValues, JSON_UNESCAPED_UNICODE));
             if (!$this->properties['resource']->save()) {
                 $this->response->error(__METHOD__, 'Failed to save resource.');
                 return;
             }
-
-            $staticBlocksResource->setTVValue($this->properties['commonConfigName'], json_encode($this->properties['sbpSectionValues'], JSON_UNESCAPED_UNICODE));
+        }
+        if(!empty($this->properties['sbpSectionValues'])){
+            $staticBlocksResource->setTVValue($this->properties['commonConfigTvName'], json_encode($this->properties['sbpSectionValues'], JSON_UNESCAPED_UNICODE));
         }
 
         $commonConfigData['extended']['multiple_formtabs'] = implode('||', array_unique($this->properties['multipleFormtabs']));
@@ -395,16 +411,6 @@ class Grabber extends Base
         if (!$commonConfig->save()) {
             $this->response->error(__METHOD__, 'Failed to save configuration.');
             return;
-        }
-
-        if ($this->updContent && !empty($this->resourceValues)) {
-            if ($this->debug) {
-                $this->logging->write(__METHOD__, 'Resource values', $this->resourceValues);
-            }
-            $this->modx->log(1, print_r($this->resourceValues, 1));
-            foreach ($this->resourceValues as $rid => $data) {
-                $this->updateResourceData((int)$rid, $data);
-            }
         }
 
         $this->response->success(__METHOD__, 'Section processing is complete.');
@@ -530,7 +536,8 @@ class Grabber extends Base
      */
     private function grabSection(\DOMElement $section, array $properties, int $i = 1): array
     {
-        $sectionIsStatic = $section->hasAttribute('data-mpc-static');
+        $sectionName = trim($section->getAttribute('data-mpc-name'));
+        $sectionIsStatic = empty($this->staticSectionNames) ? $section->hasAttribute('data-mpc-static') : in_array($sectionName, $this->staticSectionNames);
         $sectionId = $properties['sectionName'] . '_' . str_replace(['.', ',', ' '], '', microtime(true));
 
         // заполняем содержимое полей
@@ -540,10 +547,23 @@ class Grabber extends Base
             'MIGX_id' => $i,
             'MIGX_formname' => $properties['sectionName'],
             'id' => $sectionId,
-            'section_name' => trim($section->getAttribute('data-mpc-name')),
+            'section_name' => $sectionName,
             'file_name' => $properties['fileNameVis'],
         ], $fieldsValues);
-        if (!$properties['isCopy']) {
+
+        $this->modx->invokeEvent('mpcOnGetSectionFieldsValues', [
+            'sectionKey' => $properties['sectionName'],
+            'fieldsValues' => $fieldsValues
+        ]);
+
+        $response = isset($this->modx->event->returnedValues) && !empty($this->modx->event->returnedValues['fieldsValues']) ? $this->modx->event->returnedValues['fieldsValues'] : [];
+        if (!empty($response)) {
+            $fieldsValues = $response;
+        }
+
+
+
+        if (!$properties['isCopy'] && $sectionIsStatic) {
             $this->updateStaticSectionValues($fieldsValues, $properties['sectionName']);
         }
 
@@ -562,7 +582,9 @@ class Grabber extends Base
         if (!empty($this->properties['sbpSectionValues'])) {
             foreach ($this->properties['sbpSectionValues'] as $k => $sectionValue) {
                 if ($sectionValue['MIGX_formname'] === $sectionName) {
-                    $this->properties['sbpSectionValues'][$k] = $sectionFieldsValues;
+                    if(!$this->fromPlugin){
+                        $this->properties['sbpSectionValues'][$k] = $sectionFieldsValues;
+                    }
                     $upd = true;
                 }
                 $i = ++$k;
@@ -676,46 +698,6 @@ class Grabber extends Base
         }
 
         return $fields;
-    }
-
-
-    /**
-     * @param \DOMElement $row
-     * @param string $fieldName
-     * @return string
-     */
-    private function getFieldsData(\DOMElement $row, string $fieldName): string
-    {
-        $result = '';
-        if ($src = $row->getAttribute('src')) {
-            $result = $src;
-        } elseif ($fieldName === 'img') {
-            $result = $this->getImageValue($row);
-        } elseif ($fieldName === 'picture') {
-            $result = $this->getPictureValue($row);
-        } elseif ($href = $row->getAttribute('href')) {
-            $result = $href;
-        } elseif ($style = $row->getAttribute('style')) {
-            preg_match('/url\(\'(.*?)\'\)/', $style, $matches);
-            $result = $matches[1];
-        } else {
-            if ($row->childNodes->count()) {
-                foreach ($row->childNodes as $childNode) {
-                    $result .= $this->parser->getHTMLString($childNode);
-                }
-            } else {
-                $result = $row->nodeValue;
-            }
-
-            if ($style = $row->getAttribute('style')) {
-                if (strpos($style, 'background') !== false) {
-                    preg_match('/(background|background\-image):.*?url\(\'(.*?)\'\)/', $style, $matches);
-                    $result = $matches[2];
-                }
-            }
-        }
-
-        return $result;
     }
 
     private function getImageValue(\DOMElement $row)
@@ -832,48 +814,6 @@ class Grabber extends Base
             $result = $element->nodeValue;
         }
         return $result;
-    }
-
-    private function getMultipleValue(\DOMElement $element): string
-    {
-        if ($values = $this->getItems($this->parser->getHTMLString($element), '[data-mpc-value]')) {
-            $arr = [];
-            foreach ($values as $value) {
-                $arr[] = $value->getAttribute('data-mpc-value') ?? $value->textContent;
-            }
-            return !empty($arr) ? implode('||', $arr) : '';
-        }
-        return '';
-    }
-
-    /**
-     * @param int $rid
-     * @param array $data
-     * @return void
-     */
-    private function updateResourceData(int $rid, array $data): void
-    {
-        if (!$resource = $this->getResource($rid)) {
-            $this->response->error(__METHOD__, "Failed to get resource ID = $rid");
-            return;
-        }
-
-        if ($resource->get('parent') === $this->properties['staticBlocksPageId']) {
-            unset($data['res']['pagetitle']);
-        }
-
-        $resource->fromArray($data['res']);
-        $resource->save();
-        if (!empty($data['tv'])) {
-            foreach ($data['tv'] as $key => $value) {
-                if (is_array($value)) {
-                    $value = json_encode($value, JSON_UNESCAPED_UNICODE);
-                }
-                $resource->setTVValue($key, $value);
-            }
-        }
-
-        $this->response->success(__METHOD__, "Resource ID = $rid data updated successfully");
     }
 
     /**

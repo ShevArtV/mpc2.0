@@ -4,7 +4,7 @@
  * Процессор для работы с migxConfig.
  */
 
-namespace CustomServices\Processors;
+namespace MpcServices\Processors;
 
 /**
  * @author Arthur Shevchenko (https://t.me/ShevArtV)

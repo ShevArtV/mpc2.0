@@ -20,10 +20,6 @@ $packages = [
         'version' => '3.0.0-alpha5',
         'service_url' => 'modx.com',
     ],
-    'SendIt' => [
-        'version' => '1.0.7-pl',
-        'service_url' => 'modstore.pro',
-    ]
 ];
 
 $downloadPackage = function ($src, $dst) {

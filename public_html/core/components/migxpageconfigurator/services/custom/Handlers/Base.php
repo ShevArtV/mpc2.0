@@ -4,10 +4,10 @@
  * Сервис с общими методами для обработчиков.
  */
 
-namespace CustomServices\Handlers;
+namespace MpcServices\Handlers;
 
-use CustomServices\Helpers\Logging;
-use CustomServices\Helpers\Response;
+use MpcServices\Helpers\Logging;
+use MpcServices\Helpers\Response;
 
 /**
  * @author Arthur Shevchenko (https://t.me/ShevArtV)
@@ -37,7 +37,8 @@ class Base{
     /**
      * @var bool
      */
-    public bool $debug = true;
+    public bool $debug = false;
+    public array $staticSectionNames = [];
 
     public function __construct(\modX $modx, array $properties = [])
     {
@@ -49,8 +50,7 @@ class Base{
     protected function initialize()
     {
         $properties = [
-            'pathToSrc' => $this->modx->getOption('mpc_path_to_src', null, 'elements/templates/'),
-            'commonConfigName' => $this->modx->getOption('mpc_common_config_name', null, 'mpc_config'),
+            'commonConfigTvName' => $this->modx->getOption('mpc_common_config_name', null, 'mpc_config'),
             'baseSectionName' => $this->modx->getOption('mpc_base_section_name', null, 'mpc_base'),
             'staticBlocksPageId' => (int)$this->modx->getOption('mpc_static_block_page_id', null, 1),
             'pathToSections' => $this->modx->getOption('mpc_path_to_sections', null, 'sections/'),
@@ -97,6 +97,22 @@ class Base{
     public function getContactKey(string $value): string
     {
         return md5($value);
+    }
+
+    public function getStaticSectionNames(\modResource $resource): array
+    {
+        if(!$config = $resource->getTVValue($this->properties['commonConfigTvName'])){
+            return [];
+        }
+        $config = json_decode($config, true);
+        $output = [];
+        foreach ($config as $item){
+            if(!$item['is_static']){
+                continue;
+            }
+            $output[] = $item['section_name'];
+        }
+        return $output;
     }
 
 }

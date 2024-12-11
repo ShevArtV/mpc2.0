@@ -14,7 +14,7 @@ return [
             'template' => 0,
             'hidemenu' => true,
             'published' => false,
-            'richtext' => true
+            'richtext' => false
         ],
     ],
 ];

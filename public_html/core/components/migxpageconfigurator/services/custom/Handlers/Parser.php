@@ -3,7 +3,7 @@
  * Сервис для работы с DOM.
  */
 
-namespace CustomServices\Handlers;
+namespace MpcServices\Handlers;
 
 /**
  * @author Arthur Shevchenko (https://t.me/ShevArtV)

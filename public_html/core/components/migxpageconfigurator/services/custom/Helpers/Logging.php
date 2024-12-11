@@ -3,12 +3,12 @@
  * Сервис для логирования работы скриптов
  */
 
-namespace CustomServices\Helpers;
+namespace MpcServices\Helpers;
 
 /**
  * @author Arthur Shevchenko (https://t.me/ShevArtV)
  * @example
- *      $logging = new \CustomServices\Helpers\Logging();
+ *      $logging = new \MpcServices\Helpers\Logging();
  *      $logFileName = self::class . 'txt';
  *      $logging->setPath($logFileName);
  *      $logging->write(__METHOD__, 'Test', ['class' => $className]);

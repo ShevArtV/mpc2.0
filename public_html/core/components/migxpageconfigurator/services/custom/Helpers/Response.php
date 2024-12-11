@@ -3,12 +3,12 @@
  * Сервис для формирования ответа
  */
 
-namespace CustomServices\Helpers;
+namespace MpcServices\Helpers;
 
 /**
  * @author Arthur Shevchenko (https://t.me/ShevArtV)
  * @example
- *      $response = new \CustomServices\Helpers\Response();
+ *      $response = new \MpcServices\Helpers\Response();
  *      $response->error(__METHOD__, 'Test', ['class' => $className]);
  */
 class Response
