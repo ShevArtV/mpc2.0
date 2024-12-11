@@ -244,6 +244,9 @@ class Cutter extends Base
     {
         $sectionName = trim($section->getAttribute('data-mpc-section'));
         $fileName = $sectionName . $this->properties['extension'];
+        if(!file_exists($this->properties['pdotoolsElementsPath'] . $this->properties['pathToSections'])){
+            mkdir($this->properties['pdotoolsElementsPath'] . $this->properties['pathToSections'], 0777, true);
+        }
         $pathToFile = $this->properties['pdotoolsElementsPath'] . $this->properties['pathToSections'] . $fileName;
 
         $this->putToFile($section, $pathToFile);

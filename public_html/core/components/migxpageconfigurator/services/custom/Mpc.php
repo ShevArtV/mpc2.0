@@ -93,7 +93,7 @@ class Mpc
         }
         $this->grabber->updContent = $updContent ?? false;
         if (!$fileName) {
-            $fileNames = scandir($this->properties['corePath'] . $this->properties['pathToSrc']);
+            $fileNames = scandir($this->properties['pdotoolsElementsPath'] . $this->properties['pathToSrc']);
             unset($fileNames[0], $fileNames[1]);
             foreach ($fileNames as $fileName) {
                 $this->handleFile($fileName);

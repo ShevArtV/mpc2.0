@@ -238,6 +238,9 @@ class Render extends Base
             return ($a['position'] < $b['position']) ? -1 : 1;
         });
 
+        if(!file_exists($this->properties['pdotoolsElementsPath'] . $this->properties['pathToDist'])){
+            mkdir($this->properties['pdotoolsElementsPath'] . $this->properties['pathToDist'], 0777, true);
+        }
         $pathToFile = $this->properties['pdotoolsElementsPath'] . $this->properties['pathToDist'] . $rid . $langKey . $this->properties['extension']; // формируем имя файла
         $sectionsHtml = [];
         $i = 1;
@@ -494,6 +497,9 @@ class Render extends Base
     public function clearCache(string $ids = '')
     {
         $basePath = $this->properties['pdotoolsElementsPath'] . $this->properties['pathToDist'];
+        if(!file_exists($basePath)){
+            return;
+        }
         if ($ids) {
             $ids = explode(',', $ids);
             foreach ($ids as $id) {

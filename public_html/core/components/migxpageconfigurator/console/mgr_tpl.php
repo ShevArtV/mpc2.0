@@ -4,7 +4,7 @@ use MpcServices\Mpc;
 
 define('MODX_API_MODE', true);
 if (!defined('MODX_CORE_PATH')) {
-    define('MODX_CORE_PATH', str_replace('/', '\\', dirname(__FILE__, 4)) . '/');
+    define('MODX_CORE_PATH', dirname(__FILE__, 4) . '/');
 }
 if (!defined('MODX_CONFIG_KEY')) {
     define('MODX_CONFIG_KEY', 'config');
@@ -20,7 +20,7 @@ $modx->setLogLevel(modX::LOG_LEVEL_ERROR);
 $modx->setLogTarget('FILE');
 $modx->error->message = null;
 
-$fileName = $argv[2];
+$fileName = $argv[2] === 'all' ? null : $argv[2];
 $updContent = $argv[3];
 
 $mpc = new Mpc($modx);
