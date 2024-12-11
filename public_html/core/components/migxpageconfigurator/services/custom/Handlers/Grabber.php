@@ -311,11 +311,11 @@ class Grabber extends Base
             return;
         }
 
-        if (!$resource = $this->modx->getObject('modResource', ['pagetitle' => $tplData['templatename'], 'parent' => $this->properties['staticBlocksPageId']])) {
+        if (!$resource = $this->modx->getObject('modResource', ['pagetitle' => 'Шаблон ' . $tplData['templatename'], 'parent' => $this->properties['staticBlocksPageId']])) {
             $resource = $this->modx->newObject('modResource');
         }
         $resource->fromArray([
-            'pagetitle' => $tplData['templatename'],
+            'pagetitle' => 'Шаблон ' . $tplData['templatename'],
             'parent' => $this->properties['staticBlocksPageId'],
             'template' => $template->get('id'),
             'hidemenu' => 1
@@ -397,10 +397,6 @@ class Grabber extends Base
                 $this->logging->write(__METHOD__, 'Section values', $sectionValues);
             }
             $this->properties['resource']->setTVValue($this->properties['commonConfigTvName'], json_encode($sectionValues, JSON_UNESCAPED_UNICODE));
-            if (!$this->properties['resource']->save()) {
-                $this->response->error(__METHOD__, 'Failed to save resource.');
-                return;
-            }
         }
         if(!empty($this->properties['sbpSectionValues'])){
             $staticBlocksResource->setTVValue($this->properties['commonConfigTvName'], json_encode($this->properties['sbpSectionValues'], JSON_UNESCAPED_UNICODE));

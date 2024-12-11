@@ -17,7 +17,7 @@ if ($transport->xpdo) {
             $tvs = $q->stmt->fetchAll(PDO::FETCH_KEY_PAIR);
             $appendedTvs = [];
             foreach ($tvs as $name => $id) {
-                if ($name !== 'mpc_config') {
+                if ($name !== 'contacts') {
                     $appendedTvs[] = $id;
                 }
             }

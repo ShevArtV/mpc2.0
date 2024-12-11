@@ -284,7 +284,7 @@ class Render extends Base
             }
 
             if ($this->wrapperTpl) {
-                $this->modx->setPlaceholder('mpc_sections', $sectionsHtml);
+                $resourceData['sections'] = $sectionsHtml;
                 $resourceData['contacts'] = $this->contacts;
                 $resourceData['sbp_id'] = $this->properties['staticBlocksPageId']; // передаем на страницу id ресурса со статичными блоками
                 $resourceData['cp_id'] = $this->properties['contactsPageId']; // передаем на страницу id ресурса с контактами
@@ -494,7 +494,6 @@ class Render extends Base
     public function clearCache(string $ids = '')
     {
         $basePath = $this->properties['pdotoolsElementsPath'] . $this->properties['pathToDist'];
-        $this->modx->log(1, print_r($basePath, 1));
         if ($ids) {
             $ids = explode(',', $ids);
             foreach ($ids as $id) {
