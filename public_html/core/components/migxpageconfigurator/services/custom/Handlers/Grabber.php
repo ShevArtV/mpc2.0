@@ -549,7 +549,8 @@ class Grabber extends Base
 
         $this->modx->invokeEvent('mpcOnGetSectionFieldsValues', [
             'sectionKey' => $properties['sectionName'],
-            'fieldsValues' => $fieldsValues
+            'fieldsValues' => $fieldsValues,
+            'section' => $section,
         ]);
 
         $response = isset($this->modx->event->returnedValues) && !empty($this->modx->event->returnedValues['fieldsValues']) ? $this->modx->event->returnedValues['fieldsValues'] : [];

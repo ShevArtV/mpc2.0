@@ -48,3 +48,7 @@ $_lang['setting_mpc_wrapper_name'] = 'Имя секции-обёртки';
 $_lang['setting_mpc_wrapper_name_desc'] = 'это базовая секция в которую заворачиваются все остальные секции.';
 $_lang['setting_mpc_dev_mode'] = 'Включить режим разработки?';
 $_lang['setting_mpc_dev_mode_desc'] = 'в этом режиме при каждом запуске mgr_tpl.php очищается кэш';
+$_lang['setting_mpc_common_thumb_params'] = 'Общие параметры создания миниатюр';
+$_lang['setting_mpc_common_thumb_params_desc'] = 'значение по умолчанию q=60&zc=1&f=webp';
+$_lang['setting_mpc_mpc_thumb_snippet'] = 'Сниппет для создания миниатюр';
+$_lang['setting_mpc_mpc_thumb_snippet_desc'] = 'значение по умолчанию pThumb. Для некэшируемого вызова добавьте перед названием сниппета знак !';

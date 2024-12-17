@@ -111,4 +111,14 @@ return [
         'value' => '.tpl',
         'area' => 'default',
     ],
+    'mpc_common_thumb_params' => [
+        'xtype' => 'textfield',
+        'value' => 'q=90&zc=1&f=webp',
+        'area' => 'default',
+    ],
+    'mpc_thumb_snippet' => [
+        'xtype' => 'textfield',
+        'value' => 'pThumb',
+        'area' => 'default',
+    ],
 ];

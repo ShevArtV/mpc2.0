@@ -94,7 +94,11 @@ class mpcLazyLoad {
    */
   loading(elem) {
     if (['IMG', 'IFRAME', 'VIDEO', 'SOURCE'].includes(elem.tagName)) {
-      elem.src = elem.dataset[this.config.rootKey];
+      if(elem.tagName === 'SOURCE' && elem.parentNode.tagName === 'PICTURE'){
+        elem.srcset = elem.dataset[this.config.rootKey];
+      }else{
+        elem.src = elem.dataset[this.config.rootKey];
+      }
     } else {
       elem.style.backgroundImage = 'url(' + elem.dataset[this.config.rootKey] + ')';
     }

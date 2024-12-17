@@ -25,13 +25,15 @@ class Cutter extends Base
         $properties = [
             'pathToChunks' => $this->modx->getOption('mpc_path_to_chunks', null, 'chunks/'),
             'chunkNames' => [],
-            'pattern' => '/(\s)*?data-mpc-(nolazy|copy|symbol|if|static|name|item|unwrap|section|snippet|chunk|include|parse|remove|attr|field|cfield|contact|ctx|info|lim|off)(-){0,1}([0-9]*)(=".*?"){0,1}(\s)*?/',
+            'pattern' => '/(\s)*?data-mpc-(nolazy|copy|symbol|if|static|name|item|unwrap|section|snippet|chunk|include|parse|remove|attr|field|cfield|contact|ctx|info|lim|off|nothumb|thumb)(-){0,1}([0-9]*)(=".*?"){0,1}(\s)*?/',
             'wrapperName' => $this->modx->getOption('mpc_wrapper_name', null, 'wrapper'),
             'thumbFormat' => $this->modx->getOption('mpc_thumb_format', null, 'png'),
             'fakeImgPath' => $this->modx->getOption('mpc_fake_img_path', null, 'assets/components/migxpageconfigurator/images/fake-img.png'),
             'pathToPresets' => $this->modx->getOption('mpc_path_to_presets', null, 'components/migxpageconfigurator/elements/presets/'),
             'pathToSamples' => $this->modx->getOption('mpc_path_to_samples', null, 'components/migxpageconfigurator/elements/samples/'),
             'presets' => [],
+            'commonThumbParams' => $this->modx->getOption('mpc_common_thumb_params', null, ''),
+            'thumbSnippet' => $this->modx->getOption('mpc_mpc_thumb_snippet', null, 'pThumb')
         ];
         $this->properties = array_merge($this->properties, $properties);
         $this->getPresets();
@@ -244,7 +246,7 @@ class Cutter extends Base
     {
         $sectionName = trim($section->getAttribute('data-mpc-section'));
         $fileName = $sectionName . $this->properties['extension'];
-        if(!file_exists($this->properties['pdotoolsElementsPath'] . $this->properties['pathToSections'])){
+        if (!file_exists($this->properties['pdotoolsElementsPath'] . $this->properties['pathToSections'])) {
             mkdir($this->properties['pdotoolsElementsPath'] . $this->properties['pathToSections'], 0777, true);
         }
         $pathToFile = $this->properties['pdotoolsElementsPath'] . $this->properties['pathToSections'] . $fileName;
@@ -358,8 +360,9 @@ class Cutter extends Base
                 } else {
                     $sampleKey = 'foreach';
                 }
+                $html = htmlentities($props['html']);
                 $field->nodeValue = str_replace(['##', 'subject', '^', 'html', 'limit', 'offset'],
-                    [$firstSymbol, $complexName, $props['level'], $props['html'], $limit, $offset],
+                    [$firstSymbol, $complexName, $props['level'], $html, $limit, $offset],
                     $this->properties['samples'][$sampleKey]);
 
                 $fieldHTMLNew = $this->parser->getHTMLString($field);
@@ -370,7 +373,7 @@ class Cutter extends Base
             } else {
                 $fieldHTMLNew = $this->setDefaultPlaceholder($field, $fieldName, $properties);
             }
-
+            /** TODO Рассмотреть возможность добавить событие для подмены плейсхолдеров */
             if (!empty($fieldHTMLNew)) {
                 //$this->modx->log(1, print_r([$fieldHTML, $fieldHTMLNew], 1));
                 $properties['html'] = str_replace($fieldHTML, $fieldHTMLNew, $properties['html']);
@@ -386,12 +389,29 @@ class Cutter extends Base
         $html = '';
         if ($style = $row->getAttribute('style')) {
             list($firstSymbol, $complexName) = $this->getSymbolComplex($row, $fieldName, $properties['level'], $properties['isStatic']);
+            preg_match('/width:(.*?);/', $style, $width);
+            preg_match('/height:(.*?);/', $style, $height);
+
+            if (!$row->hasAttribute('data-mpc-nothumb')) {
+                $src = $this->getThumb([
+                    'width' => (int)$width[1],
+                    'height' => (int)$height[1],
+                    'thumbParams' => $row->getAttribute('data-mpc-thumb'),
+                    'firstSymbol' => $firstSymbol,
+                    'complexName' => $complexName,
+                    'srcAttr' => '',
+                    'setValues' => true
+                ]);
+            } else {
+                $src = "{$firstSymbol}{$complexName}}";
+            }
+
 
             if ($this->properties['lazyloadAttr'] && !$row->hasAttribute('data-mpc-nolazy')) {
-                $row->setAttribute($this->properties['lazyloadAttr'], "{$firstSymbol}{$complexName}}");
+                $row->setAttribute($this->properties['lazyloadAttr'], $src);
                 $row->removeAttribute('style');
             } else {
-                $style = preg_replace('/url\(\'(.*?)\'\)/', "url('" . $firstSymbol . $complexName . "}')", $style);
+                $style = preg_replace('/url\(\'(.*?)\'\)/', "url('" . $src . "')", $style);
                 $row->setAttribute('style', $style);
             }
 
@@ -404,16 +424,35 @@ class Cutter extends Base
     {
         list($firstSymbol, $complexName) = $this->getSymbolComplex($row, $fieldName, $properties['level'], $properties['isStatic']);
         $imgAttrs = ['width', 'height', 'alt'];
+        $complexName .= '[0]';
+        $prefix = "{$firstSymbol}{$complexName}";
+
+        if (!$row->hasAttribute('data-mpc-nothumb')) {
+            $src = $this->getThumb([
+                'width' => $row->hasAttribute('width'),
+                'height' => $row->hasAttribute('height'),
+                'thumbParams' => $row->getAttribute('data-mpc-thumb'),
+                'firstSymbol' => $firstSymbol,
+                'complexName' => $complexName,
+                'srcAttr' => 'src'
+            ]);
+        } else {
+            $src = "$prefix.src}";
+        }
+
 
         if ($this->properties['lazyloadAttr'] && !$row->hasAttribute('data-mpc-nolazy')) {
-            $row->setAttribute($this->properties['lazyloadAttr'], "{$firstSymbol}{$complexName}[0].src}");
+            $row->setAttribute($this->properties['lazyloadAttr'], $src);
             $row->setAttribute('src', $this->properties['fakeImgPath']);
         } else {
-            $row->setAttribute('src', "{$firstSymbol}{$complexName}[0].src}");
+            $row->setAttribute('src', $src);
         }
 
         foreach ($imgAttrs as $attr) {
-            $row->setAttribute($attr, "{$firstSymbol}{$complexName}[0].{$attr}}");
+            if (!$row->hasAttribute($attr)) {
+                continue;
+            }
+            $row->setAttribute($attr, "$prefix.{$attr}}");
         }
 
         $html = $this->parser->getHTMLString($row);
@@ -426,7 +465,6 @@ class Cutter extends Base
 
     private function setMediaPlaceholder(\DOMElement $row, string $fieldName, array $properties)
     {
-        $condition = $row->getAttribute('data-mpc-if');
         $pls = '';
         list($firstSymbol, $complexName) = $this->getSymbolComplex($row, $fieldName, $properties['level'], $properties['isStatic']);
         $complexName .= '[0]';
@@ -447,9 +485,27 @@ class Cutter extends Base
             $search = ['##', 'complexName', 'html'];
             $replace = [$firstSymbol, $complexName];
             if ($this->properties['lazyloadAttr'] && !$row->hasAttribute('data-mpc-nolazy')) {
-                $source->setAttribute($this->properties['lazyloadAttr'], "{$firstSymbol}{$complexName}.src}");
-                $source->removeAttribute('src');
-                $source->removeAttribute('srcset');
+                if ($row->nodeName === 'picture') {
+                    $attr = 'srcset';
+                    if (!$source->hasAttribute('data-mpc-nothumb')) {
+                        $src = $this->getThumb([
+                            'width' => $source->hasAttribute('width'),
+                            'height' => $source->hasAttribute('height'),
+                            'thumbParams' => $source->getAttribute('data-mpc-thumb'),
+                            'firstSymbol' => $firstSymbol,
+                            'complexName' => $complexName,
+                            'srcAttr' => 'srcset'
+                        ]);
+                    } else {
+                        $src = "{$firstSymbol}\$source.$attr}";
+                    }
+                } else {
+                    $attr = 'src';
+                    $src = "{$firstSymbol}\$source.$attr}";
+                }
+                $attr = $row->nodeName === 'picture' ? 'srcset' : 'src';
+                $source->setAttribute($this->properties['lazyloadAttr'], $src);
+                $source->removeAttribute($attr);
             }
             $sourceHtml = $this->parser->getHTMLString($source);
             $replace[] = str_replace('</source>', '', $sourceHtml);
@@ -458,9 +514,22 @@ class Cutter extends Base
 
         $images = $row->getElementsByTagName('img');
         if ($images->length) {
-            $img = $this->setAttributes($images[$images->length - 1], $firstSymbol, $complexName);
+            $img = $this->setAttributes($images[$images->length - 1], $firstSymbol, $complexName . '.img[0]');
+            if (!$img->hasAttribute('data-mpc-nothumb')) {
+                $src = $this->getThumb([
+                    'width' => $img->hasAttribute('width'),
+                    'height' => $img->hasAttribute('height'),
+                    'thumbParams' => $img->getAttribute('data-mpc-thumb'),
+                    'firstSymbol' => $firstSymbol,
+                    'complexName' => $complexName,
+                    'srcAttr' => 'src'
+                ]);
+            } else {
+                $src = "{$firstSymbol}{$complexName}.img[0].src}";
+            }
+
             if ($this->properties['lazyloadAttr'] && !$row->hasAttribute('data-mpc-nolazy')) {
-                $img->setAttribute($this->properties['lazyloadAttr'], "{$firstSymbol}{$complexName}.src}");
+                $img->setAttribute($this->properties['lazyloadAttr'], $src);
                 $img->setAttribute('src', $this->properties['fakeImgPath']);
             }
             $pls .= $this->parser->getHTMLString($img);
@@ -479,6 +548,23 @@ class Cutter extends Base
             $html = $this->wrapInCondition($condition, $html, $firstSymbol);
         }
         return $html;
+    }
+
+    private function getThumb(array $params): string
+    {
+        $snippetName = $this->properties['thumbSnippet'];
+        $thumbParams = $params['thumbParams'] ?: $this->properties['commonThumbParams'];
+        $src = $params['srcAttr'] ? "{$params['complexName']}.{$params['srcAttr']}" : $params['complexName'];
+
+        if ($params['width']) {
+            $pls = $params['setValues'] ? $params['width'] : "{$params['complexName']}.width";
+            $thumbParams .= "&w=$pls";
+        }
+        if ($params['height']) {
+            $pls = $params['setValues'] ? $params['height'] : "{$params['complexName']}.height";
+            $thumbParams .= "&h=$pls";
+        }
+        return "{$params['firstSymbol']}'$snippetName' | snippet: [ 'input' => $src, 'options' => '{$thumbParams}']}";
     }
 
     private function setAttributes(\DOMElement $row, string $firstSymbol, string $complexName): \DOMElement
@@ -511,7 +597,12 @@ class Cutter extends Base
     {
         list($firstSymbol, $complexName) = $this->getSymbolComplex($row, $fieldName, $properties['level'], $properties['isStatic']);
         if ($row->hasAttribute('href')) {
-            $row->setAttribute('href', "{$firstSymbol}{$complexName}}");
+            if ((int)$row->getAttribute('href')) {
+                $pls = "{$firstSymbol}{$complexName} | url}";
+            } else {
+                $pls = "{$firstSymbol}{$complexName}}";
+            }
+            $row->setAttribute('href', $pls);
         } else {
             $row->nodeValue = "{$firstSymbol}{$complexName}}";
         }

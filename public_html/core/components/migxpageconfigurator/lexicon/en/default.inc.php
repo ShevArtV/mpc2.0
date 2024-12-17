@@ -47,3 +47,7 @@ $_lang['setting_mpc_copy_config_tv_name'] = 'Name of the TV responsible for copy
 $_lang['setting_mpc_copy_config_tv_name_desc'] = 'default value copy_sections';
 $_lang['setting_mpc_dev_mode'] = 'Enable development mode?';
 $_lang['setting_mpc_dev_mode_desc'] = 'in this mode, each time mgr_tpl.php is launched, the cache is cleared';
+$_lang['setting_mpc_common_thumb_params'] = 'General Thumbnail Creation Options';
+$_lang['setting_mpc_common_thumb_params_desc'] = 'default value q=60&zc=1&f=webp';
+$_lang['setting_mpc_mpc_thumb_snippet'] = 'Snippet for creating thumbnails';
+$_lang['setting_mpc_mpc_thumb_snippet_desc'] = 'default value is pThumb. For a non-cacheable call, prefix the snippet name with a !';

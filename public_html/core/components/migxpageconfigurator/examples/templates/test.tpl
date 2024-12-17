@@ -26,10 +26,10 @@
     </div>
     <div class="container"
          style="background-image: url('https://i.pinimg.com/736x/2b/d7/27/2bd7274a962e509da7dd8ed5b27549f7.jpg')">
-        <img data-mpc-field="img" src="https://i.pinimg.com/736x/2b/d7/27/2bd7274a962e509da7dd8ed5b27549f7.jpg" width="500" height="400" alt="Это озеро">
+        <img data-mpc-field="img" src="https://i.pinimg.com/736x/2b/d7/27/2bd7274a962e509da7dd8ed5b27549f7.jpg" data-mpc-thumb="q=90&f=webp" width="500" height="400" alt="Это озеро">
         <picture class="my-class" data-mpc-field="picture" data-mpc-if="$picture">
             <img src="https://www.castorama.ru/upload/iblock/aca/m0ipouunfumwx30tswh2ec8jeq1g9o1j/1001422054_1.jpg" width="100" height="40" alt="Пикча">
-            <source srcset="https://i.pinimg.com/originals/25/2d/a5/252da55f9043961132aba261e903b6d9.jpg" width="100" height="40" media="(min-width: 1199px)">
+            <source srcset="https://i.pinimg.com/originals/25/2d/a5/252da55f9043961132aba261e903b6d9.jpg" data-mpc-nothumb width="100" height="40" media="(min-width: 1199px)">
         </picture>
     </div>
 </section>
@@ -130,7 +130,7 @@
                 <h5 data-mpc-field-1="title">Title12</h5>
                 <h6 data-mpc-field-1="subtitle">Subtitle12</h6>
                 <p data-mpc-field-1="content">Content12</p>
-                <img data-mpc-field-1="img" src="https://i.pinimg.com/736x/80/7d/2b/807d2b9987f0d35a1036b1597c3deb74.jpg" width="50" height="50" alt="Радуга">
+                <img data-mpc-field-1="img" src="https://i.pinimg.com/736x/80/7d/2b/807d2b9987f0d35a1036b1597c3deb74.jpg" data-mpc-nothumb width="50" height="50" alt="Радуга">
             </li>
             <li data-mpc-item>
                 <h5 data-mpc-field-1="title">Title22</h5>

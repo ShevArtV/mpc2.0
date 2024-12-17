@@ -67,3 +67,9 @@
 [data-mpc-off]{
   color: inherit;
 }
+[data-mpc-nothumb]{
+  color: inherit;
+}
+[data-mpc-thumb]{
+  color: inherit;
+}
