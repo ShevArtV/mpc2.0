@@ -31,8 +31,6 @@ $_lang['setting_mpc_phone_regexp_desc'] = 'default value /(\d)(\d{3})(\d{3})(\d{
 $_lang['setting_mpc_phone_regexp_desc'] = 'default value /(\d)(\d{3})(\d{3})(\d{2})(\d{2})$/';
 $_lang['setting_mpc_static_block_page_id'] = 'Page ID with Page Types';
 $_lang['setting_mpc_static_block_page_id_desc'] = 'the default value is set during installation';
-$_lang['setting_mpc_thumb_format'] = 'Format of the image generated for lazy load';
-$_lang['setting_mpc_thumb_format_desc'] = 'the default value is png';
 $_lang['setting_mpc_tmplvar_ids'] = 'List of TV IDs to add by the created template';
 $_lang['setting_mpc_tmplvar_ids_desc'] = 'the default value is set during installation';
 $_lang['setting_mpc_tpl_file_extension'] = 'Extension of files with layout';
@@ -51,3 +49,5 @@ $_lang['setting_mpc_common_thumb_params'] = 'General Thumbnail Creation Options'
 $_lang['setting_mpc_common_thumb_params_desc'] = 'default value q=60&zc=1&f=webp';
 $_lang['setting_mpc_mpc_thumb_snippet'] = 'Snippet for creating thumbnails';
 $_lang['setting_mpc_mpc_thumb_snippet_desc'] = 'default value is pThumb. For a non-cacheable call, prefix the snippet name with a !';
+$_lang['setting_mpc_expand_attr'] = 'Attribute for SVG images that need to be added to the markup';
+$_lang['setting_mpc_expand_attr_desc'] = 'default value data-svg.';

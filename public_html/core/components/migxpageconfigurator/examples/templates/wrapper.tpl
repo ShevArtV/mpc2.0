@@ -72,7 +72,7 @@
                         <ul class="footer-contact">
                             <li data-mpc-contact="phone|footer">
                                 <div class="footer-contact__icon">
-                                    <img src="assets/project_files/img/phone.svg" data-mpc-cfield="attributes" alt="">
+                                    <img src="assets/project_files/img/phone.svg" data-svg data-mpc-nolazy data-mpc-nothumb data-mpc-cfield="attributes" alt="">
                                 </div>
                                 <a href="" data-mpc-cfield="value">
                                     <span>8(999)888-77-66</span>
@@ -80,7 +80,7 @@
                             </li>
                             <li data-mpc-contact="email|footer">
                                 <div class="footer-contact__icon">
-                                    <img src="assets/project_files/img/envelope.svg" data-mpc-cfield="attributes" alt="">
+                                    <img src="assets/project_files/img/envelope.svg" data-mpc-nothumb data-mpc-nolazy data-svg data-mpc-cfield="attributes" alt="">
                                 </div>
                                 <a href="" data-mpc-cfield="value">
                                     email@domain.ru

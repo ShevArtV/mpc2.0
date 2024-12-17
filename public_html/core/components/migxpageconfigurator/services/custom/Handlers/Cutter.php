@@ -166,7 +166,31 @@ class Cutter extends Base
                     $replacement[] = $this->parser->getHTMLString($field);
                 } else {
                     if ($field->hasAttribute('src')) {
-                        $field->setAttribute('src', $complexName);
+
+                        if($field->nodeName === 'img') {
+                            if (!$field->hasAttribute('data-mpc-nothumb')) {
+                                $complexName = $this->getThumb([
+                                    'width' => $field->getAttribute('width'),
+                                    'height' => $field->getAttribute('height'),
+                                    'thumbParams' => $field->getAttribute('data-mpc-thumb'),
+                                    'firstSymbol' => '{',
+                                    'complexName' => "\$contacts['$placement']['$key']['$fieldName']",
+                                    'srcAttr' => ''
+                                ]);
+                            }
+
+                            if ($this->properties['lazyloadAttr'] && !$field->hasAttribute('data-mpc-nolazy')) {
+                                $field->setAttribute($this->properties['lazyloadAttr'], $complexName);
+                                $field->setAttribute('src', $this->properties['fakeImgPath']);
+                            } else {
+                                $field->setAttribute('src', $complexName);
+                            }
+
+                        }else{
+                            $field->setAttribute('src', $complexName);
+                        }
+
+
                         $replacement[] = $this->parser->getHTMLString($field);
                     } else {
                         $replacement[] = $complexName;

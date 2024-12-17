@@ -4,7 +4,7 @@
 
 /**
  * @author Arthur Shevchenko (https://t.me/ShevArtV)
- * @class mpcLazyLoad - класс отложенной загрузки
+ * @class mpcExpand - класс отложенной загрузки
  * @property {Object} config - конфигурация модуля
  * @property {Object} events - события модуля
  * @method {void} initialize() - инициализация модуля
@@ -12,27 +12,26 @@
  * @method {void} loading(elem) - загрузка элемента
  * @method {void} opacityUp(elem, time) - анимация прозрачности
  */
-class mpcLazyLoad {
+class mpcExpand {
   constructor(config = {}) {
-    if (!window.mpcLazyLoadAttr) {
-      window.mpcLazyLoadAttr = 'data-lazy';
-    }
     if (!window.mpcExpandAttr) {
       window.mpcExpandAttr = 'data-svg';
     }
-    if (window.mpcLazyLoad) return window.mpcLazyLoad;
+    if (!window.mpcLazyLoadAttr) {
+      window.mpcLazyLoadAttr = 'data-lazy';
+    }
+    if (window.mpcExpand) return window.mpcExpand;
 
     const defaults = {
-      rootSelector: `[${window.mpcLazyLoadAttr}]`,
-      rootAttr: window.mpcLazyLoadAttr,
-      expandSelector: `[${window.mpcExpandAttr}]`,
+      rootSelector: `[${window.mpcExpandAttr}]`,
+      rootAttr: window.mpcExpandAttr,
     }
     this.events = {
-      onload: 'mpc:lazy:loaded'
+      onload: 'mpc:svg:loaded'
     };
     this.config = Object.assign(defaults, config);
     this.initialize();
-    window.mpcLazyLoad = this;
+    window.mpcExpand = this;
   }
 
   /**
@@ -40,7 +39,8 @@ class mpcLazyLoad {
    */
   initialize() {
     this.config.rootKey = this.getDataAttrKey(this.config.rootAttr);
-    const elements = document.querySelectorAll(`${this.config.rootSelector}:not(${this.config.expandSelector})`);
+    this.config.lazyLoadKey = this.getDataAttrKey(window.mpcLazyLoadAttr);
+    const elements = document.querySelectorAll(this.config.rootSelector);
     if (elements.length) {
       const observer = new IntersectionObserver((entries) => this.handler(entries), {
         root: null,
@@ -74,18 +74,15 @@ class mpcLazyLoad {
       if (!elem.hasAttribute(this.config.rootAttr)) continue;
 
       if (entries[i].isIntersecting) {
-        if (elem.dataset[this.config.rootKey]) {
-          this.loading(elem);
-        } else {
-          elem.removeAttribute(this.config.rootAttr);
-        }
+        this.loading(elem);
+        elem.removeAttribute(this.config.rootAttr);
 
         elem.dispatchEvent(new CustomEvent(this.events.onload, {
           bubbles: true,
           cancelable: false,
           detail: {
             entry: entries[i],
-            LazyLoad: this
+            Expand: this
           }
         }));
       }
@@ -96,37 +93,49 @@ class mpcLazyLoad {
    * @param elem
    * @returns {void}
    */
-  loading(elem) {
-    if (['IMG', 'IFRAME', 'VIDEO', 'SOURCE'].includes(elem.tagName)) {
-      if(elem.tagName === 'SOURCE' && elem.parentNode.tagName === 'PICTURE'){
-        elem.srcset = elem.dataset[this.config.rootKey];
-      }else{
-        elem.src = elem.dataset[this.config.rootKey];
-      }
-    } else {
-      elem.style.backgroundImage = 'url(' + elem.dataset[this.config.rootKey] + ')';
-    }
-    elem.removeAttribute(this.config.rootAttr);
-    this.opacityUp(elem);
+  async loading(elem) {
+    const path = elem.dataset[this.config.lazyLoadKey] || elem.src;
+    const content = await this.getFileContents(path);
+    content && this.getImgData(elem, content);
   }
 
   /**
-   * @param elem
-   * @param time
+   * @param {string} src - The URL or file path of the file to read.
+   * @returns {Promise<string>} A promise that resolves with the contents of the file as text.
+   */
+  getFileContents(src) {
+    return fetch(src)
+      .then(response => {
+        if (!response.ok) {
+          throw new Error(`Error reading file: ${response.statusText}`);
+        }
+        return response.text();
+      })
+      .catch(error => {
+        console.error(`Error reading file: ${error}`);
+        return null;
+      });
+  }
+
+  /**
+   * @param {Element} el
+   * @param {string} content
    * @returns {void}
    */
-  opacityUp(elem, time = 1000) {
-    elem.style.opacity = 0;
-    let num = 0;
-    const t = Math.round(time / 100);
-    const interval = setInterval(() => {
-      num++;
-      if (num === 100) {
-        clearInterval(interval);
-      }
-      elem.style.opacity = `${num}%`;
-    }, t)
+  getImgData(el, content) {
+    let svg = new DOMParser().parseFromString(content, "text/html").getElementsByTagName("svg")[0];
+    svg.removeAttribute('xmlns');
+    if (el.getAttribute('id')) {
+      svg.setAttribute('id', el.getAttribute('id'));
+    }
+    if (el.getAttribute('class')) {
+      svg.setAttribute('class', el.getAttribute('class'));
+    }
+    if (!svg.getAttribute('viewBox') && svg.getAttribute('height') && svg.getAttribute('width')) {
+      svg.setAttribute('viewBox', '0 0 ' + svg.getAttribute('height') + svg.getAttribute('width'));
+    }
+    el.replaceWith(svg);
   }
 }
 
-window.mpcLazyLoad = new mpcLazyLoad();
+window.mpcExpand = new mpcExpand();

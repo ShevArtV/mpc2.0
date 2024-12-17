@@ -121,4 +121,9 @@ return [
         'value' => 'pThumb',
         'area' => 'default',
     ],
+    'mpc_expand_attr' => [
+        'xtype' => 'textfield',
+        'value' => 'data-svg',
+        'area' => 'default',
+    ],
 ];

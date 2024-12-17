@@ -63,6 +63,7 @@ class Mpc
             'extension' => $this->modx->getOption('mpc_tpl_file_extension', null, '.tpl'),
             'pathToSrc' => $this->modx->getOption('mpc_path_to_src', null, 'elements/templates/'),
             'lazyloadAttr' => $this->modx->getOption('mpc_lazyload_attr', null, ''),
+            'expandAttr' => $this->modx->getOption('mpc_expand_attr', null, ''),
             'pathToCreate' => $this->modx->getOption('mpc_path_to_create', null, 'create/'),
             'devMode' => $this->modx->getOption('mpc_dev_mode', null, false),
         ];
@@ -155,9 +156,18 @@ class Mpc
 
     public function loadWebScripts()
     {
+        if ($this->properties['expandAttr']) {
+            $this->modx->regClientScript("
+                <script>                
+                window.mpcExpandAttr = '{$this->properties['expandAttr']}';
+                </script>
+                <script type=\"module\" src=\"assets/components/migxpageconfigurator/js/web/expand.js\"></script>", true);
+        }
         if ($this->properties['lazyloadAttr']) {
             $this->modx->regClientScript("
-                <script>window.mpcLazyLoadAttr = '{$this->properties['lazyloadAttr']}';</script>
+                <script>
+                window.mpcLazyLoadAttr = '{$this->properties['lazyloadAttr']}';               
+                </script>
                 <script type=\"module\" src=\"assets/components/migxpageconfigurator/js/web/lazyload.js\"></script>", true);
         }
     }
