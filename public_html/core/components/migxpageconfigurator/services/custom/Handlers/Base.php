@@ -57,6 +57,7 @@ class Base{
             'contactsPageId' => (int)$this->modx->getOption('mpc_contacts_page_id', null, 1),
             'contactsTvName' => $this->modx->getOption('mpc_contacts_tv_name', null, 'contacts'),
             'contactsTvId' => $this->modx->getOption('mpc_contacts_tv_id', null, 0),
+            'assetsPath' => $this->modx->getOption('assets_path', null, ''),
         ];
         $this->properties = array_merge($this->properties, $properties);
 

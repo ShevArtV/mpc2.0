@@ -1,6 +1,13 @@
 <?php
 
 return [
-    'mpcOnGetSectionFieldsValues' => [],
-    'mpcOnHandleContacts' => [],
+    'mpcOnGetSectionFieldsValues' => [
+        'groupname' => 'MigxPageConfigurator',
+    ],
+    'mpcOnHandleContact' => [
+        'groupname' => 'MigxPageConfigurator',
+    ],
+    'mpcOnBeforeDownloadImage' => [
+        'groupname' => 'MigxPageConfigurator',
+    ],
 ];

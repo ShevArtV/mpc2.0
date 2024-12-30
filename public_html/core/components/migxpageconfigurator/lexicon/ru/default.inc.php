@@ -1,9 +1,9 @@
 <?php
 
 $_lang['setting_mpc_base_section_name'] = 'Имя базовой секции';
-$_lang['setting_mpc_base_section_name_desc'] = 'значение по умолчанию base. задается при установке';
+$_lang['setting_mpc_base_section_name_desc'] = 'значение по умолчанию mpc_base.';
 $_lang['setting_mpc_common_config_name'] = 'Имя общей конфигурации в интерфейсе MIGX';
-$_lang['setting_mpc_common_config_name_desc'] = 'значение по умолчанию config. должно совпадать с именем TV';
+$_lang['setting_mpc_common_config_name_desc'] = 'значение по умолчанию mpc_config. должно совпадать с именем TV';
 $_lang['setting_mpc_config_tv_id'] = 'ID TV c общей конфигурацией страницы';
 $_lang['setting_mpc_config_tv_id_desc'] = 'значение по умолчанию задается при установке';
 $_lang['setting_mpc_contacts_page_id'] = 'ID страницы Контакты';
@@ -52,3 +52,9 @@ $_lang['setting_mpc_thumb_snippet'] = 'Сниппет для создания м
 $_lang['setting_mpc_thumb_snippet_desc'] = 'значение по умолчанию pThumb. Для некэшируемого вызова добавьте перед названием сниппета знак !';
 $_lang['setting_mpc_expand_attr'] = 'Атрибут для SVG картинок, которые нужно добавить в разметку';
 $_lang['setting_mpc_expand_attr_desc'] = 'значение по умолчанию data-svg.';
+$_lang['setting_mpc_images_path'] = 'Путь к загружаемым картинкам';
+$_lang['setting_mpc_images_path_desc'] = 'указывается от корня сайта';
+$_lang['setting_mpc_lazyload_enabled'] = 'Включить ленивую загрузку?';
+$_lang['setting_mpc_lazyload_enabled_desc'] = '';
+$_lang['setting_mpc_expand_enabled'] = 'Включить разворачивание svg?';
+$_lang['setting_mpc_expand_enabled_desc'] = '';

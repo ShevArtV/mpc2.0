@@ -112,7 +112,7 @@
         </ul>
 
 
-        <ul data-mpc-field="list_triple">
+        <ul data-mpc-field="list_triple" data-mpc-lim="2" data-mpc-off="1">
             <li data-mpc-item>
                 <h5 data-mpc-field-1="title">Title1</h5>
                 <h6 data-mpc-field-1="subtitle">Subtitle1</h6>
@@ -122,6 +122,11 @@
                 <h5 data-mpc-field-1="title">Title2</h5>
                 <h6 data-mpc-field-1="subtitle">Subtitle2</h6>
                 <p data-mpc-field-1="content">Content2</p>
+            </li>
+            <li data-mpc-item>
+                <h5 data-mpc-field-1="title">Title3</h5>
+                <h6 data-mpc-field-1="subtitle">Subtitle3</h6>
+                <p data-mpc-field-1="content">Content3</p>
             </li>
         </ul>
 

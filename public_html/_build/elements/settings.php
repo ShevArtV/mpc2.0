@@ -126,4 +126,19 @@ return [
         'value' => 'data-svg',
         'area' => 'default',
     ],
+    'mpc_images_path' => [
+        'xtype' => 'textfield',
+        'value' => '',
+        'area' => 'default',
+    ],
+    'mpc_lazyload_enabled' => [
+        'xtype' => 'combo-boolean',
+        'value' => '1',
+        'area' => 'default',
+    ],
+    'mpc_expand_enabled' => [
+        'xtype' => 'combo-boolean',
+        'value' => '1',
+        'area' => 'default',
+    ],
 ];

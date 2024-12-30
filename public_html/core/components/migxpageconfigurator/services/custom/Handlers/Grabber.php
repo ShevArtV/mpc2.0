@@ -27,6 +27,8 @@ class Grabber extends Base
 
     public bool $fromPlugin = false;
 
+    public string $imagesPath = '';
+
     /**
      * @return void
      */
@@ -38,6 +40,7 @@ class Grabber extends Base
             'startPageId' => $this->modx->getOption('site_start', null, 1),
             'phoneRegExp' => $this->modx->getOption('mpc_phone_regexp', '', '/(\d)(\d{3})(\d{3})(\d{2})(\d{2})$/'),
             'phoneFormat' => $this->modx->getOption('mpc_phone_format', '', '8 (\2) \3-\4-\5'),
+            'imagesPath' => $this->modx->getOption('mpc_images_path', '', ''),
         ]);
         $this->properties = array_merge($this->properties, $properties);
         $this->modx->addPackage('migx', $this->properties['corePath'] . 'components/migx/model/');
@@ -192,6 +195,7 @@ class Grabber extends Base
             if (!$tmp['value']) {
                 continue;
             }
+
             if (!$tmp['key']) {
                 $tmp['key'] = $this->getContactKey($tmp['value']);
             }
@@ -204,11 +208,11 @@ class Grabber extends Base
                 $tmp['fvalue'] = $tmp['value'];
             }
 
-            $this->modx->invokeEvent('mpcOnHandleContacts', [
-                'contacts' => $tmp,
+            $this->modx->invokeEvent('mpcOnHandleContact', [
+                'contact' => [$tmp],
             ]);
 
-            $response = isset($this->modx->event->returnedValues) && !empty($this->modx->event->returnedValues['contacts']) ? $this->modx->event->returnedValues['contacts'] : [];
+            $response = isset($this->modx->event->returnedValues) && !empty($this->modx->event->returnedValues['contact']) ? $this->modx->event->returnedValues['contact'] : [];
             if (!empty($response)) {
                 $tmp = $response;
             }
@@ -398,7 +402,7 @@ class Grabber extends Base
             }
             $this->properties['resource']->setTVValue($this->properties['commonConfigTvName'], json_encode($sectionValues, JSON_UNESCAPED_UNICODE));
         }
-        if(!empty($this->properties['sbpSectionValues'])){
+        if (!empty($this->properties['sbpSectionValues'])) {
             $staticBlocksResource->setTVValue($this->properties['commonConfigTvName'], json_encode($this->properties['sbpSectionValues'], JSON_UNESCAPED_UNICODE));
         }
 
@@ -535,7 +539,7 @@ class Grabber extends Base
         $sectionName = trim($section->getAttribute('data-mpc-name'));
         $sectionIsStatic = empty($this->staticSectionNames) ? $section->hasAttribute('data-mpc-static') : in_array($sectionName, $this->staticSectionNames);
         $sectionId = $properties['sectionName'] . '_' . str_replace(['.', ',', ' '], '', microtime(true));
-
+        $this->imagesPath = $this->properties['imagesPath'] . $properties['sectionName'] . '/';
         // заполняем содержимое полей
         $fieldsValues = $this->getFieldsValues($this->parser->getHTMLString($section));
         $fieldsValues['is_static'] = $sectionIsStatic;
@@ -559,12 +563,30 @@ class Grabber extends Base
         }
 
 
-
         if (!$properties['isCopy'] && $sectionIsStatic) {
             $this->updateStaticSectionValues($fieldsValues, $properties['sectionName']);
         }
 
         return $fieldsValues;
+    }
+
+    public function download($url, $path)
+    {
+        if (!$path) {
+            return '';
+        }
+        $fullPath = dirname(__FILE__, 7) . $path;
+        if (file_exists($fullPath)) {
+            return $path;
+        }
+        $ch = curl_init($url);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        curl_setopt($ch, CURLOPT_HEADER, false);
+        $content = curl_exec($ch);
+        curl_close($ch);
+
+        return ($content && file_put_contents($fullPath, $content)) ? $path : '';
     }
 
     /**
@@ -579,7 +601,7 @@ class Grabber extends Base
         if (!empty($this->properties['sbpSectionValues'])) {
             foreach ($this->properties['sbpSectionValues'] as $k => $sectionValue) {
                 if ($sectionValue['MIGX_formname'] === $sectionName) {
-                    if(!$this->fromPlugin){
+                    if (!$this->fromPlugin) {
                         $this->properties['sbpSectionValues'][$k] = $sectionFieldsValues;
                     }
                     $upd = true;
@@ -702,7 +724,12 @@ class Grabber extends Base
         $attrs = ['src', 'alt', 'width', 'height'];
         $value[0]['MIGX_id'] = 1;
         foreach ($attrs as $attr) {
-            $value[0][$attr] = $row->getAttribute($attr);
+            $attrValue = $row->getAttribute($attr);
+            if ($attr === 'src' && strpos($attrValue, 'http') !== false) {
+                $attrValue = $this->downloadImage($attrValue);
+            }
+
+            $value[0][$attr] = $attrValue;
         }
 
         return json_encode($value, JSON_UNESCAPED_UNICODE);
@@ -719,9 +746,39 @@ class Grabber extends Base
 
         $value['MIGX_id'] = $idx;
         foreach ($attrs as $attr) {
-            $value[$attr] = $row->getAttribute($attr);
+            $attrValue = $row->getAttribute($attr);
+            if ($attr === 'srcset' && strpos($row->getAttribute($attr), 'http') !== false) {
+                $attrValue = $this->downloadImage($attrValue);
+            }
+            $value[$attr] = $attrValue;
         }
         return $value;
+    }
+
+    private function downloadImage(string $attrValue): string
+    {
+        if (empty($this->properties['imagesPath'])) {
+            return $attrValue;
+        }
+
+        $baseName = basename($attrValue);
+        $this->modx->invokeEvent('mpcOnBeforeDownloadImage', [
+            'baseName' => $baseName,
+            'imagesPath' => $this->imagesPath,
+        ]);
+
+        $baseName = isset($this->modx->event->returnedValues) && !empty($this->modx->event->returnedValues['baseName']) ? $this->modx->event->returnedValues['baseName'] : $baseName;
+        $imagesPath = isset($this->modx->event->returnedValues) && !empty($this->modx->event->returnedValues['imagesPath']) ? $this->modx->event->returnedValues['imagesPath'] : $this->imagesPath;
+
+        $fullPathToDir = dirname(__FILE__, 7) . $imagesPath;
+        if (!file_exists($fullPathToDir)) {
+            mkdir($fullPathToDir, 0777, true);
+        }
+
+        if ($path = $this->download($attrValue, $imagesPath . $baseName)) {
+            $attrValue = $path;
+        }
+        return $attrValue;
     }
 
     /**
@@ -792,7 +849,11 @@ class Grabber extends Base
         if ($style = $element->getAttribute('style')) {
             if (strpos($style, 'background') !== false) {
                 preg_match('/(background|background\-image):.*?url\(\'(.*?)\'\)/', $style, $matches);
-                return $matches[2];
+                $value = $matches[2];
+                if (strpos($value, 'http') !== false) {
+                    $value = $this->downloadImage($value);
+                }
+                return $value;
             }
         }
         return '';

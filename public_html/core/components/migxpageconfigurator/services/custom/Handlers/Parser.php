@@ -53,6 +53,5 @@ class Parser
     {
         $html = urldecode(html_entity_decode($element->ownerDocument->saveHTML($element)));
         return str_replace(['</source>', '</path>'], '', $html);
-        //return html_entity_decode($element->ownerDocument->saveHTML($element));
     }
 }

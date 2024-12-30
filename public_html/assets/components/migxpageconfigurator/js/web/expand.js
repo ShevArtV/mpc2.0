@@ -123,14 +123,17 @@ class mpcExpand {
    * @returns {void}
    */
   getImgData(el, content) {
-    let svg = new DOMParser().parseFromString(content, "text/html").getElementsByTagName("svg")[0];
+    const svg = new DOMParser().parseFromString(content, "text/html").getElementsByTagName("svg")[0];
+    const attributes = ['width', 'height', 'id', 'class'];
+
     svg.removeAttribute('xmlns');
-    if (el.getAttribute('id')) {
-      svg.setAttribute('id', el.getAttribute('id'));
+
+    for (let i in attributes) {
+      if (el.hasAttribute(attributes[i])) {
+        svg.setAttribute(attributes[i], el.getAttribute(attributes[i]));
+      }
     }
-    if (el.getAttribute('class')) {
-      svg.setAttribute('class', el.getAttribute('class'));
-    }
+
     if (!svg.getAttribute('viewBox') && svg.getAttribute('height') && svg.getAttribute('width')) {
       svg.setAttribute('viewBox', '0 0 ' + svg.getAttribute('height') + svg.getAttribute('width'));
     }

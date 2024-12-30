@@ -3,6 +3,7 @@
 <head>
     {* /usr/local/php/php-7.4/bin/php -d display_errors -d error_reporting=E_ALL /home/host1860015/art-sites.ru/htdocs/customfactory/core/components/migxpageconfigurator/console/slice_tpl.php web wrapper.tpl *}
     {* php -d display_errors -d error_reporting=E_ALL /home/host1860015/art-sites.ru/htdocs/customfactory/core/components/migxpageconfigurator/console/slice_tpl.php web wrapper.tpl *}
+    {* php -d display_errors -d error_reporting=E_ALL public_html/core/components/migxpageconfigurator/console/mgr_tpl.php web wrapper.tpl *}
 
     <title>{$pagetitle}</title>
     <meta name="description" content="{$description}">
@@ -10,7 +11,7 @@
     <meta http-equiv="x-ua-compatible" content="ie=edge">
     <meta name="viewport" content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0">
 
-    <base href="{$site_url}">
+    <base href="{$_modx->config.site_url}">
 
     <link rel="icon" data-mpc-info="favicon" data-mpc-if="$favicon" href="favicon_web.ico" data-mpc-ctx>
 
@@ -21,7 +22,7 @@
 
     <link rel="stylesheet" href="assets/project_files/css/landing/style.css?v={''|date: 'dmYHis'}">
 
-    <span data-mpc-unwrap="" data-mpc-info="metrics">{Metrics}</span>
+    <span data-mpc-unwrap="" data-mpc-info="metrics">{Metrics2}</span>
 </head>
 
 <body>
@@ -40,7 +41,9 @@
                         <p class="footer-contact__icon" data-mpc-cfield="caption">
                             Phone
                         </p>
-                        <a href="" data-mpc-cfield="value"><span>8(999)888-77-66</span></a>
+                        <a href="" data-mpc-cfield="value">
+                            <span>8(999)888-77-66</span>
+                        </a>
                     </li>
                 </ul>
             </div>
@@ -49,6 +52,7 @@
 
     <!-- wrap -->
     <main class="wrap">
+
         <!--CONTENT-->
         {if !$sections}
             {$content}
@@ -72,7 +76,7 @@
                         <ul class="footer-contact">
                             <li data-mpc-contact="phone|footer">
                                 <div class="footer-contact__icon">
-                                    <img src="assets/project_files/img/phone.svg" data-svg data-mpc-nolazy data-mpc-nothumb data-mpc-cfield="attributes" alt="">
+                                    <img src="assets/project_files/img/phone.svg" data-mpc-nothumb data-svg data-mpc-cfield="attributes" alt="">
                                 </div>
                                 <a href="" data-mpc-cfield="value">
                                     <span>8(999)888-77-66</span>
@@ -80,7 +84,7 @@
                             </li>
                             <li data-mpc-contact="email|footer">
                                 <div class="footer-contact__icon">
-                                    <img src="assets/project_files/img/envelope.svg" data-mpc-nothumb data-mpc-nolazy data-svg data-mpc-cfield="attributes" alt="">
+                                    <img src="assets/project_files/img/envelope.svg" data-mpc-nothumb data-svg data-mpc-cfield="attributes" alt="">
                                 </div>
                                 <a href="" data-mpc-cfield="value">
                                     email@domain.ru

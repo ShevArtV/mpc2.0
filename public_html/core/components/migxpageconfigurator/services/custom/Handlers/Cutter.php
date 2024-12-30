@@ -33,7 +33,7 @@ class Cutter extends Base
             'pathToSamples' => $this->modx->getOption('mpc_path_to_samples', null, 'components/migxpageconfigurator/elements/samples/'),
             'presets' => [],
             'commonThumbParams' => $this->modx->getOption('mpc_common_thumb_params', null, ''),
-            'thumbSnippet' => $this->modx->getOption('mpc_mpc_thumb_snippet', null, 'pThumb')
+            'thumbSnippet' => $this->modx->getOption('mpc_thumb_snippet', null, '')
         ];
         $this->properties = array_merge($this->properties, $properties);
         $this->getPresets();
@@ -166,9 +166,8 @@ class Cutter extends Base
                     $replacement[] = $this->parser->getHTMLString($field);
                 } else {
                     if ($field->hasAttribute('src')) {
-
-                        if($field->nodeName === 'img') {
-                            if (!$field->hasAttribute('data-mpc-nothumb')) {
+                        if ($field->nodeName === 'img') {
+                            if (!$field->hasAttribute('data-mpc-nothumb') && !empty($this->properties['thumbSnippet'])) {
                                 $complexName = $this->getThumb([
                                     'width' => $field->getAttribute('width'),
                                     'height' => $field->getAttribute('height'),
@@ -185,8 +184,7 @@ class Cutter extends Base
                             } else {
                                 $field->setAttribute('src', $complexName);
                             }
-
-                        }else{
+                        } else {
                             $field->setAttribute('src', $complexName);
                         }
 
@@ -331,6 +329,12 @@ class Cutter extends Base
 
         $properties['html'] = str_replace('`', '"', $properties['html']);
         $properties['html'] = preg_replace($this->properties['pattern'], '', $properties['html']);
+
+        if ($element->hasAttribute('data-mpc-if')) {
+            $condition = $element->getAttribute('data-mpc-if');
+            $firstSymbol = $element->getAttribute('data-mpc-symbol') ?: '{';
+            $properties['html'] = $this->wrapInCondition($condition, $properties['html'], $firstSymbol);
+        }
 
         file_put_contents($pathToFile, $properties['html']);
         //$this->modx->log(1, $properties['html']);
@@ -511,13 +515,13 @@ class Cutter extends Base
             if ($this->properties['lazyloadAttr'] && !$row->hasAttribute('data-mpc-nolazy')) {
                 if ($row->nodeName === 'picture') {
                     $attr = 'srcset';
-                    if (!$source->hasAttribute('data-mpc-nothumb')) {
+                    if (!$source->hasAttribute('data-mpc-nothumb') && !empty($this->properties['thumbSnippet'])) {
                         $src = $this->getThumb([
                             'width' => $source->hasAttribute('width'),
                             'height' => $source->hasAttribute('height'),
                             'thumbParams' => $source->getAttribute('data-mpc-thumb'),
                             'firstSymbol' => $firstSymbol,
-                            'complexName' => $complexName,
+                            'complexName' => '$source',
                             'srcAttr' => 'srcset'
                         ]);
                     } else {
@@ -539,13 +543,13 @@ class Cutter extends Base
         $images = $row->getElementsByTagName('img');
         if ($images->length) {
             $img = $this->setAttributes($images[$images->length - 1], $firstSymbol, $complexName . '.img[0]');
-            if (!$img->hasAttribute('data-mpc-nothumb')) {
+            if (!$img->hasAttribute('data-mpc-nothumb') && !empty($this->properties['thumbSnippet'])) {
                 $src = $this->getThumb([
                     'width' => $img->hasAttribute('width'),
                     'height' => $img->hasAttribute('height'),
                     'thumbParams' => $img->getAttribute('data-mpc-thumb'),
                     'firstSymbol' => $firstSymbol,
-                    'complexName' => $complexName,
+                    'complexName' => $complexName . '.img[0]',
                     'srcAttr' => 'src'
                 ]);
             } else {
@@ -581,14 +585,21 @@ class Cutter extends Base
         $src = $params['srcAttr'] ? "{$params['complexName']}.{$params['srcAttr']}" : $params['complexName'];
 
         if ($params['width']) {
-            $pls = $params['setValues'] ? $params['width'] : "{$params['complexName']}.width";
+            if ($params['height']) {
+                $pls = $params['setValues'] ? $params['width'] : "'~{$params['complexName']}.width~'";
+            } else {
+                $pls = $params['setValues'] ? $params['width'] : "'~{$params['complexName']}.width";
+            }
             $thumbParams .= "&w=$pls";
         }
         if ($params['height']) {
-            $pls = $params['setValues'] ? $params['height'] : "{$params['complexName']}.height";
+            $pls = $params['setValues'] ? $params['height'] : "'~{$params['complexName']}.height";
             $thumbParams .= "&h=$pls";
         }
-        return "{$params['firstSymbol']}'$snippetName' | snippet: [ 'input' => $src, 'options' => '{$thumbParams}']}";
+        if (!$params['height'] && !$params['width']) {
+            $thumbParams .= "'";
+        }
+        return "{$params['firstSymbol']}'$snippetName' | snippet: [ 'input' => $src, 'options' => '{$thumbParams}]}";
     }
 
     private function setAttributes(\DOMElement $row, string $firstSymbol, string $complexName): \DOMElement
@@ -675,6 +686,11 @@ class Cutter extends Base
                 if (!$snippet->hasAttribute('data-mpc-unwrap')) {
                     $snippet->nodeValue = $call;
                     $call = $this->parser->getHTMLString($snippet);
+                }
+
+                if ($snippet->hasAttribute('data-mpc-if')) {
+                    $condition = $snippet->getAttribute('data-mpc-if') ?: $call;
+                    $call = $this->wrapInCondition($condition, $call, $firstSymbol);
                 }
 
                 $properties['html'] = str_replace($snippetHTml, $call, $properties['html']);

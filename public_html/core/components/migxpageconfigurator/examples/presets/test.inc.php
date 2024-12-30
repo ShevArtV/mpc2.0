@@ -1,6 +1,7 @@
 <?php
 return [
   'preset' =>  [
+      'extends' => '',
       'variable' => '$var',
       'array' => '["subparam" => 12]',
       'string' => 'string',

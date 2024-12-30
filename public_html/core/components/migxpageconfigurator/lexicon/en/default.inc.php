@@ -1,9 +1,9 @@
 <?php
 
 $_lang['setting_mpc_base_section_name'] = 'Name of the base section';
-$_lang['setting_mpc_base_section_name_desc'] = 'the default value is base. set during installation';
+$_lang['setting_mpc_base_section_name_desc'] = 'the default value is mpc_base.';
 $_lang['setting_mpc_common_config_name'] = 'Name of the shared configuration in the interface MIGX';
-$_lang['setting_mpc_common_config_name_desc'] = 'the default value is config. must match the name of the TV';
+$_lang['setting_mpc_common_config_name_desc'] = 'the default value is mpc_config. must match the name of the TV';
 $_lang['setting_mpc_config_tv_id'] = 'ID TV with the general configuration of the page';
 $_lang['setting_mpc_config_tv_id_desc'] = 'the default value is set during installation';
 $_lang['setting_mpc_contacts_page_id'] = 'Contact Page ID';
@@ -51,3 +51,9 @@ $_lang['setting_mpc_mpc_thumb_snippet'] = 'Snippet for creating thumbnails';
 $_lang['setting_mpc_mpc_thumb_snippet_desc'] = 'default value is pThumb. For a non-cacheable call, prefix the snippet name with a !';
 $_lang['setting_mpc_expand_attr'] = 'Attribute for SVG images that need to be added to the markup';
 $_lang['setting_mpc_expand_attr_desc'] = 'default value data-svg.';
+$_lang['setting_mpc_images_path'] = 'Path to downloaded images';
+$_lang['setting_mpc_images_path_desc'] = 'indicated from the site root';
+$_lang['setting_mpc_lazyload_enabled'] = 'Enable lazy loading?';
+$_lang['setting_mpc_lazyload_enabled_desc'] = '';
+$_lang['setting_mpc_expand_enabled'] = 'Enable svg expansion?';
+$_lang['setting_mpc_expand_enabled_desc'] = '';

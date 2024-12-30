@@ -520,7 +520,6 @@ class Render extends Base
     public function deleteParsedConfigFile(int $rid)
     {
         $basePath = $this->properties['pdotoolsElementsPath'] . $this->properties['pathToDist'];
-        $this->modx->log(1, print_r($basePath . $rid . $this->properties['extension'], 1));
         if (file_exists($basePath . $rid . $this->properties['extension'])) {
             unlink($basePath . $rid . $this->properties['extension']);
         }
