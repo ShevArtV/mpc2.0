@@ -1,6 +1,7 @@
 <?php
-return array(
-  'preset' =>  array(
+return [
+  'preset' =>  [
+      'extends' => '',
       'variable' => '$var',
       'array' => '["subparam" => 12]',
       'string' => 'string',
@@ -11,5 +12,5 @@ return array(
       'stringWithPlaceholder' => '"noreply@{$domain}"',
       'number' => 5,
       'inlineChunk' => '@INLINE <li class="breadcrumb-item active" aria-current="page">{$menutitle?:$pagetitle}</li>'
-  )
-);
+  ]
+];
