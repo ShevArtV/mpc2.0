@@ -13,7 +13,7 @@
 [data-mpc-unwrap]{
   color: inherit;
 }
-[data-mpc-if]{
+[data-mpc-cond]{
   color: inherit;
 }
 [data-mpc-static]{
@@ -37,6 +37,9 @@
 [data-mpc-attr]{
   color: inherit;
 }
+[data-mpc-form]{
+  color: inherit;
+}
 [data-mpc-preset]{
   color: inherit;
 }
@@ -46,30 +49,6 @@
 [data-mpc-copy]{
   color: inherit;
 }
-[data-mpc-nolazy]{
-  color: inherit;
-}
-[data-mpc-cfield]{
-  color: inherit;
-}
-[data-mpc-contact]{
-  color: inherit;
-}
-[data-mpc-ctx]{
-  color: inherit;
-}
-[data-mpc-info]{
-  color: inherit;
-}
-[data-mpc-lim]{
-  color: inherit;
-}
-[data-mpc-off]{
-  color: inherit;
-}
-[data-mpc-nothumb]{
-  color: inherit;
-}
-[data-mpc-thumb]{
+[data-mpc-sff]{
   color: inherit;
 }
