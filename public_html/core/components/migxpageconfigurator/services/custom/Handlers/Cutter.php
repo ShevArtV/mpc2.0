@@ -312,16 +312,7 @@ class Cutter extends Base
             }
         }
 
-        if ($unwrap = $this->getItems($properties['html'], '[data-mpc-unwrap]')) {
-            foreach ($unwrap as $attr) {
-                $attrValue = '';
-                foreach ($attr->childNodes as $childNode) {
-                    $attrValue .= $this->parser->getHTMLString($childNode);
-                }
-                $search = $this->parser->getHTMLString($attr);
-                $properties['html'] = str_replace($search, $attrValue, $properties['html']);
-            }
-        }
+        //$properties['html'] = $this->unwrapBlock($properties['html']);
 
         if (strpos($element->getAttribute('data-mpc-section'), $this->properties['wrapperName']) !== false) {
             $properties['html'] = preg_replace('/<body(.*?)>(.*?)<\/body>/s', '<body\1>' . $properties['html'] . '</body>', $this->html);
@@ -338,6 +329,21 @@ class Cutter extends Base
 
         file_put_contents($pathToFile, $properties['html']);
         //$this->modx->log(1, $properties['html']);
+    }
+
+    private function unwrapBlock($html)
+    {
+        if ($unwrap = $this->getItems($html, '[data-mpc-unwrap]')) {
+            foreach ($unwrap as $attr) {
+                $attrValue = '';
+                foreach ($attr->childNodes as $childNode) {
+                    $attrValue .= $this->parser->getHTMLString($childNode);
+                }
+                $search = $this->parser->getHTMLString($attr);
+                $html = str_replace($search, $attrValue, $html);
+            }
+        }
+        return $html;
     }
 
     /**
@@ -388,12 +394,20 @@ class Cutter extends Base
                 } else {
                     $sampleKey = 'foreach';
                 }
-                $html = htmlentities($props['html']);
-                $field->nodeValue = str_replace(['##', 'subject', '^', 'html', 'limit', 'offset'],
+                $html = $this->unwrapBlock($props['html']);
+                $html = htmlentities($html);
+                $fieldHTMLNew = str_replace(['##', 'subject', '^', 'html', 'limit', 'offset'],
                     [$firstSymbol, $complexName, $props['level'], $html, $limit, $offset],
                     $this->properties['samples'][$sampleKey]);
 
-                $fieldHTMLNew = $this->parser->getHTMLString($field);
+                if (!$field->hasAttribute('data-mpc-unwrap')) {
+                    $field->nodeValue = $fieldHTMLNew;
+                    $fieldHTMLNew = $this->parser->getHTMLString($field);
+                } else {
+                    $fieldHTMLNew = urldecode(html_entity_decode($fieldHTMLNew));
+                    $fieldHTMLNew = str_replace(['</source>', '</path>'], '', $fieldHTMLNew);
+                }
+
                 if ($field->hasAttribute('data-mpc-if')) {
                     $condition = $field->getAttribute('data-mpc-if') ?: $complexName;
                     $fieldHTMLNew = $this->wrapInCondition($condition, $fieldHTMLNew, $firstSymbol);
@@ -485,7 +499,7 @@ class Cutter extends Base
 
         $html = $this->parser->getHTMLString($row);
         if ($row->hasAttribute('data-mpc-if')) {
-            $condition = $row->getAttribute('data-mpc-if');
+            $condition = $row->getAttribute('data-mpc-if') ?: $complexName;
             $html = $this->wrapInCondition($condition, $html, $firstSymbol);
         }
         return $html;
