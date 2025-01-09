@@ -38,8 +38,15 @@ class Base{
      * @var bool
      */
     public bool $debug = false;
+    /**
+     * @var array
+     */
     public array $staticSectionNames = [];
 
+    /**
+     * @param \modX $modx
+     * @param array $properties
+     */
     public function __construct(\modX $modx, array $properties = [])
     {
         $this->modx = $modx;
@@ -47,7 +54,10 @@ class Base{
         $this->initialize();
     }
 
-    protected function initialize()
+    /**
+     * @return void
+     */
+    protected function initialize(): void
     {
         $properties = [
             'commonConfigTvName' => $this->modx->getOption('mpc_common_config_name', null, 'mpc_config'),
@@ -68,7 +78,11 @@ class Base{
         $this->parser = new Parser();
     }
 
-    public function getFileContent($fileName): string
+    /**
+     * @param string $fileName
+     * @return string
+     */
+    public function getFileContent(string $fileName): string
     {
         $filePath = $this->properties['pdotoolsElementsPath'] . $this->properties['pathToSrc'] . $fileName;
         if ($this->debug) {
@@ -95,11 +109,19 @@ class Base{
         return $items;
     }
 
+    /**
+     * @param string $value
+     * @return string
+     */
     public function getContactKey(string $value): string
     {
         return md5($value);
     }
 
+    /**
+     * @param \modResource $resource
+     * @return array
+     */
     public function getStaticSectionNames(\modResource $resource): array
     {
         if(!$config = $resource->getTVValue($this->properties['commonConfigTvName'])){

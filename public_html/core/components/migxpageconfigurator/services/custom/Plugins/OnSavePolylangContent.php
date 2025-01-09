@@ -17,15 +17,17 @@ class OnSavePolylangContent extends PluginHandler
     {
         $Mpc = new Mpc($this->modx);
 
-        $lang_key = $_POST['polylangcontent_culture_key'];
+        $Mpc->render->langKey = $_POST['polylangcontent_culture_key'];
         $urlParts = explode('?', urldecode($_SERVER['HTTP_REFERER']));
         $paramsRaw = explode('amp;', $urlParts[1]);
         $params = [];
-        foreach($paramsRaw as $pair){
+        foreach ($paramsRaw as $pair) {
             $p = explode('=', $pair);
             $params[$p[0]] = $p[1];
         }
-        $Mpc->render->copyPolylangConfig($params['id'], $lang_key);
-        $Mpc->render->handlePolylangConfig($params['id'], $lang_key);
+        $Mpc->render->copyPolylangConfig($params['id']);
+        if ($resource = $this->modx->getObject('modResource', $params['id'])) {
+            $Mpc->render->handle($resource->toArray());
+        }
     }
 }

@@ -14,11 +14,9 @@ $mpc = new Mpc($modx);
 
 $config = '';
 if ($lang_key) {
-    $config = $mpc->render->getPolylangConfig($mpc->render->properties['staticBlocksPageId'], $lang_key);
+    $config = $mpc->render->getPolylangTVById($mpc->render->properties['staticBlocksPageId'], $lang_key, $mpc->render->properties['commonConfigTvId']);
 } else {
-    if ($resource = $modx->getObject('modResource', $mpc->render->properties['staticBlocksPageId'])) {
-        $config = $resource->getTVValue($mpc->render->properties['commonConfigTvName']);
-    }
+    $config = $mpc->render->getTVById($mpc->render->properties['staticBlocksPageId'], $mpc->render->properties['commonConfigTvId']);
 }
 
 if ($config) {

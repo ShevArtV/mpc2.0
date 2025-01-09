@@ -1,6 +1,6 @@
 <!--##{"templatename":"Шаблон-пример","wrapper":"wrapper","icon":"icon-gear","include":"file:pages/index.tpl"}##-->
 
-<!-- php -d display_errors -d error_reporting=E_ALL /home/host1860015/art-sites.ru/htdocs/customfactory/core/components/migxpageconfigurator/console/mgr_tpl.php web examples.tpl -->
+<!-- php -d display_errors -d error_reporting=E_ALL core/components/migxpageconfigurator/console/mgr_tpl.php web examples.tpl 1 -->
 
 <section id="{$id}" data-mpc-section="first" data-mpc-name="Секция с простыми полями" data-mpc-static>
     <div class="container" data-mpc-field="bg_img"

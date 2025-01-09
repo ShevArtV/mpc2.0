@@ -1,9 +1,7 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-    {* /usr/local/php/php-7.4/bin/php -d display_errors -d error_reporting=E_ALL /home/host1860015/art-sites.ru/htdocs/customfactory/core/components/migxpageconfigurator/console/slice_tpl.php web wrapper.tpl *}
-    {* php -d display_errors -d error_reporting=E_ALL /home/host1860015/art-sites.ru/htdocs/customfactory/core/components/migxpageconfigurator/console/slice_tpl.php web wrapper.tpl *}
-    {* php -d display_errors -d error_reporting=E_ALL public_html/core/components/migxpageconfigurator/console/mgr_tpl.php web wrapper.tpl *}
+    {* php -d display_errors -d error_reporting=E_ALL core/components/migxpageconfigurator/console/mgr_tpl.php web wrapper.tpl 1 *}
 
     <title>{$pagetitle}</title>
     <meta name="description" content="{$description}">
@@ -54,12 +52,12 @@
     <main class="wrap">
 
         <!--CONTENT-->
-        {if !$sections}
-            {$content}
-        {else}
+        {if $sections}
             {foreach $sections as $section}
                 {$section}
             {/foreach}
+        {else}
+            {$content}
         {/if}
         <!--CONTENT-->
 

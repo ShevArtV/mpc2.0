@@ -23,11 +23,20 @@ class Grabber extends Base
      * @var bool
      */
     public bool $updContent = false;
+    /**
+     * @var string
+     */
     private string $fileName = '';
 
+    /**
+     * @var bool
+     */
     public bool $fromPlugin = false;
 
-    public string $imagesPath = '';
+    /**
+     * @var string
+     */
+    private string $imagesPath = '';
 
     /**
      * @return void
@@ -53,7 +62,7 @@ class Grabber extends Base
      * @param $fileName
      * @return array
      */
-    public function handle($fileName): array
+    public function handle(string $fileName): array
     {
         $this->fileName = $fileName;
         if ($this->debug) {
@@ -133,7 +142,12 @@ class Grabber extends Base
     }
 
 
-    private function getClientConfigSetting($key, $ctx = null): ?object
+    /**
+     * @param string $key
+     * @param string|null $ctx
+     * @return object|null
+     */
+    private function getClientConfigSetting(string $key, ?string $ctx = null): ?object
     {
         if ($ctx) {
             $q = $this->modx->newQuery('cgContextValue');
@@ -210,12 +224,10 @@ class Grabber extends Base
 
             $this->modx->invokeEvent('mpcOnHandleContact', [
                 'contact' => [$tmp],
+                'Grabber' => $this
             ]);
 
-            $response = isset($this->modx->event->returnedValues) && !empty($this->modx->event->returnedValues['contact']) ? $this->modx->event->returnedValues['contact'] : [];
-            if (!empty($response)) {
-                $tmp = $response;
-            }
+            $tmp = isset($this->modx->event->returnedValues) && !empty($this->modx->event->returnedValues['contact']) ? $this->modx->event->returnedValues['contact'] : $tmp;
 
             $contacts[$tmp['value']]['type'] = $tmp['type'];
             $contacts[$tmp['value']]['ckey'] = $tmp['key'];
@@ -534,7 +546,7 @@ class Grabber extends Base
      * @param int $i
      * @return array
      */
-    private function grabSection(\DOMElement $section, array $properties, int $i = 1): array
+    private function grabSection(\DOMElement $section, array $properties, ?int $i = 1): array
     {
         $sectionName = trim($section->getAttribute('data-mpc-name'));
         $sectionIsStatic = empty($this->staticSectionNames) ? $section->hasAttribute('data-mpc-static') : in_array($sectionName, $this->staticSectionNames);
@@ -555,12 +567,11 @@ class Grabber extends Base
             'sectionKey' => $properties['sectionName'],
             'fieldsValues' => $fieldsValues,
             'section' => $section,
+            'Grabber' => $this
         ]);
 
-        $response = isset($this->modx->event->returnedValues) && !empty($this->modx->event->returnedValues['fieldsValues']) ? $this->modx->event->returnedValues['fieldsValues'] : [];
-        if (!empty($response)) {
-            $fieldsValues = $response;
-        }
+        $fieldsValues = isset($this->modx->event->returnedValues) && !empty($this->modx->event->returnedValues['fieldsValues'])
+            ? $this->modx->event->returnedValues['fieldsValues'] : $fieldsValues;
 
 
         if (!$properties['isCopy'] && $sectionIsStatic) {
@@ -570,7 +581,12 @@ class Grabber extends Base
         return $fieldsValues;
     }
 
-    public function download($url, $path)
+    /**
+     * @param string $url
+     * @param string $path
+     * @return string
+     */
+    public function download(string $url, string $path)
     {
         if (!$path) {
             return '';
@@ -594,7 +610,7 @@ class Grabber extends Base
      * @param string $sectionName
      * @return void
      */
-    private function updateStaticSectionValues(array $sectionFieldsValues, string $sectionName)
+    private function updateStaticSectionValues(array $sectionFieldsValues, string $sectionName): void
     {
         $upd = false;
         $i = 0;
@@ -636,7 +652,7 @@ class Grabber extends Base
      * @param int $level
      * @return array
      */
-    private function parseHTML(string $html, string $fieldAttrName = 'data-mpc-field', string $itemAttrName = 'data-mpc-item', int $level = 0): array
+    private function parseHTML(string $html, ?string $fieldAttrName = 'data-mpc-field', ?string $itemAttrName = 'data-mpc-item', ?int $level = 0): array
     {
         if (!$entries = $this->getItems($html, '[' . $fieldAttrName . ']')) {
             return [];
@@ -719,7 +735,11 @@ class Grabber extends Base
         return $fields;
     }
 
-    private function getImageValue(\DOMElement $row)
+    /**
+     * @param \DOMElement $row
+     * @return string
+     */
+    private function getImageValue(\DOMElement $row): string
     {
         $attrs = ['src', 'alt', 'width', 'height'];
         $value[0]['MIGX_id'] = 1;
@@ -735,6 +755,12 @@ class Grabber extends Base
         return json_encode($value, JSON_UNESCAPED_UNICODE);
     }
 
+    /**
+     * @param \DOMElement $row
+     * @param int|null $idx
+     * @param bool|null $isPicture
+     * @return array
+     */
     private function getSourceValue(\DOMElement $row, ?int $idx = 1, ?bool $isPicture = true)
     {
         $attrs = ['type', 'media'];
@@ -755,6 +781,10 @@ class Grabber extends Base
         return $value;
     }
 
+    /**
+     * @param string $attrValue
+     * @return string
+     */
     private function downloadImage(string $attrValue): string
     {
         if (empty($this->properties['imagesPath'])) {
@@ -765,10 +795,13 @@ class Grabber extends Base
         $this->modx->invokeEvent('mpcOnBeforeDownloadImage', [
             'baseName' => $baseName,
             'imagesPath' => $this->imagesPath,
+            'Grabber' => $this
         ]);
 
-        $baseName = isset($this->modx->event->returnedValues) && !empty($this->modx->event->returnedValues['baseName']) ? $this->modx->event->returnedValues['baseName'] : $baseName;
-        $imagesPath = isset($this->modx->event->returnedValues) && !empty($this->modx->event->returnedValues['imagesPath']) ? $this->modx->event->returnedValues['imagesPath'] : $this->imagesPath;
+        $baseName = isset($this->modx->event->returnedValues) && !empty($this->modx->event->returnedValues['baseName'])
+            ? $this->modx->event->returnedValues['baseName'] : $baseName;
+        $imagesPath = isset($this->modx->event->returnedValues) && !empty($this->modx->event->returnedValues['imagesPath'])
+            ? $this->modx->event->returnedValues['imagesPath'] : $this->imagesPath;
 
         $fullPathToDir = dirname(__FILE__, 7) . $imagesPath;
         if (!file_exists($fullPathToDir)) {
@@ -785,7 +818,7 @@ class Grabber extends Base
      * @param \DOMElement $element
      * @return string
      */
-    private function getPictureValue(\DOMElement $element)
+    private function getPictureValue(\DOMElement $element): string
     {
         $picture[0]['MIGX_id'] = 1;
         $picture[0]['preview'] = '';
@@ -804,7 +837,11 @@ class Grabber extends Base
         return json_encode($picture);
     }
 
-    private function getMediaValue(\DOMElement $element)
+    /**
+     * @param \DOMElement $element
+     * @return array
+     */
+    private function getMediaValue(\DOMElement $element): array
     {
         $media[0]['MIGX_id'] = 1;
         $attrs = [
@@ -841,9 +878,12 @@ class Grabber extends Base
             $media[0]['src'] = $media[0]['sources'][0]['src'];
         }
         return $media;
-        //return json_encode($media);
     }
 
+    /**
+     * @param \DOMElement $element
+     * @return string
+     */
     private function getBackgroundValue(\DOMElement $element): string
     {
         if ($style = $element->getAttribute('style')) {
@@ -859,6 +899,10 @@ class Grabber extends Base
         return '';
     }
 
+    /**
+     * @param \DOMElement $element
+     * @return string
+     */
     private function getValue(\DOMElement $element): string
     {
         $result = '';

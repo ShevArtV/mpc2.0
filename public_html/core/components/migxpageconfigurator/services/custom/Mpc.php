@@ -91,7 +91,7 @@ class Mpc
      */
     public function process(?string $fileName, ?bool $updContent)
     {
-        if($this->properties['devMode']){
+        if ($this->properties['devMode']) {
             $this->render->clearCache();
         }
         $this->grabber->updContent = $updContent ?? false;
@@ -115,32 +115,27 @@ class Mpc
         $result = $this->grabber->handle($fileName);
         $this->cutter->handle($fileName);
         if ($result['data']['resource']) {
-            $this->render->handle($result['data']['resource']);
+            $resourceData = $result['data']['resource']->toArray();
+            $this->render->handle($resourceData);
         }
     }
 
-    public function getParsedConfigPath(\modResource $resource)
+    public function getParsedConfigPath(\modResource $resource): string
     {
         $parsedPath = $this->properties['pdotoolsElementsPath'];
-        $rid = $resource->get('id');
-        $langKey = $this->modx->getPlaceholder('+lang');
-        $langKeyDefault = $this->modx->getOption('polylang_visitor_default_language');
-        if ($langKey && $langKey !== $langKeyDefault) {
-            $path = $this->properties['pathToDist'] . $rid . $langKey . $this->properties['extension'];
-            if (!file_exists($parsedPath . $path)) {
-                $this->render->handlePolylangConfig($rid, $langKey);
-            }
-        } else {
-            $path = $this->properties['pathToDist'] . $rid . $this->properties['extension'];
-            if (!file_exists($parsedPath . $path)) {
-                $this->render->handle($resource);
-            }
+        $resourceData = $resource->toArray();
+        $path = $this->properties['pathToDist'] . $resourceData['id'] . $this->properties['extension'];
+        $this->render->langKey = $this->modx->getPlaceholder('+lang') ?: '';
+
+        if ($this->render->langKey && $this->render->langKey !== $this->render->langKeyDefault) {
+            $path = $this->properties['pathToDist'] . $resourceData['content_id'] . $this->render->langKey . $this->properties['extension'];
         }
 
-        if (file_exists($parsedPath . $path)) {
-            return 'file:' . $path;
+        if (!file_exists($parsedPath . $path)) {
+            $this->render->handle($resourceData);
         }
-        return '';
+
+        return file_exists($parsedPath . $path) ? 'file:' . $path : '';
     }
 
     public function copySystemSettingsToNewContext(\modContext $context)
@@ -155,22 +150,27 @@ class Mpc
         }
     }
 
-
     public function loadWebScripts()
     {
         if ($this->properties['expandAttr'] && $this->properties['expandEnabled']) {
-            $this->modx->regClientScript("
+            $this->modx->regClientScript(
+                "
                 <script>                
                 window.mpcExpandAttr = '{$this->properties['expandAttr']}';
                 </script>
-                <script type=\"module\" src=\"assets/components/migxpageconfigurator/js/web/expand.js\"></script>", true);
+                <script type=\"module\" src=\"assets/components/migxpageconfigurator/js/web/expand.js\"></script>",
+                true
+            );
         }
         if ($this->properties['lazyloadAttr'] && $this->properties['lazyloadEnabled']) {
-            $this->modx->regClientScript("
+            $this->modx->regClientScript(
+                "
                 <script>
                 window.mpcLazyLoadAttr = '{$this->properties['lazyloadAttr']}';               
                 </script>
-                <script type=\"module\" src=\"assets/components/migxpageconfigurator/js/web/lazyload.js\"></script>", true);
+                <script type=\"module\" src=\"assets/components/migxpageconfigurator/js/web/lazyload.js\"></script>",
+                true
+            );
         }
     }
 
@@ -204,7 +204,6 @@ class Mpc
                 $this->runProcessor($dir, $file, $type);
             }
         }
-
     }
 
     /**
@@ -236,7 +235,9 @@ class Mpc
         foreach ($resources as $context => $items) {
             $menuindex = 0;
             foreach ($items as $item) {
-                if (!$item['pagetitle']) continue;
+                if (!$item['pagetitle']) {
+                    continue;
+                }
                 $item['context_key'] = $context;
                 $item['menuindex'] = $menuindex++;
                 $this->manageResource($item);
@@ -294,7 +295,9 @@ class Mpc
         if (!empty($data['resources'])) {
             $menuindex = 0;
             foreach ($data['resources'] as $item) {
-                if (!$item['pagetitle']) continue;
+                if (!$item['pagetitle']) {
+                    continue;
+                }
                 $item['context_key'] = $data['context_key'];
                 $item['menuindex'] = $menuindex++;
                 $this->manageResource($item, $uri . '/', $resource->get('id'));
@@ -449,7 +452,9 @@ class Mpc
     private function getTemplateId($templateName, $full = false)
     {
         $template = $this->modx->getObject('modTemplate', ['templatename' => $templateName]);
-        if ($templateName == null) return 0;
+        if ($templateName == null) {
+            return 0;
+        }
         if ($full !== false) {
             return array_merge($template->toArray(), ['access' => true]);
         }

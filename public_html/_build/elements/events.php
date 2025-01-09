@@ -10,4 +10,10 @@ return [
     'mpcOnBeforeDownloadImage' => [
         'groupname' => 'MigxPageConfigurator',
     ],
+    'mpcOnBeforeParseConfig' => [
+        'groupname' => 'MigxPageConfigurator',
+    ],
+    'mpcOnBeforeRender' => [
+        'groupname' => 'MigxPageConfigurator',
+    ],
 ];

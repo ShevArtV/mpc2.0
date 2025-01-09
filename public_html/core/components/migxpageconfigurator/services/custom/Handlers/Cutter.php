@@ -6,13 +6,14 @@
 
 namespace MpcServices\Handlers;
 
-use Couchbase\ThresholdLoggingTracer;
-
 /**
  * @author Arthur Shevchenko (https://t.me/ShevArtV)
  */
 class Cutter extends Base
 {
+    /**
+     * @var string
+     */
     private string $html = '';
 
     /**
@@ -43,7 +44,7 @@ class Cutter extends Base
     /**
      * @return void
      */
-    private function getPresets()
+    private function getPresets(): void
     {
         $pathToPresets = $this->properties['pdotoolsElementsPath'] . $this->properties['pathToPresets'];
         if (file_exists($pathToPresets)) {
@@ -58,7 +59,10 @@ class Cutter extends Base
         }
     }
 
-    private function getSamples()
+    /**
+     * @return void
+     */
+    private function getSamples(): void
     {
         $pathToSamples = $this->properties['corePath'] . $this->properties['pathToSamples'];
         if (file_exists($pathToSamples)) {
@@ -73,6 +77,10 @@ class Cutter extends Base
         }
     }
 
+    /**
+     * @param string $fileName
+     * @return array
+     */
     public function handle(string $fileName): array
     {
         if ($this->debug) {
@@ -90,7 +98,10 @@ class Cutter extends Base
         return $this->response->success(__METHOD__, "Processing of file $fileName is completed");
     }
 
-    private function handleInformation()
+    /**
+     * @return void
+     */
+    private function handleInformation(): void
     {
         if (!$items = $this->getItems($this->html, '[data-mpc-info]')) {
             return;
@@ -125,7 +136,10 @@ class Cutter extends Base
         }
     }
 
-    private function handleContacts()
+    /**
+     * @return void
+     */
+    private function handleContacts(): void
     {
         if (!$items = $this->getItems($this->html, '[data-mpc-contact]')) {
             return;
@@ -202,7 +216,10 @@ class Cutter extends Base
         }
     }
 
-    private function handleSections()
+    /**
+     * @return void
+     */
+    private function handleSections(): void
     {
         if (!$sections = $this->getItems($this->html, '[data-mpc-section]')) {
             return;
@@ -227,7 +244,7 @@ class Cutter extends Base
      * @param \DOMNodeList $innerChunks
      * @return void
      */
-    private function parseInnerChunks(\DOMNodeList $innerChunks)
+    private function parseInnerChunks(\DOMNodeList $innerChunks): void
     {
         foreach ($innerChunks as $innerChunk) {
             if (!property_exists($innerChunk, 'nodeValue')) {
@@ -264,7 +281,7 @@ class Cutter extends Base
      * @param \DOMElement $section
      * @return void
      */
-    private function createSectionFiles(\DOMElement $section)
+    private function createSectionFiles(\DOMElement $section): void
     {
         $sectionName = trim($section->getAttribute('data-mpc-section'));
         $fileName = $sectionName . $this->properties['extension'];
@@ -281,7 +298,7 @@ class Cutter extends Base
      * @param string $pathToFile
      * @return void
      */
-    private function putToFile(\DOMElement $element, string $pathToFile)
+    private function putToFile(\DOMElement $element, string $pathToFile): void
     {
         $html = $this->parser->getHTMLString($element);
         $sectionName = trim($element->getAttribute('data-mpc-name'));
@@ -312,7 +329,7 @@ class Cutter extends Base
             }
         }
 
-        //$properties['html'] = $this->unwrapBlock($properties['html']);
+        $properties['html'] = $this->unwrapBlock($properties['html']);
 
         if (strpos($element->getAttribute('data-mpc-section'), $this->properties['wrapperName']) !== false) {
             $properties['html'] = preg_replace('/<body(.*?)>(.*?)<\/body>/s', '<body\1>' . $properties['html'] . '</body>', $this->html);
@@ -331,7 +348,11 @@ class Cutter extends Base
         //$this->modx->log(1, $properties['html']);
     }
 
-    private function unwrapBlock($html)
+    /**
+     * @param string $html
+     * @return string
+     */
+    private function unwrapBlock(string $html): string
     {
         if ($unwrap = $this->getItems($html, '[data-mpc-unwrap]')) {
             foreach ($unwrap as $attr) {
@@ -426,6 +447,12 @@ class Cutter extends Base
         return $properties;
     }
 
+    /**
+     * @param \DOMElement $row
+     * @param string $fieldName
+     * @param array $properties
+     * @return string
+     */
     private function setBackgroundPlaceholder(\DOMElement $row, string $fieldName, array $properties): string
     {
         $html = '';
@@ -462,7 +489,13 @@ class Cutter extends Base
         return $html;
     }
 
-    private function setImgPlaceholder(\DOMElement $row, string $fieldName, array $properties)
+    /**
+     * @param \DOMElement $row
+     * @param string $fieldName
+     * @param array $properties
+     * @return string
+     */
+    private function setImgPlaceholder(\DOMElement $row, string $fieldName, array $properties): string
     {
         list($firstSymbol, $complexName) = $this->getSymbolComplex($row, $fieldName, $properties['level'], $properties['isStatic']);
         $imgAttrs = ['width', 'height', 'alt'];
@@ -505,7 +538,13 @@ class Cutter extends Base
         return $html;
     }
 
-    private function setMediaPlaceholder(\DOMElement $row, string $fieldName, array $properties)
+    /**
+     * @param \DOMElement $row
+     * @param string $fieldName
+     * @param array $properties
+     * @return string
+     */
+    private function setMediaPlaceholder(\DOMElement $row, string $fieldName, array $properties): string
     {
         $pls = '';
         list($firstSymbol, $complexName) = $this->getSymbolComplex($row, $fieldName, $properties['level'], $properties['isStatic']);
@@ -592,6 +631,10 @@ class Cutter extends Base
         return $html;
     }
 
+    /**
+     * @param array $params
+     * @return string
+     */
     private function getThumb(array $params): string
     {
         $snippetName = $this->properties['thumbSnippet'];
@@ -616,6 +659,12 @@ class Cutter extends Base
         return "{$params['firstSymbol']}'$snippetName' | snippet: [ 'input' => $src, 'options' => '{$thumbParams}]}";
     }
 
+    /**
+     * @param \DOMElement $row
+     * @param string $firstSymbol
+     * @param string $complexName
+     * @return \DOMElement
+     */
     private function setAttributes(\DOMElement $row, string $firstSymbol, string $complexName): \DOMElement
     {
         $allowedAttrs = [
@@ -642,7 +691,13 @@ class Cutter extends Base
         return $row;
     }
 
-    private function setDefaultPlaceholder(\DOMElement $row, string $fieldName, array $properties)
+    /**
+     * @param \DOMElement $row
+     * @param string $fieldName
+     * @param array $properties
+     * @return string
+     */
+    private function setDefaultPlaceholder(\DOMElement $row, string $fieldName, array $properties): string
     {
         list($firstSymbol, $complexName) = $this->getSymbolComplex($row, $fieldName, $properties['level'], $properties['isStatic']);
         if ($row->hasAttribute('href')) {
@@ -663,6 +718,13 @@ class Cutter extends Base
         return $html;
     }
 
+    /**
+     * @param \DOMElement $row
+     * @param string $fieldName
+     * @param int|null $level
+     * @param bool|null $isStatic
+     * @return array
+     */
     private function getSymbolComplex(\DOMElement $row, string $fieldName, ?int $level = 0, ?bool $isStatic = false): array
     {
         $firstSymbol = $isStatic ? '##' : (trim($row->getAttribute('data-mpc-symbol')) ?: '{');
@@ -677,7 +739,13 @@ class Cutter extends Base
         return [$firstSymbol, $complexName];
     }
 
-    private function wrapInCondition(string $conditions, string $html, ?string $firstSymbol = '{')
+    /**
+     * @param string $conditions
+     * @param string $html
+     * @param string|null $firstSymbol
+     * @return string
+     */
+    private function wrapInCondition(string $conditions, string $html, ?string $firstSymbol = '{'): string
     {
         return str_replace(['##', 'condition', 'html'], [$firstSymbol, $conditions, $html], $this->properties['samples']['if']);
     }
@@ -770,11 +838,11 @@ class Cutter extends Base
     }
 
     /**
-     * @param $preset
-     * @param $extends
-     * @return array|mixed
+     * @param string $preset
+     * @param array|null $extends
+     * @return array
      */
-    private function getExtends($preset, $extends)
+    private function getExtends(string $preset, ?array $extends = []): array
     {
         $preset = explode('.', $preset);
         $presetData = $this->properties['presets'][$preset[0]][$preset[1]];
