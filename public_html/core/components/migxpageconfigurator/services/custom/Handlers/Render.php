@@ -448,7 +448,7 @@ class Render extends Base
         } else {
             $html = $resourceData['sections'] ? implode('\n', $resourceData['sections']) : $resourceData['content'];
         }
-
+        $html = preg_replace('/ => {(.*?)\| lexicon}/', ' => ($1| lexicon)', $html);
         if (!file_put_contents($pathToFile, $html)) {
             $this->response->error(__METHOD__, 'Failed to save section file' . $pathToFile);
             return false;

@@ -10,13 +10,13 @@ use MpcServices\Mpc;
 $corePath = $modx->getOption('core_path', '', MODX_CORE_PATH);
 
 require_once $corePath . 'components/migxpageconfigurator/services/vendor/autoload.php';
-$mpc = new Mpc($modx);
+$Mpc = new Mpc($modx);
 
 $config = '';
 if ($lang_key) {
-    $config = $mpc->render->getPolylangTVById($mpc->render->properties['staticBlocksPageId'], $lang_key, $mpc->render->properties['commonConfigTvId']);
+    $config = $Mpc->render->getPolylangTVById($Mpc->render->properties['staticBlocksPageId'], $lang_key, $Mpc->render->properties['commonConfigTvId']);
 } else {
-    $config = $mpc->render->getTVById($mpc->render->properties['staticBlocksPageId'], $mpc->render->properties['commonConfigTvId']);
+    $config = $Mpc->render->getTVById($Mpc->render->properties['staticBlocksPageId'], $Mpc->render->properties['commonConfigTvId']);
 }
 
 if ($config) {
@@ -26,7 +26,7 @@ if ($config) {
             if ($section['MIGX_formname'] === $section_name) {
                 foreach ($section as $k => $v) {
                     if (!is_array($v) && strpos($v, '[{') !== false) {
-                        $section[$k] = $mpc->render->jsonDecodeValue(json_decode($v, 1));
+                        $section[$k] = $Mpc->render->jsonDecodeValue(json_decode($v, 1));
                     }
                 }
                 return $section;

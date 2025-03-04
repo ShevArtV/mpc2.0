@@ -484,4 +484,25 @@ class Mpc
 
         return $obCategory->get('id');
     }
+
+    public function loadLexicons(int $rid, ?int $templateId = 0)
+    {
+        $this->modx->lexicon->load('migxpageconfigurator:' . $this->grabber->properties['staticBlocksPageId']);
+        if($parentResourceId = $this->getParentResourceId($templateId)){
+            $this->modx->lexicon->load('migxpageconfigurator:' . $parentResourceId);
+        }
+        $this->modx->lexicon->load('migxpageconfigurator:' . $rid);
+    }
+
+    public function getParentResourceId(int $templateId): int
+    {
+        $q = $this->modx->newQuery('modResource');
+        $q->select('id');
+        $q->where(['template' => $templateId, 'parent' => $this->grabber->properties['staticBlocksPageId']]);
+        $q->prepare();
+        if($q->stmt->execute()){
+            return $q->stmt->fetchColumn();
+        }
+        return 0;
+    }
 }

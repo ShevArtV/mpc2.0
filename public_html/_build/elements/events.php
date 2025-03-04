@@ -16,4 +16,7 @@ return [
     'mpcOnBeforeRender' => [
         'groupname' => 'MigxPageConfigurator',
     ],
+    'mpcOnGetLexiconKey' => [
+        'groupname' => 'MigxPageConfigurator',
+    ],
 ];

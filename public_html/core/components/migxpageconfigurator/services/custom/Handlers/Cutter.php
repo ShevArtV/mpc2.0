@@ -26,7 +26,7 @@ class Cutter extends Base
         $properties = [
             'pathToChunks' => $this->modx->getOption('mpc_path_to_chunks', null, 'chunks/'),
             'chunkNames' => [],
-            'pattern' => '/(\s)*?data-mpc-(nolazy|copy|symbol|if|static|name|item|unwrap|section|snippet|chunk|include|parse|remove|attr|field|cfield|contact|ctx|info|lim|off|nothumb|thumb)(-){0,1}([0-9]*)(=".*?"){0,1}(\s)*?/',
+            'pattern' => '/(\s)*?data-mpc-(nolazy|copy|symbol|if|static|name|item|unwrap|section|snippet|chunk|include|parse|remove|attr|field|cfield|contact|ctx|info|lim|off|nothumb|thumb|lexicon)(-){0,1}([0-9]*)(=".*?"){0,1}(\s)*?/',
             'wrapperName' => $this->modx->getOption('mpc_wrapper_name', null, 'wrapper'),
             'thumbFormat' => $this->modx->getOption('mpc_thumb_format', null, 'png'),
             'fakeImgPath' => $this->modx->getOption('mpc_fake_img_path', null, 'assets/components/migxpageconfigurator/images/fake-img.png'),
@@ -284,6 +284,7 @@ class Cutter extends Base
     private function createSectionFiles(\DOMElement $section): void
     {
         $sectionName = trim($section->getAttribute('data-mpc-section'));
+        $this->properties['isSectionStatic'] = $section->hasAttribute('data-mpc-static');
         $fileName = $sectionName . $this->properties['extension'];
         if (!file_exists($this->properties['pdotoolsElementsPath'] . $this->properties['pathToSections'])) {
             mkdir($this->properties['pdotoolsElementsPath'] . $this->properties['pathToSections'], 0777, true);
@@ -302,12 +303,14 @@ class Cutter extends Base
     {
         $html = $this->parser->getHTMLString($element);
         $sectionName = trim($element->getAttribute('data-mpc-name'));
+        $sectionLexiconPrefix = trim($element->getAttribute('data-mpc-lexicon'));
         $properties = [
             'html' => $html,
             'element' => $element,
             'fieldAttrName' => 'data-mpc-field',
             'itemAttrName' => 'data-mpc-item',
             'level' => 0,
+            'sectionLexiconPrefix' => $sectionLexiconPrefix,
             'isStatic' => empty($this->staticSectionNames) ? $element->hasAttribute('data-mpc-static') : in_array($sectionName, $this->staticSectionNames)
         ];
         $properties = $this->setPlaceholders($properties);
@@ -381,6 +384,7 @@ class Cutter extends Base
         $mediaLists = [];
         foreach ($fields as $field) {
             $fieldName = $field->getAttribute($fieldAttrName);
+            $properties['fieldName'] = $fieldName;
             $fieldHTML = $this->parser->getHTMLString($field);
 
             if ($fieldName === 'bg_img') {
@@ -391,6 +395,7 @@ class Cutter extends Base
                 $fieldHTMLNew = $this->setMediaPlaceholder($field, $fieldName, $properties);
             } elseif (in_array($fieldName, ['list_images', 'list_pictures', 'list_audios', 'list_videos'])) {
                 $k = isset($mediaLists[$fieldName]) ? count($mediaLists[$fieldName]) : 0;
+                $properties['level'] = $k;
                 if ($fieldName === 'list_images') {
                     $fieldHTMLNew = $this->setImgPlaceholder($field, $fieldName . "[$k].img", $properties);
                 } else {
@@ -402,7 +407,8 @@ class Cutter extends Base
                 $props['html'] = $this->parser->getHTMLString($items[0]);
                 $props['element'] = $items[0];
                 $props['level'] = $properties['level'] + 1;
-
+                $properties['parentFieldName'] = $fieldName;
+                $properties['fieldName'] = preg_replace('/^\$/', '', $complexName);
                 $props = $this->setPlaceholders(array_merge($properties, $props));
                 $limit = $field->getAttribute('data-mpc-lim');
                 $offset = $field->getAttribute('data-mpc-off');
@@ -420,7 +426,6 @@ class Cutter extends Base
                 $fieldHTMLNew = str_replace(['##', 'subject', '^', 'html', 'limit', 'offset'],
                     [$firstSymbol, $complexName, $props['level'], $html, $limit, $offset],
                     $this->properties['samples'][$sampleKey]);
-
                 if (!$field->hasAttribute('data-mpc-unwrap')) {
                     $field->nodeValue = $fieldHTMLNew;
                     $fieldHTMLNew = $this->parser->getHTMLString($field);
@@ -438,7 +443,6 @@ class Cutter extends Base
             }
             /** TODO Рассмотреть возможность добавить событие для подмены плейсхолдеров */
             if (!empty($fieldHTMLNew)) {
-                //$this->modx->log(1, print_r([$fieldHTML, $fieldHTMLNew], 1));
                 $properties['html'] = str_replace($fieldHTML, $fieldHTMLNew, $properties['html']);
             }
         }
@@ -460,7 +464,6 @@ class Cutter extends Base
             list($firstSymbol, $complexName) = $this->getSymbolComplex($row, $fieldName, $properties['level'], $properties['isStatic']);
             preg_match('/width:(.*?);/', $style, $width);
             preg_match('/height:(.*?);/', $style, $height);
-
             if (!$row->hasAttribute('data-mpc-nothumb')) {
                 $src = $this->getThumb([
                     'width' => (int)$width[1],
@@ -469,7 +472,7 @@ class Cutter extends Base
                     'firstSymbol' => $firstSymbol,
                     'complexName' => $complexName,
                     'srcAttr' => '',
-                    'setValues' => true
+                    'setValues' => true,
                 ]);
             } else {
                 $src = "{$firstSymbol}{$complexName}}";
@@ -477,7 +480,7 @@ class Cutter extends Base
 
 
             if ($this->properties['lazyloadAttr'] && !$row->hasAttribute('data-mpc-nolazy')) {
-                $row->setAttribute($this->properties['lazyloadAttr'], $src);
+                $row->setAttribute($this->properties['lazyloadAttr'], 'bg:' . $src);
                 $row->removeAttribute('style');
             } else {
                 $style = preg_replace('/url\(\'(.*?)\'\)/', "url('" . $src . "')", $style);
@@ -501,7 +504,6 @@ class Cutter extends Base
         $imgAttrs = ['width', 'height', 'alt'];
         $complexName .= '[0]';
         $prefix = "{$firstSymbol}{$complexName}";
-
         if (!$row->hasAttribute('data-mpc-nothumb')) {
             $src = $this->getThumb([
                 'width' => $row->hasAttribute('width'),
@@ -509,7 +511,7 @@ class Cutter extends Base
                 'thumbParams' => $row->getAttribute('data-mpc-thumb'),
                 'firstSymbol' => $firstSymbol,
                 'complexName' => $complexName,
-                'srcAttr' => 'src'
+                'srcAttr' => 'src',
             ]);
         } else {
             $src = "$prefix.src}";
@@ -562,7 +564,8 @@ class Cutter extends Base
 
         $sources = $row->getElementsByTagName('source');
         if ($sources->length) {
-            $source = $this->setAttributes($sources[$sources->length - 1], $firstSymbol, '$source');
+            $k = $sources->length - 1;
+            $source = $this->setAttributes($sources[$k], $firstSymbol, '$source');
             $search = ['##', 'complexName', 'html'];
             $replace = [$firstSymbol, $complexName];
             if ($this->properties['lazyloadAttr'] && !$row->hasAttribute('data-mpc-nolazy')) {
@@ -575,7 +578,7 @@ class Cutter extends Base
                             'thumbParams' => $source->getAttribute('data-mpc-thumb'),
                             'firstSymbol' => $firstSymbol,
                             'complexName' => '$source',
-                            'srcAttr' => 'srcset'
+                            'srcAttr' => 'srcset',
                         ]);
                     } else {
                         $src = "{$firstSymbol}\$source.$attr}";
@@ -603,7 +606,7 @@ class Cutter extends Base
                     'thumbParams' => $img->getAttribute('data-mpc-thumb'),
                     'firstSymbol' => $firstSymbol,
                     'complexName' => $complexName . '.img[0]',
-                    'srcAttr' => 'src'
+                    'srcAttr' => 'src',
                 ]);
             } else {
                 $src = "{$firstSymbol}{$complexName}.img[0].src}";
@@ -640,7 +643,6 @@ class Cutter extends Base
         $snippetName = $this->properties['thumbSnippet'];
         $thumbParams = $params['thumbParams'] ?: $this->properties['commonThumbParams'];
         $src = $params['srcAttr'] ? "{$params['complexName']}.{$params['srcAttr']}" : $params['complexName'];
-
         if ($params['width']) {
             if ($params['height']) {
                 $pls = $params['setValues'] ? $params['width'] : "'~{$params['complexName']}.width~'";
@@ -656,6 +658,12 @@ class Cutter extends Base
         if (!$params['height'] && !$params['width']) {
             $thumbParams .= "'";
         }
+
+        if ($this->properties['useLexicons'] && in_array('image', $this->properties['translatableContentTypes'])) {
+            $src = !$this->properties['isSectionStatic'] ? '{' . $src . '}' : $src;
+            $params['firstSymbol'] = '##';
+        }
+
         return "{$params['firstSymbol']}'$snippetName' | snippet: [ 'input' => $src, 'options' => '{$thumbParams}]}";
     }
 
@@ -732,7 +740,15 @@ class Cutter extends Base
         $table = $row->getAttribute('data-mpc-table') ?: 'config';
 
         if ($table === 'config') {
-            $complexName = $level > 0 ? "\$item{$level}.{$fieldName}" : "\${$fieldName}";
+            if (strpos($fieldName, 'list_images') === 0
+                || strpos($fieldName, 'list_pictures') === 0
+                || strpos($fieldName, 'list_videos') === 0
+                || strpos($fieldName, 'list_audios') === 0
+            ) {
+                $complexName = "\${$fieldName}";
+            } else {
+                $complexName = $level > 0 ? "\$item{$level}.{$fieldName}" : "\${$fieldName}";
+            }
         } else {
             $complexName = "($rid | resource: '$fieldName')";
         }

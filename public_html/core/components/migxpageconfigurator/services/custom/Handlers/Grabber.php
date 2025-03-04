@@ -34,9 +34,24 @@ class Grabber extends Base
     public bool $fromPlugin = false;
 
     /**
+     * @var bool
+     */
+    private bool $sectionIsStatic = false;
+
+    /**
      * @var string
      */
     private string $imagesPath = '';
+
+    /**
+     * @var array
+     */
+    public array $lexicons = [];
+
+    /**
+     * @var string
+     */
+    public string $sectionLexiconPrefix = '';
 
     /**
      * @return void
@@ -45,12 +60,32 @@ class Grabber extends Base
     {
         parent::initialize();
 
+        $excludeLexiconFields = $this->modx->getOption('mpc_exclude_lexicons_fields', '', '');
+        $excludeLexiconFields = array_merge([
+            'MIGX_id',
+            'MIGX_formname',
+            'id',
+            'section_name',
+            'file_name',
+            'is_static',
+            'limit',
+            'target',
+            'resources'
+        ], explode(',', $excludeLexiconFields));
+
         $properties = array_merge($this->properties, [
             'startPageId' => $this->modx->getOption('site_start', null, 1),
             'phoneRegExp' => $this->modx->getOption('mpc_phone_regexp', '', '/(\d)(\d{3})(\d{3})(\d{2})(\d{2})$/'),
             'phoneFormat' => $this->modx->getOption('mpc_phone_format', '', '8 (\2) \3-\4-\5'),
             'imagesPath' => $this->modx->getOption('mpc_images_path', '', ''),
+            'excludeLexiconFields' => $excludeLexiconFields,
         ]);
+
+        if ($this->properties['useLexicons']) {
+            /** TODO Добавить возможность создавать файлы словарей по псевдониму ресурса */
+            $properties['basePathToLexiconFile'] = $this->properties['corePath'] . 'components/migxpageconfigurator/lexicon/' . $properties['langKey'] . '/';
+            $this->lexicons[$properties['staticBlocksPageId']] = $this->getLexicons($properties['staticBlocksPageId'], $properties['basePathToLexiconFile']);
+        }
         $this->properties = array_merge($this->properties, $properties);
         $this->modx->addPackage('migx', $this->properties['corePath'] . 'components/migx/model/');
         if ($this->debug) {
@@ -59,7 +94,7 @@ class Grabber extends Base
     }
 
     /**
-     * @param $fileName
+     * @param string $fileName
      * @return array
      */
     public function handle(string $fileName): array
@@ -130,9 +165,11 @@ class Grabber extends Base
                     $data['value'] = $item->getAttribute('src');
                     break;
                 default:
+                    //$value = $item->hasAttribute('data-mpc-unwrap') ? $item->nodeValue : $this->parser->getHTMLString($item);
                     $data['value'] = str_replace('{', '{ ', $item->nodeValue);
                     break;
             }
+
             $setting->fromArray($data, '', true);
             $setting->save();
             if ($this->debug) {
@@ -190,6 +227,7 @@ class Grabber extends Base
                 'type' => $contactAttrValue[0],
                 'placement' => $contactAttrValue[1] ?? 'default',
             ];
+            /** TODO Создавать лексиконы для контактов */
             foreach ($fields as $field) {
                 $key = $field->getAttribute('data-mpc-cfield');
                 if ($key === 'fvalue') {
@@ -425,7 +463,27 @@ class Grabber extends Base
             return;
         }
 
+        $this->createLexicons($this->lexicons);
+
         $this->response->success(__METHOD__, 'Section processing is complete.');
+    }
+
+    public function createLexicons(array $allLexicons)
+    {
+        $basePathToLexiconFile = $this->properties['basePathToLexiconFile'];
+        foreach ($allLexicons as $rid => $lexicons) {
+            $pathToLexiconFile = $basePathToLexiconFile . $rid . '.inc.php';
+
+            if (!empty($lexicons)) {
+                $content = '<?php' . PHP_EOL;
+                foreach ($lexicons as $k => $v) {
+                    $content .= '$_lang[\'' . $k . '\'] = \'' . $v . '\';' . PHP_EOL;
+                }
+                file_put_contents($pathToLexiconFile, $content);
+            } else {
+                unlink($pathToLexiconFile);
+            }
+        }
     }
 
     /**
@@ -543,23 +601,26 @@ class Grabber extends Base
     /**
      * @param \DOMElement $section
      * @param array $properties
-     * @param int $i
+     * @param int|null $i
      * @return array
      */
     private function grabSection(\DOMElement $section, array $properties, ?int $i = 1): array
     {
         $sectionName = trim($section->getAttribute('data-mpc-name'));
-        $sectionIsStatic = empty($this->staticSectionNames) ? $section->hasAttribute('data-mpc-static') : in_array($sectionName, $this->staticSectionNames);
+        $this->sectionLexiconPrefix = trim($section->getAttribute('data-mpc-lexicon')) ?? $properties['sectionName'];
+        $this->sectionIsStatic = empty($this->staticSectionNames) ? $section->hasAttribute('data-mpc-static') : in_array($sectionName, $this->staticSectionNames);
         $sectionId = $properties['sectionName'] . '_' . str_replace(['.', ',', ' '], '', microtime(true));
         $this->imagesPath = $this->properties['imagesPath'] . $properties['sectionName'] . '/';
+
         // заполняем содержимое полей
         $fieldsValues = $this->getFieldsValues($this->parser->getHTMLString($section));
-        $fieldsValues['is_static'] = $sectionIsStatic;
+        $fieldsValues['is_static'] = $this->sectionIsStatic;
         $fieldsValues = array_merge([
             'MIGX_id' => $i,
             'MIGX_formname' => $properties['sectionName'],
             'id' => $sectionId,
             'section_name' => $sectionName,
+            'lexicon_prefix' => $this->sectionLexiconPrefix,
             'file_name' => $properties['fileNameVis'],
         ], $fieldsValues);
 
@@ -573,8 +634,7 @@ class Grabber extends Base
         $fieldsValues = isset($this->modx->event->returnedValues) && !empty($this->modx->event->returnedValues['fieldsValues'])
             ? $this->modx->event->returnedValues['fieldsValues'] : $fieldsValues;
 
-
-        if (!$properties['isCopy'] && $sectionIsStatic) {
+        if (!$properties['isCopy'] && $this->sectionIsStatic) {
             $this->updateStaticSectionValues($fieldsValues, $properties['sectionName']);
         }
 
@@ -647,16 +707,21 @@ class Grabber extends Base
 
     /**
      * @param string $html
-     * @param string $fieldAttrName
-     * @param string $itemAttrName
-     * @param int $level
+     * @param array|null $options
      * @return array
      */
-    private function parseHTML(string $html, ?string $fieldAttrName = 'data-mpc-field', ?string $itemAttrName = 'data-mpc-item', ?int $level = 0): array
+    private function parseHTML(string $html, ?array $options = []): array
     {
+        $level = $options['level'] ?? 0;
+        $fieldAttrName = $options['fieldAttrName'] ?? 'data-mpc-field';
+        $itemAttrName = $options['itemAttrName'] ?? 'data-mpc-item';
+        $idx = $options['idx'] ?? 0;
+        $parentFieldName = $options['parentFieldName'] ?? '';
+
         if (!$entries = $this->getItems($html, '[' . $fieldAttrName . ']')) {
             return [];
         }
+
         $fields = [];
         $level++;
         $nextFieldAttr = 'data-mpc-field-' . $level;
@@ -664,28 +729,38 @@ class Grabber extends Base
         $mediaLists = [];
         foreach ($entries as $key => $row) {
             $fieldName = $row->getAttribute($fieldAttrName);
-
+            $lexiconOptions = ['fieldName' => $options['fieldName'] ?? $fieldName, 'parentFieldName' => $parentFieldName, 'idx' => $idx];
             if ($fieldName === 'img') {
-                $fields[$fieldName] = $this->getImageValue($row);
+                $fields[$fieldName] = $this->getImageValue($row, $lexiconOptions);
             } elseif ($fieldName === 'picture') {
-                $fields[$fieldName] = $this->getPictureValue($row);
+                $fields[$fieldName] = $this->getPictureValue($row, $lexiconOptions);
             } elseif ($fieldName === 'bg_img') {
-                $fields[$fieldName] = $this->getBackgroundValue($row);
+                $fields[$fieldName] = $this->getBackgroundValue($row, $lexiconOptions);
             } elseif (in_array($fieldName, ['video', 'audio'])) {
-                $fields[$fieldName] = $this->getMediaValue($row);
+                $fields[$fieldName] = $this->getMediaValue($row, $lexiconOptions);
             } elseif (in_array($fieldName, ['list_images', 'list_pictures', 'list_audios', 'list_videos'])) {
                 $mediaLists[$fieldName][] = $row;
             } elseif ($items = $this->getItems($this->parser->getHTMLString($row), '[' . $itemAttrName . ']')) {
                 foreach ($items as $k => $item) {
+                    $parentFieldName = $k ? "{$fieldName}_{$k}" : $fieldName;
+                    $parentFieldName = $lexiconOptions['parentFieldName'] ? "{$lexiconOptions['parentFieldName']}_$parentFieldName" : $parentFieldName;
                     $fields[$fieldName][$k]['MIGX_id'] = $k + 1;
-                    $value = $this->parseHTML($this->parser->getHTMLString($item), $nextFieldAttr, $nextItemAttr, $level);
+                    $value = $this->parseHTML($this->parser->getHTMLString($item), [
+                        'fieldAttrName' => $nextFieldAttr,
+                        'itemAttrName' => $nextItemAttr,
+                        'level' => $level,
+                        'idx' => $k,
+                        'parentFieldName' => $parentFieldName,
+                        'fieldName' => $options['fieldName']
+                    ]);
+
                     $fields[$fieldName][$k] = array_merge(
                         $fields[$fieldName][$k],
                         $value
                     );
                 }
             } else {
-                $fields[$fieldName] = $this->getValue($row);
+                $fields[$fieldName] = $this->getValue($row, $lexiconOptions);
             }
         }
 
@@ -720,7 +795,10 @@ class Grabber extends Base
                 if (!method_exists($this, $method)) {
                     continue;
                 }
-                $value = $this->$method($row);
+                $lexiconOptions['idx'] = $k;
+                $lexiconOptions['fieldName'] = $fieldName;
+
+                $value = $this->$method($row, $lexiconOptions);
                 $value = !is_array($value) ? json_decode($value, true) : $value;
                 $preview = $value[0][$pathKey];
                 $value = json_encode($value, JSON_UNESCAPED_UNICODE);
@@ -737,9 +815,10 @@ class Grabber extends Base
 
     /**
      * @param \DOMElement $row
+     * @param array|null $options
      * @return string
      */
-    private function getImageValue(\DOMElement $row): string
+    private function getImageValue(\DOMElement $row, ?array $options = []): string
     {
         $attrs = ['src', 'alt', 'width', 'height'];
         $value[0]['MIGX_id'] = 1;
@@ -747,6 +826,9 @@ class Grabber extends Base
             $attrValue = $row->getAttribute($attr);
             if ($attr === 'src' && strpos($attrValue, 'http') !== false) {
                 $attrValue = $this->downloadImage($attrValue);
+            }
+            if ($attr === 'src') {
+                $attrValue = in_array('image', $this->properties['translatableContentTypes']) ? $this->setLexicons($attrValue, $options) : $attrValue;
             }
 
             $value[0][$attr] = $attrValue;
@@ -761,7 +843,7 @@ class Grabber extends Base
      * @param bool|null $isPicture
      * @return array
      */
-    private function getSourceValue(\DOMElement $row, ?int $idx = 1, ?bool $isPicture = true)
+    private function getSourceValue(\DOMElement $row, ?int $idx = 1, ?bool $isPicture = true): array
     {
         $attrs = ['type', 'media'];
         if (!$isPicture) {
@@ -816,21 +898,27 @@ class Grabber extends Base
 
     /**
      * @param \DOMElement $element
+     * @param array|null $options
      * @return string
      */
-    private function getPictureValue(\DOMElement $element): string
+    private function getPictureValue(\DOMElement $element, ?array $options = []): string
     {
         $picture[0]['MIGX_id'] = 1;
         $picture[0]['preview'] = '';
         $picture[0]['img'] = [];
         $picture[0]['sources'] = [];
         if ($img = $element->getElementsByTagName('img')) {
-            $picture[0]['img'] = $this->getImageValue($img[0]);
+            $picture[0]['img'] = $this->getImageValue($img[0], $options);
             $picture[0]['preview'] = $img[0]->getAttribute('src');
         }
         if ($sources = $element->getElementsByTagName('source')) {
+            $options['parentFieldName'] = $options['idx'] ? "{$options['fieldName']}_{$options['idx']}" : $options['fieldName'];
+            $options['fieldName'] = 'source';
             foreach ($sources as $k => $source) {
+                $options['idx'] = $k;
                 $picture[0]['sources'][$k] = $this->getSourceValue($source, $k + 1);
+                $picture[0]['sources'][$k]['srcset'] = in_array('image', $this->properties['translatableContentTypes'])
+                    ? $this->setLexicons($picture[0]['sources'][$k]['srcset'], $options) : $picture[0]['sources'][$k]['srcset'];
             }
         }
 
@@ -839,10 +927,13 @@ class Grabber extends Base
 
     /**
      * @param \DOMElement $element
+     * @param array|null $options
      * @return array
      */
-    private function getMediaValue(\DOMElement $element): array
+    private function getMediaValue(\DOMElement $element, ?array $options = []): array
     {
+        $useLexicons = (in_array('video', $this->properties['translatableContentTypes']) || in_array('audio', $this->properties['translatableContentTypes']));
+
         $media[0]['MIGX_id'] = 1;
         $attrs = [
             'src' => 'string',
@@ -868,10 +959,25 @@ class Grabber extends Base
             } else {
                 $media[0][$attr] = $element->getAttribute($attr);
             }
+            if ($attr === 'poster') {
+                $lexiconOptions = [
+                    'fieldName' => 'poster',
+                    'parentFieldName' => $options['idx'] ? "{$options['fieldName']}_{$options['idx']}" : $options['fieldName'],
+                    'idx' => 0,
+                ];
+                $media[0][$attr] = in_array('image', $this->properties['translatableContentTypes']) ? $this->setLexicons($media[0][$attr], $lexiconOptions) : $media[0][$attr];
+            }
+            if ($attr === 'src') {
+                $media[0][$attr] = $useLexicons ? $this->setLexicons($media[0][$attr], $options) : $media[0][$attr];
+            }
         }
         if ($sources = $element->getElementsByTagName('source')) {
+            $options['parentFieldName'] = $options['idx'] ? "{$options['fieldName']}_{$options['idx']}" : $options['fieldName'];
+            $options['fieldName'] = 'source';
             foreach ($sources as $k => $source) {
+                $options['idx'] = $k;
                 $media[0]['sources'][$k] = $this->getSourceValue($source, $k + 1, false);
+                $media[0]['sources'][$k]['src'] = $useLexicons ? $this->setLexicons($media[0]['sources'][$k]['src'], $options) : $media[0]['sources'][$k]['src'];
             }
         }
         if (!$media[0]['src']) {
@@ -882,9 +988,10 @@ class Grabber extends Base
 
     /**
      * @param \DOMElement $element
+     * @param array|null $options
      * @return string
      */
-    private function getBackgroundValue(\DOMElement $element): string
+    private function getBackgroundValue(\DOMElement $element, ?array $options = []): string
     {
         if ($style = $element->getAttribute('style')) {
             if (strpos($style, 'background') !== false) {
@@ -893,7 +1000,8 @@ class Grabber extends Base
                 if (strpos($value, 'http') !== false) {
                     $value = $this->downloadImage($value);
                 }
-                return $value;
+                return in_array('image', $this->properties['translatableContentTypes'])
+                    ? $this->setLexicons($value, $options) : $value;
             }
         }
         return '';
@@ -901,9 +1009,10 @@ class Grabber extends Base
 
     /**
      * @param \DOMElement $element
+     * @param array|null $options
      * @return string
      */
-    private function getValue(\DOMElement $element): string
+    private function getValue(\DOMElement $element, ?array $options = []): string
     {
         $result = '';
         if ($href = $element->getAttribute('href')) {
@@ -915,8 +1024,55 @@ class Grabber extends Base
         } else {
             $result = $element->nodeValue;
         }
-        return $result;
+        return in_array('text', $this->properties['translatableContentTypes']) ? $this->setLexicons($result, $options) : $result;
     }
+
+
+    /**
+     * @param string $value
+     * @param string $fieldName
+     * @return string
+     */
+    private function setLexicons(string $value, ?array $options = []): string
+    {
+        if (!$this->properties['useLexicons']) {
+            return $value;
+        }
+        $fieldName = $options['fieldName'] ?? '';
+        $parentFieldName = $options['parentFieldName'] ?? '';
+
+        if (in_array($fieldName, $this->properties['excludeLexiconFields'])) {
+            return $value;
+        }
+
+        if ($parentFieldName && in_array($parentFieldName, $this->properties['excludeLexiconFields'])) {
+            return $value;
+        }
+
+        $options['prefix'] = $this->sectionLexiconPrefix;
+        $lexiconKey = $this->getLexiconKey($options);
+
+        $this->modx->invokeEvent('mpcOnGetLexiconKey', [
+            'sectionLexiconPrefix' => $this->sectionLexiconPrefix,
+            'lexiconKey' => $lexiconKey,
+            'fieldName' => $fieldName,
+            'Grabber' => $this
+        ]);
+
+        $lexiconKey = isset($this->modx->event->returnedValues) && !empty($this->modx->event->returnedValues['lexiconKey'])
+            ? $this->modx->event->returnedValues['lexiconKey'] : $lexiconKey;
+
+        if ($this->sectionIsStatic) {
+            $rid = $this->properties['staticBlocksPageId'];
+        } else {
+            $rid = $this->properties['resource']->get('id');
+        }
+
+        $this->lexicons[$rid][$lexiconKey] = $value;
+
+        return "{'$lexiconKey' | lexicon}";
+    }
+
 
     /**
      * @param string $className
@@ -934,5 +1090,21 @@ class Grabber extends Base
             }
         }
         return $this->response->error(__METHOD__, 'Object not found', ['conditions' => $conditions, 'className' => $className]);
+    }
+
+    /**
+     * @param $rid
+     * @param $basePath
+     * @return array|mixed
+     */
+    public function getLexicons($rid, $basePath): array
+    {
+        $pathToLexiconFile = $basePath . $rid . '.inc.php';
+        $lexicons[$rid] = [];
+        if (file_exists($pathToLexiconFile)) {
+            include $pathToLexiconFile;
+            return $_lang ?? [];
+        }
+        return [];
     }
 }

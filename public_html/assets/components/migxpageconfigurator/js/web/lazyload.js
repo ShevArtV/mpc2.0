@@ -114,6 +114,7 @@ class mpcLazyLoad {
     } else if (elem.tagName === 'SOURCE') {
       if (['VIDEO', 'AUDIO'].includes(elem.parentNode.tagName)) {
         elem.src = elem.dataset[this.config.rootKey];
+        elem.parentNode.load();
       } else {
         elem.srcset = elem.dataset[this.config.rootKey];
       }

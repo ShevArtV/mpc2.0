@@ -141,4 +141,19 @@ return [
         'value' => '1',
         'area' => 'default',
     ],
+    'mpc_use_lexicons' => [
+        'xtype' => 'combo-boolean',
+        'value' => '0',
+        'area' => 'default',
+    ],
+    'mpc_exclude_lexicons_fields' => [
+        'xtype' => 'textarea',
+        'value' => '',
+        'area' => 'default',
+    ],
+    'mpc_translated_content' => [
+        'xtype' => 'textarea',
+        'value' => 'text,image,poster,video,audio',
+        'area' => 'default',
+    ],
 ];

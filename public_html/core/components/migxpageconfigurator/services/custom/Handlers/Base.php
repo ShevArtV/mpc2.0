@@ -12,7 +12,8 @@ use MpcServices\Helpers\Response;
 /**
  * @author Arthur Shevchenko (https://t.me/ShevArtV)
  */
-class Base{
+class Base
+{
 
     /**
      * @var \modX
@@ -59,6 +60,7 @@ class Base{
      */
     protected function initialize(): void
     {
+        $translatableContentTypes = $this->modx->getOption('mpc_translated_content', '', 'text,image,poster,video,audio');
         $properties = [
             'commonConfigTvName' => $this->modx->getOption('mpc_common_config_name', null, 'mpc_config'),
             'baseSectionName' => $this->modx->getOption('mpc_base_section_name', null, 'mpc_base'),
@@ -68,6 +70,9 @@ class Base{
             'contactsTvName' => $this->modx->getOption('mpc_contacts_tv_name', null, 'contacts'),
             'contactsTvId' => $this->modx->getOption('mpc_contacts_tv_id', null, 0),
             'assetsPath' => $this->modx->getOption('assets_path', null, ''),
+            'useLexicons' => $this->modx->getOption('mpc_use_lexicons', '', ''),
+            'langKey' => $this->modx->getOption('cultureKey', '', 'ru'),
+            'translatableContentTypes' => explode(',', $translatableContentTypes),
         ];
         $this->properties = array_merge($this->properties, $properties);
 
@@ -124,18 +129,29 @@ class Base{
      */
     public function getStaticSectionNames(\modResource $resource): array
     {
-        if(!$config = $resource->getTVValue($this->properties['commonConfigTvName'])){
+        if (!$config = $resource->getTVValue($this->properties['commonConfigTvName'])) {
             return [];
         }
         $config = json_decode($config, true);
         $output = [];
-        foreach ($config as $item){
-            if(!$item['is_static']){
+        foreach ($config as $item) {
+            if (!$item['is_static']) {
                 continue;
             }
             $output[] = $item['section_name'];
         }
         return $output;
+    }
+
+    public function getLexiconKey(array $options): string
+    {
+        $fieldName = $options['fieldName'] ?? '';
+        $idx = $options['idx'] ?? '';
+        $parentFieldName = $options['parentFieldName'] ?? '';
+        $prefix = $options['prefix'] ?? '';
+
+        $lexiconKey = $parentFieldName ? "{$prefix}_{$parentFieldName}_$fieldName" : "{$prefix}_$fieldName";
+        return $idx ? "{$lexiconKey}_$idx" : $lexiconKey;
     }
 
 }
