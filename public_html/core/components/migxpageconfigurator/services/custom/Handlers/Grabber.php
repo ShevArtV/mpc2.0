@@ -78,13 +78,19 @@ class Grabber extends Base
             'phoneRegExp' => $this->modx->getOption('mpc_phone_regexp', '', '/(\d)(\d{3})(\d{3})(\d{2})(\d{2})$/'),
             'phoneFormat' => $this->modx->getOption('mpc_phone_format', '', '8 (\2) \3-\4-\5'),
             'imagesPath' => $this->modx->getOption('mpc_images_path', '', ''),
+            'lexiconPath' => $this->modx->getOption('mpc_lexicon_path', '', 'components/migxpageconfigurator/lexicon/'),
             'excludeLexiconFields' => $excludeLexiconFields,
         ]);
-
+        $this->properties['lexiconFilenameField'] = $this->modx->getOption('mpc_lexicon_filename_field', '', 'id');
         if ($this->properties['useLexicons']) {
-            /** TODO Добавить возможность создавать файлы словарей по псевдониму ресурса */
-            $properties['basePathToLexiconFile'] = $this->properties['corePath'] . 'components/migxpageconfigurator/lexicon/' . $properties['langKey'] . '/';
-            $this->lexicons[$properties['staticBlocksPageId']] = $this->getLexicons($properties['staticBlocksPageId'], $properties['basePathToLexiconFile']);
+            $properties['basePathToLexiconFile'] = $this->properties['corePath'] . $properties['lexiconPath'] . $properties['langKey'] . '/';
+            $properties['staticBlocksPageLexiconFilename'] = $this->getResourceIdentifierById($properties['staticBlocksPageId']);
+            $properties['contactsPageLexiconFilename'] = $this->getResourceIdentifierById($properties['contactsPageId']);
+            $this->lexicons[$properties['staticBlocksPageLexiconFilename']] = $this->getLexicons(
+                $properties['staticBlocksPageLexiconFilename'],
+                $properties['basePathToLexiconFile']
+            );
+            $this->lexicons[$properties['contactsPageLexiconFilename']] = $this->getLexicons($properties['contactsPageLexiconFilename'], $properties['basePathToLexiconFile']);
         }
         $this->properties = array_merge($this->properties, $properties);
         $this->modx->addPackage('migx', $this->properties['corePath'] . 'components/migx/model/');
@@ -165,7 +171,6 @@ class Grabber extends Base
                     $data['value'] = $item->getAttribute('src');
                     break;
                 default:
-                    //$value = $item->hasAttribute('data-mpc-unwrap') ? $item->nodeValue : $this->parser->getHTMLString($item);
                     $data['value'] = str_replace('{', '{ ', $item->nodeValue);
                     break;
             }
@@ -227,7 +232,7 @@ class Grabber extends Base
                 'type' => $contactAttrValue[0],
                 'placement' => $contactAttrValue[1] ?? 'default',
             ];
-            /** TODO Создавать лексиконы для контактов */
+
             foreach ($fields as $field) {
                 $key = $field->getAttribute('data-mpc-cfield');
                 if ($key === 'fvalue') {
@@ -266,6 +271,31 @@ class Grabber extends Base
             ]);
 
             $tmp = isset($this->modx->event->returnedValues) && !empty($this->modx->event->returnedValues['contact']) ? $this->modx->event->returnedValues['contact'] : $tmp;
+            if (in_array('contact', $this->properties['translatableContentTypes'])) {
+                foreach ($tmp as $k => $v) {
+                    if (in_array($k, ['placement', 'key', 'type'])) {
+                        continue;
+                    }
+                    if (in_array($k, ['value', 'fvalue'])) {
+                        $lexiconOptions = [
+                            'fieldName' => $k,
+                            'parentFieldName' => $tmp['key'],
+                            'idx' => 0,
+                            'prefix' => 'contact'
+                        ];
+                    } else {
+                        $lexiconOptions = [
+                            'fieldName' => $k,
+                            'parentFieldName' => "{$tmp['key']}_{$tmp['placement']}",
+                            'idx' => 0,
+                            'prefix' => 'contact'
+                        ];
+                    }
+
+                    $tmp[$k] = $this->setLexicons($v, $lexiconOptions);
+                }
+            }
+
 
             $contacts[$tmp['value']]['type'] = $tmp['type'];
             $contacts[$tmp['value']]['ckey'] = $tmp['key'];
@@ -287,6 +317,10 @@ class Grabber extends Base
 
         if (!$resource = $this->getResource((int)$this->properties['contactsPageId'])) {
             return;
+        }
+
+        if (!empty($this->lexicons)) {
+            $this->createLexicons($this->lexicons);
         }
 
         if ($tvValue = json_decode($resource->getTVValue($this->properties['contactsTvName']), true)) {
@@ -468,6 +502,10 @@ class Grabber extends Base
         $this->response->success(__METHOD__, 'Section processing is complete.');
     }
 
+    /**
+     * @param array $allLexicons
+     * @return void
+     */
     public function createLexicons(array $allLexicons)
     {
         $basePathToLexiconFile = $this->properties['basePathToLexiconFile'];
@@ -481,9 +519,13 @@ class Grabber extends Base
                 }
                 file_put_contents($pathToLexiconFile, $content);
             } else {
-                unlink($pathToLexiconFile);
+                if(file_exists($pathToLexiconFile)){
+                    unlink($pathToLexiconFile);
+                }
             }
         }
+
+        $this->modx->cacheManager->refresh(['lexicon_topics' => []]);
     }
 
     /**
@@ -965,7 +1007,10 @@ class Grabber extends Base
                     'parentFieldName' => $options['idx'] ? "{$options['fieldName']}_{$options['idx']}" : $options['fieldName'],
                     'idx' => 0,
                 ];
-                $media[0][$attr] = in_array('image', $this->properties['translatableContentTypes']) ? $this->setLexicons($media[0][$attr], $lexiconOptions) : $media[0][$attr];
+                $media[0][$attr] = in_array('poster', $this->properties['translatableContentTypes']) ? $this->setLexicons(
+                    $media[0][$attr],
+                    $lexiconOptions
+                ) : $media[0][$attr];
             }
             if ($attr === 'src') {
                 $media[0][$attr] = $useLexicons ? $this->setLexicons($media[0][$attr], $options) : $media[0][$attr];
@@ -1049,7 +1094,7 @@ class Grabber extends Base
             return $value;
         }
 
-        $options['prefix'] = $this->sectionLexiconPrefix;
+        $options['prefix'] = $options['prefix'] ?? $this->sectionLexiconPrefix;
         $lexiconKey = $this->getLexiconKey($options);
 
         $this->modx->invokeEvent('mpcOnGetLexiconKey', [
@@ -1063,9 +1108,11 @@ class Grabber extends Base
             ? $this->modx->event->returnedValues['lexiconKey'] : $lexiconKey;
 
         if ($this->sectionIsStatic) {
-            $rid = $this->properties['staticBlocksPageId'];
+            $rid = $this->properties['staticBlocksPageLexiconFilename'];
+        } elseif ($options['prefix'] === 'contact') {
+            $rid = $this->properties['contactsPageLexiconFilename'];
         } else {
-            $rid = $this->properties['resource']->get('id');
+            $rid = $this->getResourceIdentifierById($this->properties['resource']->get('id'));
         }
 
         $this->lexicons[$rid][$lexiconKey] = $value;
@@ -1093,11 +1140,11 @@ class Grabber extends Base
     }
 
     /**
-     * @param $rid
-     * @param $basePath
-     * @return array|mixed
+     * @param string $rid
+     * @param string $basePath
+     * @return array
      */
-    public function getLexicons($rid, $basePath): array
+    public function getLexicons(string $rid, string $basePath): array
     {
         $pathToLexiconFile = $basePath . $rid . '.inc.php';
         $lexicons[$rid] = [];
@@ -1105,6 +1152,34 @@ class Grabber extends Base
             include $pathToLexiconFile;
             return $_lang ?? [];
         }
+
         return [];
+    }
+
+    /**
+     * @param int $rid
+     * @return string
+     */
+    public function getResourceIdentifierById(int $rid): string
+    {
+        if ($this->properties['lexiconFilenameField'] !== 'id') {
+            $q = $this->modx->newQuery('modResource');
+            $q->select($this->properties['lexiconFilenameField']);
+            $q->where(['id' => $rid]);
+            $q->prepare();
+            if ($q->stmt->execute()) {
+                $rid = $q->stmt->fetchColumn();
+                $rid = trim($rid);
+                $rid = strtolower($rid);
+                $rid = str_replace([' ', "\n", "\r"], '-', $rid);
+            }
+        }
+
+        $this->modx->invokeEvent('mpcOnGetResourceIdentifier', [
+            'rid' => $rid,
+            'Grabber' => $this
+        ]);
+
+        return isset($this->modx->event->returnedValues) && !empty($this->modx->event->returnedValues['rid']) ? $this->modx->event->returnedValues['rid'] : $rid;
     }
 }

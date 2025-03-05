@@ -1,5 +1,5 @@
 /**
- * Модуль отложенной загрузки картинок, видео, фреймов, блоков
+ * Модуль разворачивания svg
  */
 
 /**
@@ -7,10 +7,6 @@
  * @class mpcExpand - класс отложенной загрузки
  * @property {Object} config - конфигурация модуля
  * @property {Object} events - события модуля
- * @method {void} initialize() - инициализация модуля
- * @method {void} handler(entries) - обработчик событий IntersectionObserver
- * @method {void} loading(elem) - загрузка элемента
- * @method {void} opacityUp(elem, time) - анимация прозрачности
  */
 class mpcExpand {
   constructor(config = {}) {

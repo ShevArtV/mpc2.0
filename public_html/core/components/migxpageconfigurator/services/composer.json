@@ -3,5 +3,8 @@
     "psr-4": {
       "MpcServices\\": "custom/"
     }
+  },
+  "require": {
+    "phpoffice/phpspreadsheet": "^1.29"
   }
 }

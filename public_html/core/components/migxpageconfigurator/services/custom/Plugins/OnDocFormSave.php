@@ -38,6 +38,9 @@ class OnDocFormSave extends PluginHandler
         if ($this->scriptProperties['id'] === $Mpc->grabber->properties['staticBlocksPageId']) {
             $this->filterStaticSectionsLexicons($Mpc);
         }
+        if ($this->scriptProperties['id'] === $Mpc->grabber->properties['contactsPageId']) {
+            $this->filterContactsLexicons($Mpc);
+        }
     }
 
     /**
@@ -47,22 +50,49 @@ class OnDocFormSave extends PluginHandler
     public function filterStaticSectionsLexicons(Mpc $Mpc): void
     {
         $staticBlocksPageId = $Mpc->grabber->properties['staticBlocksPageId'];
-        $lexicons[$staticBlocksPageId] = $Mpc->grabber->getLexicons($staticBlocksPageId, $Mpc->grabber->properties['basePathToLexiconFile']);
-        if (empty($lexicons[$staticBlocksPageId])) {
+        $staticBlocksPageLexiconFilename = $Mpc->grabber->properties['staticBlocksPageLexiconFilename'];
+        $lexicons[$staticBlocksPageLexiconFilename] = $Mpc->grabber->getLexicons($staticBlocksPageLexiconFilename, $Mpc->grabber->properties['basePathToLexiconFile']);
+        if (empty($lexicons[$staticBlocksPageLexiconFilename])) {
             return;
         }
         $resource = $this->modx->getObject('modResource', $staticBlocksPageId);
         if (!$config = $resource->getTVValue($Mpc->grabber->properties['commonConfigTvName'])) {
             return;
         }
-        $lexiconsFiltered[$staticBlocksPageId] = [];
+        $lexiconsFiltered[$staticBlocksPageLexiconFilename] = [];
         $config = json_decode($config, true);
         foreach ($config as $item) {
-            $result = $this->filterByPrefix($lexicons[$staticBlocksPageId], $item['lexicon_prefix'] ?? $item['MIGX_formname']);
-            $lexiconsFiltered[$staticBlocksPageId] = array_merge($result, $lexiconsFiltered[$staticBlocksPageId]);
+            $result = $this->filterByPrefix($lexicons[$staticBlocksPageLexiconFilename], $item['lexicon_prefix'] ?? $item['MIGX_formname']);
+            $lexiconsFiltered[$staticBlocksPageLexiconFilename] = array_merge($result, $lexiconsFiltered[$staticBlocksPageLexiconFilename]);
         }
 
         $Mpc->grabber->createLexicons($lexiconsFiltered);
+    }
+
+    /**
+     * @param Mpc $Mpc
+     * @return void
+     */
+    public function filterContactsLexicons(Mpc $Mpc): void
+    {
+        $contactsPageId = $Mpc->grabber->properties['contactsPageId'];
+        $contactsPageLexiconFilename = $Mpc->grabber->properties['contactsPageLexiconFilename'];
+        $lexicons[$contactsPageLexiconFilename] = $Mpc->grabber->getLexicons($contactsPageLexiconFilename, $Mpc->grabber->properties['basePathToLexiconFile']);
+        if (empty($lexicons[$contactsPageLexiconFilename])) {
+            return;
+        }
+        $resource = $this->modx->getObject('modResource', $contactsPageId);
+        if (!$contacts = $resource->getTVValue($Mpc->grabber->properties['contactsTvName'])) {
+            return;
+        }
+        $lexiconsFiltered[$contactsPageLexiconFilename] = [];
+        $config = json_decode($contacts, true);
+        foreach ($config as $item) {
+            $result = $this->filterByPrefix($lexicons[$contactsPageLexiconFilename], 'contact_'.$item['ckey']);
+            $lexiconsFiltered[$contactsPageLexiconFilename] = array_merge($result, $lexiconsFiltered[$contactsPageLexiconFilename]);
+        }
+
+       $Mpc->grabber->createLexicons($lexiconsFiltered);
     }
 
     /**
@@ -81,17 +111,18 @@ class OnDocFormSave extends PluginHandler
             return;
         }
         $config = json_decode($config, true);
-        $rid = $resource->get('id');
-        $staticBlocksPageId = $Mpc->grabber->properties['staticBlocksPageId'];
-        $lexicons[$rid] = $Mpc->grabber->getLexicons($rid, $Mpc->grabber->properties['basePathToLexiconFile']);
-        $lexicons[$staticBlocksPageId] = $Mpc->grabber->getLexicons($staticBlocksPageId, $Mpc->grabber->properties['basePathToLexiconFile']);
+        $resourceLexiconFilename = $Mpc->grabber->getResourceIdentifierById($resource->get('id'));
+        $typeResourceLexiconFilename = $Mpc->grabber->getResourceIdentifierById($typeResourceId);
+        $staticBlocksPageLexiconFilename = $Mpc->grabber->properties['staticBlocksPageLexiconFilename'];
+        $lexicons[$resourceLexiconFilename] = $Mpc->grabber->getLexicons($resourceLexiconFilename, $Mpc->grabber->properties['basePathToLexiconFile']);
+        $lexicons[$staticBlocksPageLexiconFilename] = $Mpc->grabber->getLexicons($staticBlocksPageLexiconFilename, $Mpc->grabber->properties['basePathToLexiconFile']);
 
         foreach ($config as $item) {
-            $result = $this->filterByPrefix($Mpc->grabber->lexicons[$typeResourceId], $item['lexicon_prefix'] ?? $item['MIGX_formname']);
+            $result = $this->filterByPrefix($Mpc->grabber->lexicons[$typeResourceLexiconFilename], $item['lexicon_prefix'] ?? $item['MIGX_formname']);
             if ($item['is_static']) {
-                $lexicons[$staticBlocksPageId] = array_merge($result, $lexicons[$staticBlocksPageId]);
+                $lexicons[$staticBlocksPageLexiconFilename] = array_merge($result, $lexicons[$staticBlocksPageLexiconFilename]);
             } else {
-                $lexicons[$rid] = array_merge($result, $lexicons[$rid]);
+                $lexicons[$resourceLexiconFilename] = array_merge($result, $lexicons[$resourceLexiconFilename]);
             }
         }
         $Mpc->grabber->createLexicons($lexicons);

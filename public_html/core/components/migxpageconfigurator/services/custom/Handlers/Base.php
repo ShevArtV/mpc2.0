@@ -70,7 +70,7 @@ class Base
             'contactsTvName' => $this->modx->getOption('mpc_contacts_tv_name', null, 'contacts'),
             'contactsTvId' => $this->modx->getOption('mpc_contacts_tv_id', null, 0),
             'assetsPath' => $this->modx->getOption('assets_path', null, ''),
-            'useLexicons' => $this->modx->getOption('mpc_use_lexicons', '', ''),
+            'useLexicons' => $this->modx->getOption('mpc_use_lexicons', '', false),
             'langKey' => $this->modx->getOption('cultureKey', '', 'ru'),
             'translatableContentTypes' => explode(',', $translatableContentTypes),
         ];

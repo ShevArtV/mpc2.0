@@ -68,6 +68,8 @@ class Mpc
             'devMode' => $this->modx->getOption('mpc_dev_mode', null, false),
             'lazyloadEnabled' => $this->modx->getOption('mpc_lazyload_enabled', null, true),
             'expandEnabled' => $this->modx->getOption('mpc_expand_enabled', null, true),
+            'lexiconsNamespace' => $this->modx->getOption('mpc_lexicons_namespace', null, 'migxpageconfigurator'),
+            'useLexicons' => $this->modx->getOption('mpc_use_lexicons', '', false),
         ];
 
         $this->properties['pdotoolsElementsPath'] = str_replace('{core_path}', '', $this->properties['pdotoolsElementsPath']);
@@ -169,6 +171,14 @@ class Mpc
                 window.mpcLazyLoadAttr = '{$this->properties['lazyloadAttr']}';               
                 </script>
                 <script type=\"module\" src=\"assets/components/migxpageconfigurator/js/web/lazyload.js\"></script>",
+                true
+            );
+        }
+
+        if ($this->properties['useLexicons']) {
+            $this->modx->regClientScript(
+                "                
+                <script type=\"module\" src=\"assets/components/migxpageconfigurator/js/web/languages.js\"></script>",
                 true
             );
         }
@@ -487,11 +497,15 @@ class Mpc
 
     public function loadLexicons(int $rid, ?int $templateId = 0)
     {
-        $this->modx->lexicon->load('migxpageconfigurator:' . $this->grabber->properties['staticBlocksPageId']);
+        $lexiconsNamespace = $this->properties['lexiconsNamespace'] . ':';
+        $this->modx->lexicon->load($lexiconsNamespace . $this->grabber->properties['staticBlocksPageLexiconFilename']);
+        $this->modx->lexicon->load($lexiconsNamespace . $this->grabber->properties['contactsPageLexiconFilename']);
         if($parentResourceId = $this->getParentResourceId($templateId)){
-            $this->modx->lexicon->load('migxpageconfigurator:' . $parentResourceId);
+            $parentResourceLexiconFilename = $this->grabber->getResourceIdentifierById($parentResourceId);
+            $this->modx->lexicon->load($lexiconsNamespace . $parentResourceLexiconFilename);
         }
-        $this->modx->lexicon->load('migxpageconfigurator:' . $rid);
+        $resourceLexiconFilename = $this->grabber->getResourceIdentifierById($rid);
+        $this->modx->lexicon->load($lexiconsNamespace . $resourceLexiconFilename);
     }
 
     public function getParentResourceId(int $templateId): int

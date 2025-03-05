@@ -441,7 +441,15 @@ class Cutter extends Base
             } else {
                 $fieldHTMLNew = $this->setDefaultPlaceholder($field, $fieldName, $properties);
             }
-            /** TODO Рассмотреть возможность добавить событие для подмены плейсхолдеров */
+
+            $this->modx->invokeEvent('mpcOnGetNewHtml', [
+                'fieldHTMLNew' => $fieldHTMLNew,
+                'Grabber' => $this
+            ]);
+
+            $fieldHTMLNew = isset($this->modx->event->returnedValues) && !empty($this->modx->event->returnedValues['fieldHTMLNew'])
+                ? $this->modx->event->returnedValues['fieldHTMLNew'] : $fieldHTMLNew;
+
             if (!empty($fieldHTMLNew)) {
                 $properties['html'] = str_replace($fieldHTML, $fieldHTMLNew, $properties['html']);
             }

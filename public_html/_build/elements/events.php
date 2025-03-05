@@ -19,4 +19,16 @@ return [
     'mpcOnGetLexiconKey' => [
         'groupname' => 'MigxPageConfigurator',
     ],
+    'mpcOnGetResourceIdentifier' => [
+        'groupname' => 'MigxPageConfigurator',
+    ],
+    'mpcOnGetNewHtml' => [
+        'groupname' => 'MigxPageConfigurator',
+    ],
+    'OnGetFormParams' => [
+        'groupname' => 'MigxPageConfigurator',
+    ],
+    'OnManagerPageInit' => [
+        'groupname' => 'MigxPageConfigurator',
+    ],
 ];

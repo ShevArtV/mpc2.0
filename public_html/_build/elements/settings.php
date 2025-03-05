@@ -156,4 +156,29 @@ return [
         'value' => 'text,image,poster,video,audio',
         'area' => 'default',
     ],
+    'mpc_lexicon_filename_field' => [
+        'xtype' => 'textfield',
+        'value' => 'id',
+        'area' => 'default',
+    ],
+    'mpc_lexicon_path' => [
+        'xtype' => 'textfield',
+        'value' => 'components/migxpageconfigurator/lexicon/',
+        'area' => 'default',
+    ],
+    'mpc_lexicons_namespace' => [
+        'xtype' => 'textfield',
+        'value' => 'migxpageconfigurator',
+        'area' => 'default',
+    ],
+    'mpc_available_languages' => [
+        'xtype' => 'textfield',
+        'value' => '',
+        'area' => 'default',
+    ],
+    'mpc_default_language' => [
+        'xtype' => 'textfield',
+        'value' => 'ru',
+        'area' => 'default',
+    ],
 ];

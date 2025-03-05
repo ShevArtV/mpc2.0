@@ -31,7 +31,7 @@ class PluginHandler
     protected function initialize()
     {
         $this->basePath = $this->modx->getOption('base_path', null, $_SERVER['DOCUMENT_ROOT'] . '/');
-        $this->corePath = $this->modx->getOption('base_path', null, $this->basePath . 'core/');
+        $this->corePath = $this->modx->getOption('core_path', null, MODX_CORE_PATH);
     }
 
     public function run()
