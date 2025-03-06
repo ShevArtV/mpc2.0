@@ -73,3 +73,16 @@ $_lang['setting_mpc_available_languages'] = 'Available languages';
 $_lang['setting_mpc_available_languages_desc'] = '';
 $_lang['setting_mpc_default_language'] = 'Default language';
 $_lang['setting_mpc_default_language_desc'] = '';
+$_lang['setting_mpc_allowed_tags'] = 'Tags allowed in lexicons';
+$_lang['setting_mpc_allowed_tags_desc'] = '';
+$_lang['setting_mpc_allow_modx_tags'] = 'Allow Fenom and Modx tags in lexicons';
+$_lang['setting_mpc_allow_modx_tags_desc'] = '';
+
+$_lang['mpc_widget_export_btn'] = 'Export';
+$_lang['mpc_widget_export_choose_file'] = 'Select the lexicon file';
+$_lang['mpc_widget_err_filename'] = 'File is not selected';
+$_lang['mpc_widget_success_export'] = 'File has been exported';
+$_lang['mpc_widget_import_btn'] = 'Import';
+$_lang['mpc_widget_err_filelist'] = 'Upload the file';
+$_lang['mpc_widget_success_import'] = 'Import completed';
+$_lang['mpc_widget_err_empty_data_import'] = 'Could not get data from files';

@@ -31,4 +31,7 @@ return [
     'OnManagerPageInit' => [
         'groupname' => 'MigxPageConfigurator',
     ],
+    'mpcOnImportLexiconValue' => [
+        'groupname' => 'MigxPageConfigurator',
+    ],
 ];

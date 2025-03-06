@@ -74,8 +74,16 @@ $_lang['setting_mpc_available_languages'] = 'Доступные языки';
 $_lang['setting_mpc_available_languages_desc'] = '';
 $_lang['setting_mpc_default_language'] = 'Язык по умолчанию';
 $_lang['setting_mpc_default_language_desc'] = '';
+$_lang['setting_mpc_allowed_tags'] = 'Тэги разрешённые в лексиконах';
+$_lang['setting_mpc_allowed_tags_desc'] = '';
+$_lang['setting_mpc_allow_modx_tags'] = 'Разрешить тэги Fenom и Modx в лексиконах';
+$_lang['setting_mpc_allow_modx_tags_desc'] = '';
 
 $_lang['mpc_widget_export_btn'] = 'Экспортировать';
 $_lang['mpc_widget_export_choose_file'] = 'Выберите файл словаря';
 $_lang['mpc_widget_err_filename'] = 'Файл не выбран';
 $_lang['mpc_widget_success_export'] = 'Файл экспортирован';
+$_lang['mpc_widget_import_btn'] = 'Импортировать';
+$_lang['mpc_widget_err_filelist'] = 'Загрузите файл';
+$_lang['mpc_widget_success_import'] = 'Импорт завершён';
+$_lang['mpc_widget_err_empty_data_import'] = 'Не удалось получить данные из файлов';

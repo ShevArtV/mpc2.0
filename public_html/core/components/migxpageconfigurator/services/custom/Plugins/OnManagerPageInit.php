@@ -19,6 +19,7 @@ class OnManagerPageInit extends PluginHandler
         }
         $this->modx->regClientStartupHTMLBlock(
             '            
+            <link rel="stylesheet" href="/assets/components/sendit/css/web/index.css" type="text/css">
             <script type="module" src="/assets/components/migxpageconfigurator/js/mgr/widgets.js"></script>
             '
         );

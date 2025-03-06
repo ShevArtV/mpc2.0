@@ -10,7 +10,7 @@ use MpcServices\Helpers\ExcelFileHandler;
 /**
  * @author Arthur Shevchenko (https://t.me/ShevArtV)
  */
-class Export
+class LexiconExport
 {
     /**
      * @var \modX
@@ -29,6 +29,10 @@ class Export
      */
     private ExcelFileHandler $ExcelFileHandler;
 
+    /**
+     * @param \modX $modx
+     * @param array $scriptProperties
+     */
     public function __construct(\modX $modx, array $scriptProperties)
     {
         $this->modx = $modx;
@@ -36,6 +40,9 @@ class Export
         $this->initialize();
     }
 
+    /**
+     * @return void
+     */
     protected function initialize()
     {
         $this->paths = [
@@ -46,7 +53,10 @@ class Export
         $this->ExcelFileHandler = new ExcelFileHandler($this->modx);
     }
 
-    public function run()
+    /**
+     * @return array
+     */
+    public function run(): array
     {
         $data = $this->getData();
         $filename = str_replace('.inc.php', '.xlsx', $_POST['filename']);
@@ -58,13 +68,21 @@ class Export
         ];
     }
 
+    /**
+     * @return array
+     */
     private function getData(): array
     {
         $languages = scandir($this->paths['core'] . $this->paths['lexicons']);
         $data = [];
         unset($languages[0], $languages[1]);
         foreach ($languages as $language) {
-            include $this->paths['core'] . $this->paths['lexicons'] . $language . '/' . $_POST['filename'];
+            $_lang = [];
+            $pathToLexiconFile = $this->paths['core'] . $this->paths['lexicons'] . $language . '/' . $_POST['filename'];
+            if(file_exists($pathToLexiconFile)){
+                include $pathToLexiconFile;
+            }
+
             foreach ($_lang as $k => $v) {
                 if (!isset($data[$k]['lexicon_key'])) {
                     $data[$k]['lexicon_key'] = $k;

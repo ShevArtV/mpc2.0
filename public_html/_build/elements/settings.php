@@ -181,4 +181,14 @@ return [
         'value' => 'ru',
         'area' => 'default',
     ],
+    'mpc_allowed_tags' => [
+        'xtype' => 'textarea',
+        'value' => '',
+        'area' => 'default',
+    ],
+    'mpc_allow_modx_tags' =>  [
+        'xtype' => 'combo-boolean',
+        'value' => '0',
+        'area' => 'default',
+    ],
 ];

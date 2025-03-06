@@ -26,7 +26,7 @@ class Cutter extends Base
         $properties = [
             'pathToChunks' => $this->modx->getOption('mpc_path_to_chunks', null, 'chunks/'),
             'chunkNames' => [],
-            'pattern' => '/(\s)*?data-mpc-(nolazy|copy|symbol|if|static|name|item|unwrap|section|snippet|chunk|include|parse|remove|attr|field|cfield|contact|ctx|info|lim|off|nothumb|thumb|lexicon)(-){0,1}([0-9]*)(=".*?"){0,1}(\s)*?/',
+            'pattern' => '/(\s)*?data-mpc-(nolazy|copy|symbol|if|static|name|item|unwrap|section|snippet|chunk|include|parse|remove|attr|field|cfield|contact|ctx|info|lim|off|nothumb|thumb|lexicon|key)(-){0,1}([0-9]*)(=".*?"){0,1}(\s)*?/',
             'wrapperName' => $this->modx->getOption('mpc_wrapper_name', null, 'wrapper'),
             'thumbFormat' => $this->modx->getOption('mpc_thumb_format', null, 'png'),
             'fakeImgPath' => $this->modx->getOption('mpc_fake_img_path', null, 'assets/components/migxpageconfigurator/images/fake-img.png'),

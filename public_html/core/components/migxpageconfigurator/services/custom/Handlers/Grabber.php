@@ -243,10 +243,10 @@ class Grabber extends Base
                     if ($href = $field->getAttribute('href')) {
                         $tmp[$key] = $href;
                     } else {
-                        $tmp[$key] = trim($field->textContent);
+                        $tmp[$key] = trim($this->getValue($field));
                     }
-                } else {
-                    $tmp[$key] = $field->getAttribute('src') ?: $this->parser->getHTMLString($field);
+                } else{
+                    $tmp[$key] = $field->getAttribute('src') ?: $this->getValue($field);
                 }
             }
             if (!$tmp['value']) {
@@ -254,7 +254,7 @@ class Grabber extends Base
             }
 
             if (!$tmp['key']) {
-                $tmp['key'] = $this->getContactKey($tmp['value']);
+                $tmp['key'] = $item->getAttribute('data-mpc-key') ?: $this->getContactKey($tmp['value']);
             }
             if ($tmp['type'] === 'phone') {
                 $tmp['value'] = preg_replace('/[^0-9]/', '', trim($tmp['value']));
@@ -276,21 +276,12 @@ class Grabber extends Base
                     if (in_array($k, ['placement', 'key', 'type'])) {
                         continue;
                     }
-                    if (in_array($k, ['value', 'fvalue'])) {
-                        $lexiconOptions = [
-                            'fieldName' => $k,
-                            'parentFieldName' => $tmp['key'],
-                            'idx' => 0,
-                            'prefix' => 'contact'
-                        ];
-                    } else {
-                        $lexiconOptions = [
-                            'fieldName' => $k,
-                            'parentFieldName' => "{$tmp['key']}_{$tmp['placement']}",
-                            'idx' => 0,
-                            'prefix' => 'contact'
-                        ];
-                    }
+                    $lexiconOptions = [
+                        'fieldName' => $k,
+                        'parentFieldName' => "{$tmp['key']}_{$tmp['type']}_{$tmp['placement']}",
+                        'idx' => 0,
+                        'prefix' => 'contact'
+                    ];
 
                     $tmp[$k] = $this->setLexicons($v, $lexiconOptions);
                 }
@@ -1067,9 +1058,9 @@ class Grabber extends Base
                 $result .= $this->parser->getHTMLString($childNode);
             }
         } else {
-            $result = $element->nodeValue;
+            $result = trim($element->nodeValue);
         }
-        return in_array('text', $this->properties['translatableContentTypes']) ? $this->setLexicons($result, $options) : $result;
+        return in_array('text', $this->properties['translatableContentTypes']) && !empty($options)  ? $this->setLexicons($result, $options) : $result;
     }
 
 

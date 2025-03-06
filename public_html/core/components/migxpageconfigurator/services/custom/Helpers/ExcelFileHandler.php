@@ -103,4 +103,33 @@ class ExcelFileHandler
         $writer->save($filePath);
         return '/assets/' . $dir . $filename;
     }
+
+    public function getDataFromFile($path)
+    {
+        $spreadsheet = IOFactory::load($path);
+        $file_keys = array_flip($this->fields);
+        $listeners = [];
+
+        $cells = $spreadsheet->getActiveSheet()->getCellCollection();
+
+        for ($row = 1; $row <= $cells->getHighestRow(); $row++) {
+            $c = 0;
+            if ($row === 1) {
+                for ($col = 'A'; $col <= $cells->getHighestColumn(); $col++) {
+                    $cell = $cells->get($col . $row);
+                    if ($cell) {
+                        $value = $cell->getValue();
+                        $fieldLinks[] = $file_keys[$value] ?? $value;
+                    }
+                }
+            } else {
+                for ($col = 'A'; $col <= $cells->getHighestColumn(); $col++) {
+                    $cell = $cells->get($col . $row);
+                    $listeners[$row][$fieldLinks[$c]] = $cell ? $cell->getFormattedValue() : '';
+                    $c++;
+                }
+            }
+        }
+        return $listeners;
+    }
 }

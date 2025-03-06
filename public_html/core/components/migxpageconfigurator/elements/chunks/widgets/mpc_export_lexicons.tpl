@@ -1,12 +1,15 @@
 <style>
-  [data-si-form] {
+  [data-si-preset="mpc_export_lexicons"] {
     display: flex;
     gap: 12px;
     align-items: stretch;
   }
 
-  [data-si-form] button {
+  [data-si-preset="mpc_export_lexicons"] button {
     margin: 0 !important;
+  }
+  [data-si-preset="mpc_export_lexicons"] select {
+    flex-grow: 1;
   }
 </style>
 <form action="" data-si-form data-si-preset="mpc_export_lexicons">
