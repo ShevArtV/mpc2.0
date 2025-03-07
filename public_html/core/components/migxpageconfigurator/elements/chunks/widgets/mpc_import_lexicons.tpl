@@ -13,6 +13,8 @@
   }
   .v_hidden{
     position: absolute;
+    width: 0;
+    z-index: -1;
   }
   [data-fu-dropzone]{
     border: 1px dashed #000;

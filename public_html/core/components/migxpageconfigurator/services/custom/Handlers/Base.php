@@ -71,7 +71,7 @@ class Base
             'contactsTvId' => $this->modx->getOption('mpc_contacts_tv_id', null, 0),
             'assetsPath' => $this->modx->getOption('assets_path', null, ''),
             'useLexicons' => $this->modx->getOption('mpc_use_lexicons', '', false),
-            'langKey' => $this->modx->getOption('cultureKey', '', 'ru'),
+            'defaultLanguageKey' => $this->modx->getOption('mpc_default_language', '', 'ru'),
             'translatableContentTypes' => explode(',', $translatableContentTypes),
         ];
         $this->properties = array_merge($this->properties, $properties);

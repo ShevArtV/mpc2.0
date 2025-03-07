@@ -697,6 +697,7 @@ class Cutter extends Base
             'height',
             'width',
             'poster',
+            'alt'
         ];
         foreach ($row->attributes as $attr) {
             if (!in_array($attr->nodeName, $allowedAttrs)) {

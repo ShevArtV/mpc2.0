@@ -69,7 +69,6 @@ class Grabber extends Base
             'file_name',
             'is_static',
             'limit',
-            'target',
             'resources'
         ], explode(',', $excludeLexiconFields));
 
@@ -83,7 +82,10 @@ class Grabber extends Base
         ]);
         $this->properties['lexiconFilenameField'] = $this->modx->getOption('mpc_lexicon_filename_field', '', 'id');
         if ($this->properties['useLexicons']) {
-            $properties['basePathToLexiconFile'] = $this->properties['corePath'] . $properties['lexiconPath'] . $properties['langKey'] . '/';
+            $properties['basePathToLexiconFile'] = $this->properties['corePath'] . $properties['lexiconPath'] . $properties['defaultLanguageKey'] . '/';
+            if(!file_exists($properties['basePathToLexiconFile'])){
+                mkdir($properties['basePathToLexiconFile'], 0755);
+            }
             $properties['staticBlocksPageLexiconFilename'] = $this->getResourceIdentifierById($properties['staticBlocksPageId']);
             $properties['contactsPageLexiconFilename'] = $this->getResourceIdentifierById($properties['contactsPageId']);
             $this->lexicons[$properties['staticBlocksPageLexiconFilename']] = $this->getLexicons(
@@ -397,6 +399,7 @@ class Grabber extends Base
             'pagetitle' => 'Шаблон ' . $tplData['templatename'],
             'parent' => $this->properties['staticBlocksPageId'],
             'template' => $template->get('id'),
+            'alias' => $resource->cleanAlias('tpl-' . mb_strtolower($tplData['templatename'])),
             'hidemenu' => 1
         ]);
         if ($resource->save()) {
@@ -749,7 +752,6 @@ class Grabber extends Base
         $fieldAttrName = $options['fieldAttrName'] ?? 'data-mpc-field';
         $itemAttrName = $options['itemAttrName'] ?? 'data-mpc-item';
         $idx = $options['idx'] ?? 0;
-        $parentFieldName = $options['parentFieldName'] ?? '';
 
         if (!$entries = $this->getItems($html, '[' . $fieldAttrName . ']')) {
             return [];
@@ -762,7 +764,7 @@ class Grabber extends Base
         $mediaLists = [];
         foreach ($entries as $key => $row) {
             $fieldName = $row->getAttribute($fieldAttrName);
-            $lexiconOptions = ['fieldName' => $options['fieldName'] ?? $fieldName, 'parentFieldName' => $parentFieldName, 'idx' => $idx];
+            $lexiconOptions = ['fieldName' => $options['fieldName'] ?? $fieldName, 'parentFieldName' => $options['parentFieldName'] ?? '', 'idx' => $idx];
             if ($fieldName === 'img') {
                 $fields[$fieldName] = $this->getImageValue($row, $lexiconOptions);
             } elseif ($fieldName === 'picture') {
@@ -795,6 +797,7 @@ class Grabber extends Base
             } else {
                 $fields[$fieldName] = $this->getValue($row, $lexiconOptions);
             }
+            $options['parentFieldName'] = '';
         }
 
         foreach ($mediaLists as $fieldName => $items) {
@@ -863,7 +866,10 @@ class Grabber extends Base
             if ($attr === 'src') {
                 $attrValue = in_array('image', $this->properties['translatableContentTypes']) ? $this->setLexicons($attrValue, $options) : $attrValue;
             }
-
+            if ($attr === 'alt') {
+                $options['fieldName'] = $options['fieldName'] . '_alt';
+                $attrValue = in_array('text', $this->properties['translatableContentTypes']) ? $this->setLexicons($attrValue, $options) : $attrValue;
+            }
             $value[0][$attr] = $attrValue;
         }
 
@@ -1097,6 +1103,10 @@ class Grabber extends Base
 
         $lexiconKey = isset($this->modx->event->returnedValues) && !empty($this->modx->event->returnedValues['lexiconKey'])
             ? $this->modx->event->returnedValues['lexiconKey'] : $lexiconKey;
+
+        if (!$lexiconKey || in_array($lexiconKey, $this->properties['excludeLexiconFields'])) {
+            return $value;
+        }
 
         if ($this->sectionIsStatic) {
             $rid = $this->properties['staticBlocksPageLexiconFilename'];

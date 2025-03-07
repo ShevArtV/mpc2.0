@@ -148,7 +148,7 @@ return [
     ],
     'mpc_exclude_lexicons_fields' => [
         'xtype' => 'textarea',
-        'value' => '',
+        'value' => 'inline_styles,class_names,css_file_path',
         'area' => 'default',
     ],
     'mpc_translated_content' => [
@@ -158,7 +158,7 @@ return [
     ],
     'mpc_lexicon_filename_field' => [
         'xtype' => 'textfield',
-        'value' => 'id',
+        'value' => 'alias',
         'area' => 'default',
     ],
     'mpc_lexicon_path' => [

@@ -127,11 +127,6 @@ class Mpc
         $parsedPath = $this->properties['pdotoolsElementsPath'];
         $resourceData = $resource->toArray();
         $path = $this->properties['pathToDist'] . $resourceData['id'] . $this->properties['extension'];
-        $this->render->langKey = $this->modx->getPlaceholder('+lang') ?: '';
-
-        if ($this->render->langKey && $this->render->langKey !== $this->render->langKeyDefault) {
-            $path = $this->properties['pathToDist'] . $resourceData['content_id'] . $this->render->langKey . $this->properties['extension'];
-        }
 
         if (!file_exists($parsedPath . $path)) {
             $this->render->handle($resourceData);

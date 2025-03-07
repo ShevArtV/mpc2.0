@@ -11,9 +11,9 @@ return [
         'description' => 'получает данные статичной секции',
         'properties' => []
     ],
-    'include' => [
-        'file' => 'snippet.include',
-        'description' => 'работает как модификатор, заменяет во включаемом чанке ## на {',
+    'widgetHandler' => [
+        'file' => 'snippet.widgethandler',
+        'description' => 'обрабатывает запрос с виджетов',
         'properties' => []
     ],
 ];

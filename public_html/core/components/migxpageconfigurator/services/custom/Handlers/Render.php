@@ -24,19 +24,6 @@ class Render extends Base
      */
     public array $contacts;
     /**
-     * @var object|null
-     */
-    private ?object $polylang = null;
-    /**
-     * @var string
-     */
-    public string $langKey = '';
-    /**
-     * @var string
-     */
-    public string $langKeyDefault = '';
-
-    /**
      * @return void
      */
     protected function initialize(): void
@@ -58,10 +45,6 @@ class Render extends Base
             $this->properties['excludeFields'] = json_decode($excludeFields, 1);
         }
         $this->properties['sectionChunkPrefix'] = '@FILE ' . $this->properties['pathToSections'];
-        if (is_dir($this->properties['corePath'] . 'components/polylang')) {
-            $this->polylang = $this->modx->getService('polylang', 'Polylang');
-            $this->langKeyDefault = $this->modx->getOption('polylang_visitor_default_language', '', '');
-        }
         $this->pdo = $this->modx->getService('pdoTools') ?? $this->modx;
         $this->pdo->config['elementsPath'] = str_replace('\\', '/', $this->pdo->config['elementsPath']);
     }
@@ -104,11 +87,9 @@ class Render extends Base
     {
         $output = [];
         $rid = $this->properties['contactsPageId'];
-        $langKey = $this->langKey ?: $this->modx->getOption('cultureKey');
         $tvId = $this->properties['contactsTvId'];
         $contacts = $this->getTVById($rid, $tvId);
-        $polylangContacts = $this->getPolylangTVById($rid, $langKey, $tvId);
-        $contacts = $polylangContacts ? json_decode($polylangContacts, true) : json_decode($contacts, true);
+        $contacts = json_decode($contacts, true);
 
         if (is_array($contacts) && !empty($contacts)) {
             foreach ($contacts as $item) {
@@ -160,32 +141,6 @@ class Render extends Base
     }
 
     /**
-     * @param int $rid
-     * @param string $langKey
-     * @param int $tvId
-     * @return string
-     */
-    public function getPolylangTVById(int $rid, string $langKey, int $tvId): string
-    {
-        if (!$this->polylang instanceof \Polylang) {
-            return '';
-        }
-
-        $q = $this->modx->newQuery('PolylangTv');
-        $q->select('value');
-        $q->where([
-            'tmplvarid' => $tvId ?: $this->properties['configTVid'],
-            'culture_key' => $langKey,
-            'content_id' => $rid
-        ]);
-        if ($value = $this->execute($q, [\PDO::FETCH_COLUMN])) {
-            return $value[0];
-        }
-
-        return '';
-    }
-
-    /**
      * @param int $templateId
      * @return string
      */
@@ -212,26 +167,6 @@ class Render extends Base
             }
         }
 
-        if ($this->polylang instanceof \Polylang) {
-            $resourceData = $this->getPolylangResourceData($resourceData);
-        }
-
-        return $resourceData;
-    }
-
-    /**
-     * @param array $resourceData
-     * @return array
-     */
-    private function getPolylangResourceData(array $resourceData): array
-    {
-        $q = $this->modx->newQuery('PolylangContent');
-        $q->select($this->modx->getSelectColumns('PolylangContent', 'PolylangContent'));
-        $q->select('content_id as id');
-        $q->where(['content_id' => $resourceData['id'], 'culture_key' => $this->langKey]);
-        if ($result = $this->execute($q)) {
-            return array_merge($resourceData, $result);
-        }
         return $resourceData;
     }
 
@@ -242,9 +177,6 @@ class Render extends Base
      */
     private function getResourceTVs(int $rid, bool $isDonor = false): array
     {
-        $resourceTVs = [];
-        $polylangTVs = [];
-
         $q = $this->modx->newQuery('modTemplateVar');
         $q->setClassAlias('TV');
         $q->leftJoin('modTemplateVarResource', 'TVResource', 'TV.id = TVResource.tmplvarid');
@@ -254,25 +186,11 @@ class Render extends Base
         ]);
         if ($tvs = $this->execute($q)) {
             if (!empty($tvs)) {
-                $resourceTVs = $this->reformatTVs($tvs, $isDonor);
-
-                if ($this->langKey && $this->langKey !== $this->langKeyDefault && $this->polylang instanceof \Polylang) {
-                    $q = $this->modx->newQuery('modTemplateVar');
-                    $q->setClassAlias('TV');
-                    $q->leftJoin('PolylangTv', 'PolylangTv', 'TV.id = PolylangTv.tmplvarid');
-                    $q->select('TV.name as name, PolylangTv.value as value');
-                    $q->where([
-                        'PolylangTv.content_id' => $rid,
-                        'PolylangTv.culture_key' => $this->langKey
-                    ]);
-                    if ($tvs = $this->execute($q)) {
-                        $polylangTVs = $this->reformatTVs($tvs, $isDonor);
-                    }
-                }
+                return $this->reformatTVs($tvs, $isDonor);
             }
         }
 
-        return array_merge($resourceTVs, $polylangTVs);
+        return [];
     }
 
     /**
@@ -358,7 +276,7 @@ class Render extends Base
             $section['sbp_id'] = $this->properties['staticBlocksPageId']; // передаем на страницу id ресурса со статичными блоками
             $section['cp_id'] = $this->properties['contactsPageId']; // передаем на страницу id ресурса с контактами
 
-            $sets = PHP_EOL . "{set \$section = '!getStaticSection'| snippet:['section_name' => '{$section['MIGX_formname']}', 'lang_key' => '{$this->langKey}']}{if \$section}";
+            $sets = PHP_EOL . "{set \$section = '!getStaticSection'| snippet:['section_name' => '{$section['MIGX_formname']}']}{if \$section}";
 
             foreach ($section as $key => $value) {
                 if (is_string($value) && strpos($value, '[{') !== false) {
@@ -498,51 +416,6 @@ class Render extends Base
     }
 
     /**
-     * @param int $rid
-     * @return void
-     */
-    public function copyPolylangConfig(int $rid): void
-    {
-        if (!$this->polylang instanceof \Polylang) {
-            return;
-        }
-
-        $resource = $this->modx->getObject('modResource', $rid);
-        if ($resource) {
-            $q = $this->modx->newQuery('modTemplateVar');
-            $q->select('name, id');
-            $q->where([
-                'name:IN' => [$this->properties['commonConfigTvName'], $this->properties['copyConfigTvName'], $this->properties['contactsTvName']]
-            ]);
-            if ($data = $this->execute($q, [\PDO::FETCH_KEY_PAIR])) {
-                $polyLangTvParams = [
-                    'culture_key' => $this->langKey,
-                    'content_id' => $rid
-                ];
-                if ($polylangTvCopyConfig = $this->modx->getObject(
-                    'PolylangTv',
-                    array_merge($polyLangTvParams, ['tmplvarid' => $data[$this->properties['commonConfigTvName']]])
-                )) {
-                    foreach ($data as $name => $id) {
-                        if ($name === $this->properties['copyConfigTvName']) {
-                            continue;
-                        }
-                        if (!$polylangTvConfig = $this->modx->getObject('PolylangTv', array_merge($polyLangTvParams, ['tmplvarid' => $id]))) {
-                            $polylangTvConfig = $this->modx->newObject('PolylangTv');
-                        }
-                        if ($tvValue = $resource->getTVValue($name)) {
-                            $polylangTvConfig->fromArray(array_merge($polyLangTvParams, ['tmplvarid' => $id, 'value' => $tvValue]), '', 1);
-                            $polylangTvConfig->save();
-                        }
-                    }
-                    $polylangTvCopyConfig->set('value', 0);
-                    $polylangTvCopyConfig->save();
-                }
-            }
-        }
-    }
-
-    /**
      * @param string|null $ids
      * @return void
      */
@@ -575,17 +448,6 @@ class Render extends Base
         $basePath = $this->properties['pdotoolsElementsPath'] . $this->properties['pathToDist'];
         if (file_exists($basePath . $rid . $this->properties['extension'])) {
             unlink($basePath . $rid . $this->properties['extension']);
-        }
-        if ($this->polylang instanceof \Polylang) {
-            $q = $this->modx->newQuery('PolylangLanguage');
-            $q->select('culture_key');
-            if ($langs = $this->execute($q, [\PDO::FETCH_COLUMN])) {
-                foreach ($langs as $lang) {
-                    if (file_exists($basePath . $rid . $lang . $this->properties['extension'])) {
-                        unlink($basePath . $rid . $lang . $this->properties['extension']);
-                    }
-                }
-            }
         }
     }
 
