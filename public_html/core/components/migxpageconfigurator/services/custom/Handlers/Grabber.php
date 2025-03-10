@@ -60,17 +60,12 @@ class Grabber extends Base
     {
         parent::initialize();
 
-        $excludeLexiconFields = $this->modx->getOption('mpc_exclude_lexicons_fields', '', '');
-        $excludeLexiconFields = array_merge([
-            'MIGX_id',
-            'MIGX_formname',
-            'id',
-            'section_name',
-            'file_name',
-            'is_static',
-            'limit',
-            'resources'
-        ], explode(',', $excludeLexiconFields));
+        $excludeLexiconFieldsPath = $this->modx->getOption('mpc_exclude_lexicons_filename', '', 'components/migxpageconfigurator/services/exclude_lexicons.inc.php');
+        $excludeLexiconFieldsPath = $this->properties['corePath'] . $excludeLexiconFieldsPath;
+        $excludeLexiconFields = [];
+        if (file_exists($excludeLexiconFieldsPath)) {
+            include $excludeLexiconFieldsPath;
+        }
 
         $properties = array_merge($this->properties, [
             'startPageId' => $this->modx->getOption('site_start', null, 1),
@@ -83,7 +78,7 @@ class Grabber extends Base
         $this->properties['lexiconFilenameField'] = $this->modx->getOption('mpc_lexicon_filename_field', '', 'id');
         if ($this->properties['useLexicons']) {
             $properties['basePathToLexiconFile'] = $this->properties['corePath'] . $properties['lexiconPath'] . $properties['defaultLanguageKey'] . '/';
-            if(!file_exists($properties['basePathToLexiconFile'])){
+            if (!file_exists($properties['basePathToLexiconFile'])) {
                 mkdir($properties['basePathToLexiconFile'], 0755);
             }
             $properties['staticBlocksPageLexiconFilename'] = $this->getResourceIdentifierById($properties['staticBlocksPageId']);
@@ -247,7 +242,7 @@ class Grabber extends Base
                     } else {
                         $tmp[$key] = trim($this->getValue($field));
                     }
-                } else{
+                } else {
                     $tmp[$key] = $field->getAttribute('src') ?: $this->getValue($field);
                 }
             }
@@ -513,7 +508,7 @@ class Grabber extends Base
                 }
                 file_put_contents($pathToLexiconFile, $content);
             } else {
-                if(file_exists($pathToLexiconFile)){
+                if (file_exists($pathToLexiconFile)) {
                     unlink($pathToLexiconFile);
                 }
             }
@@ -1066,7 +1061,7 @@ class Grabber extends Base
         } else {
             $result = trim($element->nodeValue);
         }
-        return in_array('text', $this->properties['translatableContentTypes']) && !empty($options)  ? $this->setLexicons($result, $options) : $result;
+        return in_array('text', $this->properties['translatableContentTypes']) && !empty($options) ? $this->setLexicons($result, $options) : $result;
     }
 
 

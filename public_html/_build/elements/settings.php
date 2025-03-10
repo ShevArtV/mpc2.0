@@ -146,9 +146,9 @@ return [
         'value' => '0',
         'area' => 'default',
     ],
-    'mpc_exclude_lexicons_fields' => [
+    'mpc_exclude_lexicons_filename' => [
         'xtype' => 'textarea',
-        'value' => 'inline_styles,class_names,css_file_path',
+        'value' => 'components/migxpageconfigurator/services/exclude_lexicons.inc.php',
         'area' => 'default',
     ],
     'mpc_translated_content' => [
