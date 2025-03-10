@@ -34,4 +34,10 @@ return [
     'mpcOnImportLexiconValue' => [
         'groupname' => 'MigxPageConfigurator',
     ],
+    'mpcOnAddCellToExcel' => [
+        'groupname' => 'MigxPageConfigurator',
+    ],
+    'mpcOnBeforeSaveExcel' => [
+        'groupname' => 'MigxPageConfigurator',
+    ],
 ];

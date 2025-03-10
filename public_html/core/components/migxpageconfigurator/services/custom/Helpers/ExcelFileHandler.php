@@ -24,6 +24,10 @@ class ExcelFileHandler
      * @var string $assetsPath
      */
     private string $assetsPath;
+    /**
+     * @var string $basePath
+     */
+    private string $basePath;
 
     public function __construct(\Modx $modx)
     {
@@ -34,6 +38,7 @@ class ExcelFileHandler
     private function initialize()
     {
         $this->assetsPath = $this->modx->getOption('assets_path', '', MODX_ASSETS_PATH);
+        $this->basePath = $this->modx->getOption('base_path', '', MODX_ASSETS_PATH);
     }
 
     public function generateFile(array $data, string $filename, ?string $dir): string
@@ -94,14 +99,28 @@ class ExcelFileHandler
         $pathToReports = $this->assetsPath . $dir;
         foreach ($data as $cell => $value) {
             $sheet->setCellValue($cell, is_array($value) ? implode('; ', $value) : $value);
+            $this->modx->invokeEvent('mpcOnAddCellToExcel', [
+                'cell' => $cell,
+                'sheet' => $sheet,
+                'spreadsheet' => $spreadsheet,
+                'ExcelFileHandler' => $this
+            ]);
         }
         $writer = new Xlsx($spreadsheet);
         if (!is_dir($pathToReports)) {
             mkdir($pathToReports, 0755);
         }
         $filePath = $this->assetsPath . $dir . $filename;
+        $this->modx->invokeEvent('mpcOnBeforeSaveExcel', [
+            'filePath' => $filePath,
+            'sheet' => $sheet,
+            'spreadsheet' => $spreadsheet,
+            'ExcelFileHandler' => $this
+        ]);
+        $filePath = isset($this->modx->event->returnedValues) && !empty($this->modx->event->returnedValues['filePath'])
+            ? $this->modx->event->returnedValues['filePath'] : $filePath;
         $writer->save($filePath);
-        return '/assets/' . $dir . $filename;
+        return '/' . str_replace($this->basePath, '', $filePath);
     }
 
     public function getDataFromFile($path)

@@ -7,12 +7,14 @@ if (!defined('MODX_CORE_PATH')) {
     }
     define('MODX_CORE_PATH', $path . '/core/');
 }
-
+if (!defined('PKG_NAME')) {
+    define('PKG_NAME', 'MigxPageConfigurator');
+}
 return [
     'name' => 'MigxPageConfigurator',
     'name_lower' => 'migxpageconfigurator',
     'version' => '2.2.0',
-    'release' => 'beta8',
+    'release' => 'beta10',
     // Install package to site right after build
     'install' => false,
     // Which elements should be updated on package upgrade
