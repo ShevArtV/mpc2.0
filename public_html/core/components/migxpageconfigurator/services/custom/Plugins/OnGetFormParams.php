@@ -1,7 +1,7 @@
 <?php
 
 /**
- * Сервис для обработки события OnHandleRequest
+ * Сервис для обработки события OnGetFormParams
  */
 
 namespace MpcServices\Plugins;
@@ -23,6 +23,18 @@ class OnGetFormParams extends PluginHandler
                 'validate' => 'filename:required',
                 'filename.vTextRequired' => $this->modx->lexicon('mpc_widget_err_filename'),
                 'successMessage' => $this->modx->lexicon('mpc_widget_success_export'),
+                'resultBlockSelector' => '[data-si-preset="mpc_export_lexicons"] [name="section"]'
+            ];
+        }
+        if($this->scriptProperties['presetName'] === 'mpc_load_sections'){
+            $this->scriptProperties['SendIt']->pluginParams = [
+                'hooks' => '',
+                'method' => 'loadSections',
+                'className' => 'MpcServices\Widgets\LexiconExport',
+                'snippet' => 'widgetHandler',
+                'successMessage' => '',
+                'resultShowMethod' => 'insert',
+                'resultBlockSelector' => '[data-si-preset="mpc_export_lexicons"] [name="section"]'
             ];
         }
         if($this->scriptProperties['presetName'] === 'mpc_upload_lexicon_file'){

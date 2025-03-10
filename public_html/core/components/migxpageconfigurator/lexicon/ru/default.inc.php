@@ -87,3 +87,4 @@ $_lang['mpc_widget_import_btn'] = 'Импортировать';
 $_lang['mpc_widget_err_filelist'] = 'Загрузите файл';
 $_lang['mpc_widget_success_import'] = 'Импорт завершён';
 $_lang['mpc_widget_err_empty_data_import'] = 'Не удалось получить данные из файлов';
+$_lang['mpc_widget_all_sections'] = 'Все секции';

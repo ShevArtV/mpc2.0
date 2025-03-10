@@ -25,6 +25,10 @@ class LexiconExport
      */
     protected array $paths;
     /**
+     * @var string
+     */
+    protected string $defaultLanguageKey;
+    /**
      * @var ExcelFileHandler
      */
     private ExcelFileHandler $ExcelFileHandler;
@@ -45,6 +49,7 @@ class LexiconExport
      */
     protected function initialize()
     {
+        $this->defaultLanguageKey = $this->modx->getOption('mpc_default_language', '', 'ru');
         $this->paths = [
             'base' => $this->modx->getOption('base_path', null, $_SERVER['DOCUMENT_ROOT'] . '/'),
             'core' => $this->modx->getOption('core_path', null, MODX_CORE_PATH),
@@ -64,7 +69,33 @@ class LexiconExport
         return [
             'success' => true,
             'message' => $this->scriptProperties['successMessage'],
-            'data' => ['fileName' => $filename, 'filePath' => $exportFilePath]
+            'data' => [
+                'fileName' => $filename,
+                'filePath' => $exportFilePath
+            ]
+        ];
+    }
+
+    public function loadSections(){
+        $pathToLexiconFile = $this->paths['core'] . $this->paths['lexicons'] . $this->defaultLanguageKey . '/' . $_POST['filename'];
+        $optionLexicon = $this->modx->lexicon('mpc_widget_all_sections');
+        $sections['all'] = '<option value="">' . $optionLexicon . '</option>' . PHP_EOL;
+        if (file_exists($pathToLexiconFile)) {
+            include $pathToLexiconFile;
+            foreach ($_lang as $k => $v) {
+                $parts = explode('_', $k);
+                if (!isset($sections[$parts[0]])) {
+                    $sections[$parts[0]] = '<option value="' . $parts[0] . '">' . $parts[0] . '</option>' . PHP_EOL;
+                }
+            }
+        }
+
+        return [
+            'success' => true,
+            'message' => $this->scriptProperties['successMessage'],
+            'data' => [
+                'html' => implode('', $sections)
+            ]
         ];
     }
 
@@ -79,11 +110,14 @@ class LexiconExport
         foreach ($languages as $language) {
             $_lang = [];
             $pathToLexiconFile = $this->paths['core'] . $this->paths['lexicons'] . $language . '/' . $_POST['filename'];
-            if(file_exists($pathToLexiconFile)){
+            if (file_exists($pathToLexiconFile)) {
                 include $pathToLexiconFile;
             }
-
+            $this->modx->log(1, print_r($_POST['section'], 1));
             foreach ($_lang as $k => $v) {
+                if($_POST['section'] && strpos($k, $_POST['section']) !== 0){
+                    continue;
+                }
                 if (!isset($data[$k]['lexicon_key'])) {
                     $data[$k]['lexicon_key'] = $k;
                 }

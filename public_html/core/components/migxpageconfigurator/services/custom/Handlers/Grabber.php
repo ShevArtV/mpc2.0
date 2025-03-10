@@ -907,15 +907,17 @@ class Grabber extends Base
             return $attrValue;
         }
 
-        $baseName = basename($attrValue);
+        $extension = pathinfo($attrValue, PATHINFO_EXTENSION);
+        $fileName = pathinfo($attrValue, PATHINFO_FILENAME);
         $this->modx->invokeEvent('mpcOnBeforeDownloadImage', [
-            'baseName' => $baseName,
+            'fileName' => $fileName,
+            'extention' => $extension,
             'imagesPath' => $this->imagesPath,
             'Grabber' => $this
         ]);
 
-        $baseName = isset($this->modx->event->returnedValues) && !empty($this->modx->event->returnedValues['baseName'])
-            ? $this->modx->event->returnedValues['baseName'] : $baseName;
+        $fileName = isset($this->modx->event->returnedValues) && !empty($this->modx->event->returnedValues['fileName'])
+            ? $this->modx->event->returnedValues['fileName'] : $fileName;
         $imagesPath = isset($this->modx->event->returnedValues) && !empty($this->modx->event->returnedValues['imagesPath'])
             ? $this->modx->event->returnedValues['imagesPath'] : $this->imagesPath;
 
@@ -924,7 +926,9 @@ class Grabber extends Base
             mkdir($fullPathToDir, 0777, true);
         }
 
-        if ($path = $this->download($attrValue, $imagesPath . $baseName)) {
+        $fileName = $this->properties['resource']->cleanAlias($fileName);
+
+        if ($path = $this->download($attrValue, $imagesPath . $fileName . '.' . $extension)) {
             $attrValue = $path;
         }
         return $attrValue;
