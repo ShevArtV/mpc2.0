@@ -14,7 +14,7 @@ return [
     'name' => 'MigxPageConfigurator',
     'name_lower' => 'migxpageconfigurator',
     'version' => '2.2.0',
-    'release' => 'beta12',
+    'release' => 'beta14',
     // Install package to site right after build
     'install' => false,
     // Which elements should be updated on package upgrade

@@ -381,12 +381,12 @@ class Cutter extends Base
         if (!$fields = $this->getItems($properties['html'], '[' . $fieldAttrName . ']')) {
             return $properties;
         }
+
         $mediaLists = [];
         foreach ($fields as $field) {
             $fieldName = $field->getAttribute($fieldAttrName);
             $properties['fieldName'] = $fieldName;
             $fieldHTML = $this->parser->getHTMLString($field);
-
             if ($fieldName === 'bg_img') {
                 $fieldHTMLNew = $this->setBackgroundPlaceholder($field, $fieldName, $properties);
             } elseif ($fieldName === 'img') {
@@ -394,18 +394,29 @@ class Cutter extends Base
             } elseif (in_array($fieldName, ['video', 'audio', 'picture'])) {
                 $fieldHTMLNew = $this->setMediaPlaceholder($field, $fieldName, $properties);
             } elseif (in_array($fieldName, ['list_images', 'list_pictures', 'list_audios', 'list_videos'])) {
+                $parentNode = $this->getParentNode($properties['parentElement'] ?? $field, $fieldAttrName);
+                if ($parentNode != $properties['element']) {
+                    continue;
+                }
+                $prefix = '';
+                if ($properties['parentElement']) {
+                    $prefix = 'item' . $properties['level'] . '.';
+                    $fieldName = strpos($fieldName, $prefix) === 0 ? $fieldName : $prefix . $fieldName;
+                }
                 $k = isset($mediaLists[$fieldName]) ? count($mediaLists[$fieldName]) : 0;
-                $properties['level'] = $k;
-                if ($fieldName === 'list_images') {
-                    $fieldHTMLNew = $this->setImgPlaceholder($field, $fieldName . "[$k].img", $properties);
+                $listProperties['level'] = $k;
+                $listProperties = array_merge($properties, $listProperties);
+                if ($fieldName === $prefix . 'list_images') {
+                    $fieldHTMLNew = $this->setImgPlaceholder($field, $fieldName . "[$k].img", $listProperties);
                 } else {
-                    $fieldHTMLNew = $this->setMediaPlaceholder($field, $fieldName . "[$k]." . $field->nodeName, $properties);
+                    $fieldHTMLNew = $this->setMediaPlaceholder($field, $fieldName . "[$k]." . $field->nodeName, $listProperties);
                 }
                 $mediaLists[$fieldName][] = $field;
             } elseif ($items = $this->getItems($fieldHTML, '[' . $itemAttrName . ']')) {
                 list($firstSymbol, $complexName) = $this->getSymbolComplex($field, $fieldName, $properties['level'], $properties['isStatic']);
                 $props['html'] = $this->parser->getHTMLString($items[0]);
                 $props['element'] = $items[0];
+                $props['parentElement'] = $this->getParentNode($items[0], $fieldAttrName);
                 $props['level'] = $properties['level'] + 1;
                 $properties['parentFieldName'] = $fieldName;
                 $properties['fieldName'] = preg_replace('/^\$/', '', $complexName);
@@ -457,6 +468,20 @@ class Cutter extends Base
 
         //$this->modx->log(1, print_r($properties['html'], 1));
         return $properties;
+    }
+
+    private function getParentNode($node, $attrName)
+    {
+        if ($node->parentNode->tagName === 'html') {
+            return $node->parentNode;
+        }
+        if ($node->parentNode->hasAttribute($attrName)) {
+            return $node->parentNode;
+        }
+        if ($node->parentNode->hasAttribute('data-mpc-section')) {
+            return $node->parentNode;
+        }
+        return $this->getParentNode($node->parentNode, $attrName);
     }
 
     /**
@@ -749,10 +774,10 @@ class Cutter extends Base
         $table = $row->getAttribute('data-mpc-table') ?: 'config';
 
         if ($table === 'config') {
-            if (strpos($fieldName, 'list_images') === 0
-                || strpos($fieldName, 'list_pictures') === 0
-                || strpos($fieldName, 'list_videos') === 0
-                || strpos($fieldName, 'list_audios') === 0
+            if (strpos($fieldName, 'list_images') !== false
+                || strpos($fieldName, 'list_pictures') !== false
+                || strpos($fieldName, 'list_videos') !== false
+                || strpos($fieldName, 'list_audios') !== false
             ) {
                 $complexName = "\${$fieldName}";
             } else {

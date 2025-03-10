@@ -792,7 +792,6 @@ class Grabber extends Base
             } else {
                 $fields[$fieldName] = $this->getValue($row, $lexiconOptions);
             }
-            $options['parentFieldName'] = '';
         }
 
         foreach ($mediaLists as $fieldName => $items) {
@@ -828,7 +827,6 @@ class Grabber extends Base
                 }
                 $lexiconOptions['idx'] = $k;
                 $lexiconOptions['fieldName'] = $fieldName;
-
                 $value = $this->$method($row, $lexiconOptions);
                 $value = !is_array($value) ? json_decode($value, true) : $value;
                 $preview = $value[0][$pathKey];
@@ -1092,7 +1090,6 @@ class Grabber extends Base
 
         $options['prefix'] = $options['prefix'] ?? $this->sectionLexiconPrefix;
         $lexiconKey = $this->getLexiconKey($options);
-
         $this->modx->invokeEvent('mpcOnGetLexiconKey', [
             'sectionLexiconPrefix' => $this->sectionLexiconPrefix,
             'lexiconKey' => $lexiconKey,
