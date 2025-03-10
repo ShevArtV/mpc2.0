@@ -113,7 +113,7 @@ class LexiconExport
             if (file_exists($pathToLexiconFile)) {
                 include $pathToLexiconFile;
             }
-            $this->modx->log(1, print_r($_POST['section'], 1));
+
             foreach ($_lang as $k => $v) {
                 if($_POST['section'] && strpos($k, $_POST['section']) !== 0){
                     continue;
