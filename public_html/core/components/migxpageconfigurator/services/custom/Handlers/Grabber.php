@@ -641,7 +641,7 @@ class Grabber extends Base
     {
         $sectionName = trim($section->getAttribute('data-mpc-name'));
         $this->sectionLexiconPrefix = trim($section->getAttribute('data-mpc-lexicon')) ?? $properties['sectionName'];
-        $this->sectionIsStatic = empty($this->staticSectionNames) ? $section->hasAttribute('data-mpc-static') : in_array($sectionName, $this->staticSectionNames);
+        $this->sectionIsStatic = $section->hasAttribute('data-mpc-static');
         $sectionId = $properties['sectionName'] . '_' . str_replace(['.', ',', ' '], '', microtime(true));
         $this->imagesPath = $this->properties['imagesPath'] . $properties['sectionName'] . '/';
 
@@ -998,9 +998,10 @@ class Grabber extends Base
                 $media[0][$attr] = $element->getAttribute($attr);
             }
             if ($attr === 'poster') {
+                $parentFieldName = $this->getParentFieldName($options);
                 $lexiconOptions = [
                     'fieldName' => 'poster',
-                    'parentFieldName' => $options['idx'] ? "{$options['fieldName']}_{$options['idx']}" : $options['fieldName'],
+                    'parentFieldName' => $parentFieldName,
                     'idx' => 0,
                 ];
                 $media[0][$attr] = in_array('poster', $this->properties['translatableContentTypes']) ? $this->setLexicons(
@@ -1013,18 +1014,29 @@ class Grabber extends Base
             }
         }
         if ($sources = $element->getElementsByTagName('source')) {
-            $options['parentFieldName'] = $options['idx'] ? "{$options['fieldName']}_{$options['idx']}" : $options['fieldName'];
-            $options['fieldName'] = 'source';
+            $parentFieldName = $this->getParentFieldName($options);
+            $lexiconOptions = [
+                'fieldName' => 'source',
+                'parentFieldName' => $parentFieldName,
+            ];
             foreach ($sources as $k => $source) {
-                $options['idx'] = $k;
+                $lexiconOptions['idx'] = $k;
                 $media[0]['sources'][$k] = $this->getSourceValue($source, $k + 1, false);
-                $media[0]['sources'][$k]['src'] = $useLexicons ? $this->setLexicons($media[0]['sources'][$k]['src'], $options) : $media[0]['sources'][$k]['src'];
+                $media[0]['sources'][$k]['src'] = $useLexicons ? $this->setLexicons($media[0]['sources'][$k]['src'], $lexiconOptions) : $media[0]['sources'][$k]['src'];
             }
         }
         if (!$media[0]['src']) {
             $media[0]['src'] = $media[0]['sources'][0]['src'];
         }
         return $media;
+    }
+
+    private function getParentFieldName(array $options){
+        if ($options['parentFieldName']) {
+            return $options['idx'] ? $options['parentFieldName'] . '_' . "{$options['fieldName']}_{$options['idx']}" : $options['parentFieldName'] . '_' . $options['fieldName'];
+        } else {
+            return $options['idx'] ? "{$options['fieldName']}_{$options['idx']}" : $options['fieldName'];
+        }
     }
 
     /**
@@ -1125,13 +1137,13 @@ class Grabber extends Base
      */
     public function sanitizeValue(string $value): string
     {
-        $value = preg_replace_callback("/([^\\\\])'/", function($match) {
+        $value = preg_replace_callback("/([^\\\\])'/", function ($match) {
             return $match[1] . "\\'";
         }, $value);
         $value = strip_tags($value, $this->properties['allowedTags']);
         $value = trim($value);
 
-        if(!$this->properties['allowModxTags']){
+        if (!$this->properties['allowModxTags']) {
             $value = preg_replace('/\{.*?\}/', '', $value);
             $value = preg_replace('/\[\[\+.*?\]\]/', '', $value);
             $value = str_replace('{', '{ ', $value);
@@ -1143,7 +1155,6 @@ class Grabber extends Base
 
         return isset($this->modx->event->returnedValues) && !empty($this->modx->event->returnedValues['value'])
             ? $this->modx->event->returnedValues['value'] : $value;
-
     }
 
     /**

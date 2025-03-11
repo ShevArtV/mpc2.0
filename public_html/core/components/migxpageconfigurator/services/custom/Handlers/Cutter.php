@@ -311,7 +311,7 @@ class Cutter extends Base
             'itemAttrName' => 'data-mpc-item',
             'level' => 0,
             'sectionLexiconPrefix' => $sectionLexiconPrefix,
-            'isStatic' => empty($this->staticSectionNames) ? $element->hasAttribute('data-mpc-static') : in_array($sectionName, $this->staticSectionNames)
+            'isStatic' => $element->hasAttribute('data-mpc-static')
         ];
         $properties = $this->setPlaceholders($properties);
         $properties = $this->setSnippetTags($properties);
@@ -677,15 +677,23 @@ class Cutter extends Base
         $thumbParams = $params['thumbParams'] ?: $this->properties['commonThumbParams'];
         $src = $params['srcAttr'] ? "{$params['complexName']}.{$params['srcAttr']}" : $params['complexName'];
         if ($params['width']) {
+            $width = $params['complexName'] . '.width';
+            if ($this->properties['useLexicons'] && in_array('image', $this->properties['translatableContentTypes'])) {
+                $width = '{'. $params['complexName'] . '.width}';
+            }
             if ($params['height']) {
-                $pls = $params['setValues'] ? $params['width'] : "'~{$params['complexName']}.width~'";
+                $pls = $params['setValues'] ? $params['width'] : "'~$width~'";
             } else {
-                $pls = $params['setValues'] ? $params['width'] : "'~{$params['complexName']}.width";
+                $pls = $params['setValues'] ? $params['width'] : "'~$width";
             }
             $thumbParams .= "&w=$pls";
         }
         if ($params['height']) {
-            $pls = $params['setValues'] ? $params['height'] : "'~{$params['complexName']}.height";
+            $height = $params['complexName'] . '.height';
+            if ($this->properties['useLexicons'] && in_array('image', $this->properties['translatableContentTypes'])) {
+                $height = '{'. $params['complexName'] . '.height}';
+            }
+            $pls = $params['setValues'] ? $params['height'] : "'~$height";
             $thumbParams .= "&h=$pls";
         }
         if (!$params['height'] && !$params['width']) {
