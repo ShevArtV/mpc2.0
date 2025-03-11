@@ -6,6 +6,7 @@
 namespace MpcServices\Widgets;
 
 use MpcServices\Helpers\ExcelFileHandler;
+use MpcServices\Handlers\Grabber;
 
 /**
  * @author Arthur Shevchenko (https://t.me/ShevArtV)
@@ -28,14 +29,7 @@ class LexiconImport
      * @var ExcelFileHandler
      */
     private ExcelFileHandler $ExcelFileHandler;
-    /**
-     * @var array
-     */
-    private array $allowedTags = [];
-    /**
-     * @var array|mixed|string
-     */
-    private bool $allowModxTags = false;
+
 
     /**
      * @param \modX $modx
@@ -53,6 +47,7 @@ class LexiconImport
      */
     protected function initialize()
     {
+        $this->grabber = new Grabber($this->modx);
         $this->paths = [
             'base' => $this->modx->getOption('base_path', null, $_SERVER['DOCUMENT_ROOT'] . '/'),
             'core' => $this->modx->getOption('core_path', null, MODX_CORE_PATH),
@@ -61,9 +56,6 @@ class LexiconImport
             'upload' => $this->modx->getOption('si_uploaddir', '', '[[+asseetsUrl]]components/sendit/uploaded_files/'),
         ];
         $this->paths['upload'] = str_replace('[[+asseetsUrl]]', $this->paths['assets'], $this->paths['upload']) . session_id() . '/';
-        $allowedTags = $this->modx->getOption('mpc_allowed_tags', '', '');
-        $this->allowModxTags = $this->modx->getOption('mpc_allow_modx_tags', '', false);
-        $this->allowedTags = explode(',', $allowedTags);
         $this->ExcelFileHandler = new ExcelFileHandler($this->modx);
     }
 
@@ -138,7 +130,7 @@ class LexiconImport
                 $_lang = array_merge($_lang, $values);
                 $content = '<?php' . PHP_EOL;
                 foreach ($_lang as $k => $v) {
-                    $v = $this->sanitizeValue($v);
+                    $v = $this->grabber->sanitizeValue($v);
                     $content .= '$_lang[\'' . $k . '\'] = \'' . $v . '\';' . PHP_EOL;
                 }
                 file_put_contents($pathToLexiconFile, $content);
@@ -146,32 +138,4 @@ class LexiconImport
         }
         $this->modx->cacheManager->refresh(['lexicon_topics' => []]);
     }
-
-    /**
-     * @param string $value
-     * @return string
-     */
-    private function sanitizeValue(string $value): string
-    {
-        $value = preg_replace_callback("/([^\\\\])'/", function($match) {
-            return $match[1] . "\\'";
-        }, $value);
-        $value = strip_tags($value, $this->allowedTags);
-        $value = trim($value);
-
-        if(!$this->allowModxTags){
-            $value = preg_replace('/\{.*?\}/', '', $value);
-            $value = preg_replace('/\[\[\+.*?\]\]/', '', $value);
-            $value = str_replace('{', '{ ', $value);
-        }
-
-        $this->modx->invokeEvent('mpcOnImportLexiconValue', [
-            '$value' => $value
-        ]);
-
-        return isset($this->modx->event->returnedValues) && !empty($this->modx->event->returnedValues['value'])
-            ? $this->modx->event->returnedValues['value'] : $value;
-
-    }
-
 }

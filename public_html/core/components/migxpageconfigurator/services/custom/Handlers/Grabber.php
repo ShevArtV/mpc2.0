@@ -66,7 +66,7 @@ class Grabber extends Base
         if (file_exists($excludeLexiconFieldsPath)) {
             include $excludeLexiconFieldsPath;
         }
-
+        $allowedTags = $this->modx->getOption('mpc_allowed_tags', '', '');
         $properties = array_merge($this->properties, [
             'startPageId' => $this->modx->getOption('site_start', null, 1),
             'phoneRegExp' => $this->modx->getOption('mpc_phone_regexp', '', '/(\d)(\d{3})(\d{3})(\d{2})(\d{2})$/'),
@@ -74,6 +74,8 @@ class Grabber extends Base
             'imagesPath' => $this->modx->getOption('mpc_images_path', '', ''),
             'lexiconPath' => $this->modx->getOption('mpc_lexicon_path', '', 'components/migxpageconfigurator/lexicon/'),
             'excludeLexiconFields' => $excludeLexiconFields,
+            'allowModxTags' => $this->modx->getOption('mpc_allow_modx_tags', '', false),
+            'allowedTags' => explode(',', $allowedTags),
         ]);
         $this->properties['lexiconFilenameField'] = $this->modx->getOption('mpc_lexicon_filename_field', '', 'id');
         if ($this->properties['useLexicons']) {
@@ -1112,11 +1114,37 @@ class Grabber extends Base
             $rid = $this->getResourceIdentifierById($this->properties['resource']->get('id'));
         }
 
-        $this->lexicons[$rid][$lexiconKey] = $value;
+        $this->lexicons[$rid][$lexiconKey] = $this->sanitizeValue($value);
 
         return "{'$lexiconKey' | lexicon}";
     }
 
+    /**
+     * @param string $value
+     * @return string
+     */
+    public function sanitizeValue(string $value): string
+    {
+        $value = preg_replace_callback("/([^\\\\])'/", function($match) {
+            return $match[1] . "\\'";
+        }, $value);
+        $value = strip_tags($value, $this->properties['allowedTags']);
+        $value = trim($value);
+
+        if(!$this->properties['allowModxTags']){
+            $value = preg_replace('/\{.*?\}/', '', $value);
+            $value = preg_replace('/\[\[\+.*?\]\]/', '', $value);
+            $value = str_replace('{', '{ ', $value);
+        }
+
+        $this->modx->invokeEvent('mpcOnImportLexiconValue', [
+            '$value' => $value
+        ]);
+
+        return isset($this->modx->event->returnedValues) && !empty($this->modx->event->returnedValues['value'])
+            ? $this->modx->event->returnedValues['value'] : $value;
+
+    }
 
     /**
      * @param string $className
