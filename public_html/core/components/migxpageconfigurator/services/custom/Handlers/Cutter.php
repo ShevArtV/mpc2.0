@@ -389,9 +389,9 @@ class Cutter extends Base
             $fieldHTML = $this->parser->getHTMLString($field);
             if ($fieldName === 'bg_img') {
                 $fieldHTMLNew = $this->setBackgroundPlaceholder($field, $fieldName, $properties);
-            } elseif ($fieldName === 'img') {
+            } elseif ($field->tagName === 'img' && !in_array($fieldName, ['list_images', 'list_pictures'])) {
                 $fieldHTMLNew = $this->setImgPlaceholder($field, $fieldName, $properties);
-            } elseif (in_array($fieldName, ['video', 'audio', 'picture'])) {
+            } elseif (in_array($field->tagName, ['video', 'audio', 'picture']) && !in_array($fieldName, ['list_pictures', 'list_audios', 'list_videos'])) {
                 $fieldHTMLNew = $this->setMediaPlaceholder($field, $fieldName, $properties);
             } elseif (in_array($fieldName, ['list_images', 'list_pictures', 'list_audios', 'list_videos'])) {
                 $parentNode = $this->getParentNode($properties['parentElement'] ?? $field, $fieldAttrName);

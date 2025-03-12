@@ -506,7 +506,7 @@ class Grabber extends Base
             if (!empty($lexicons)) {
                 $content = '<?php' . PHP_EOL;
                 foreach ($lexicons as $k => $v) {
-                    $content .= '$_lang[\'' . $k . '\'] = \'' . $v . '\';' . PHP_EOL;
+                    $content .= '$_lang[\'' . $k . '\'] = \'' . $this->sanitizeValue($v) . '\';' . PHP_EOL;
                 }
                 file_put_contents($pathToLexiconFile, $content);
             } else {
@@ -762,13 +762,13 @@ class Grabber extends Base
         foreach ($entries as $key => $row) {
             $fieldName = $row->getAttribute($fieldAttrName);
             $lexiconOptions = ['fieldName' => $options['fieldName'] ?? $fieldName, 'parentFieldName' => $options['parentFieldName'] ?? '', 'idx' => $idx];
-            if ($fieldName === 'img') {
+            if ($row->tagName === 'img' && !in_array($fieldName, ['list_images', 'list_pictures'])) {
                 $fields[$fieldName] = $this->getImageValue($row, $lexiconOptions);
-            } elseif ($fieldName === 'picture') {
+            } elseif ($row->tagName === 'picture' && !in_array($fieldName, ['list_images', 'list_pictures'])) {
                 $fields[$fieldName] = $this->getPictureValue($row, $lexiconOptions);
             } elseif ($fieldName === 'bg_img') {
                 $fields[$fieldName] = $this->getBackgroundValue($row, $lexiconOptions);
-            } elseif (in_array($fieldName, ['video', 'audio'])) {
+            } elseif (in_array($row->tagName, ['video', 'audio']) && !in_array($fieldName, ['list_audios', 'list_videos'])) {
                 $fields[$fieldName] = $this->getMediaValue($row, $lexiconOptions);
             } elseif (in_array($fieldName, ['list_images', 'list_pictures', 'list_audios', 'list_videos'])) {
                 $mediaLists[$fieldName][] = $row;
