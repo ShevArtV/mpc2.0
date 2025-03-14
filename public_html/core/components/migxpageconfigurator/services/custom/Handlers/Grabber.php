@@ -73,6 +73,7 @@ class Grabber extends Base
             'phoneFormat' => $this->modx->getOption('mpc_phone_format', '', '8 (\2) \3-\4-\5'),
             'imagesPath' => $this->modx->getOption('mpc_images_path', '', ''),
             'lexiconPath' => $this->modx->getOption('mpc_lexicon_path', '', 'components/migxpageconfigurator/lexicon/'),
+            'resourceLexiconKeysPath' => $this->modx->getOption('mpc_resource_lexicon_keys_path', '', 'components/migxpageconfigurator/services/resource_lexicon_keys.inc.php'),
             'excludeLexiconFields' => $excludeLexiconFields,
             'allowModxTags' => $this->modx->getOption('mpc_allow_modx_tags', '', false),
             'allowedTags' => explode(',', $allowedTags),
@@ -500,9 +501,21 @@ class Grabber extends Base
     public function createLexicons(array $allLexicons)
     {
         $basePathToLexiconFile = $this->properties['basePathToLexiconFile'];
+        $resourceLexiconKeysPath = $this->properties['corePath'] . $this->properties['resourceLexiconKeysPath'];
+        $_rlang = $_lang = [];
+        if (file_exists($resourceLexiconKeysPath)) {
+            include $resourceLexiconKeysPath;
+        }
         foreach ($allLexicons as $rid => $lexicons) {
             $pathToLexiconFile = $basePathToLexiconFile . $rid . '.inc.php';
-
+            if (file_exists($pathToLexiconFile) && !empty($_rlang)) {
+                include $pathToLexiconFile;
+                $tmp = array_intersect_key($_lang, $_rlang);
+                if (empty($tmp)) {
+                    $tmp = $_rlang;
+                }
+                $lexicons = array_merge($tmp, $lexicons);
+            }
             if (!empty($lexicons)) {
                 $content = '<?php' . PHP_EOL;
                 foreach ($lexicons as $k => $v) {

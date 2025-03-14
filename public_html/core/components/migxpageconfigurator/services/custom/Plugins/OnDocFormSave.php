@@ -33,7 +33,9 @@ class OnDocFormSave extends PluginHandler
             $Mpc->cutter->staticSectionNames = $Mpc->grabber->staticSectionNames = $Mpc->cutter->getStaticSectionNames($this->scriptProperties['resource']);
             $Mpc->handleFile($fileName);
 
-            $this->manageResourceLexicons($this->scriptProperties['resource'], $Mpc, $typeResource->get('id'));
+            if($typeResource->get('id') !== $this->scriptProperties['id']){
+                $this->manageResourceLexicons($this->scriptProperties['resource'], $Mpc, $typeResource->get('id'));
+            }
         }
         if ($this->scriptProperties['id'] === $Mpc->grabber->properties['staticBlocksPageId']) {
             $this->filterStaticSectionsLexicons($Mpc);

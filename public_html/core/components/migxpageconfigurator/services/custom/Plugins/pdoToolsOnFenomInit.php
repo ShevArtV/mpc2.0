@@ -21,7 +21,8 @@ class pdoToolsOnFenomInit extends PluginHandler
     private array $modifiers = [
         'version',
         'include',
-        'lexicon'
+        'lexicon',
+        'reslexicons',
     ];
 
     public function run()
@@ -56,6 +57,14 @@ class pdoToolsOnFenomInit extends PluginHandler
             return '';
         }
         return $result;
+    }
+
+    private function reslexicons($args)
+    {
+        $id = $args[0];
+        $template = $args[1];
+        $Mpc = new Mpc($this->modx);
+        $Mpc->loadLexicons($id, $template);
     }
 
     private function version($args)

@@ -496,8 +496,10 @@ class Mpc
         $this->modx->lexicon->load($lexiconsNamespace . $this->grabber->properties['staticBlocksPageLexiconFilename']);
         $this->modx->lexicon->load($lexiconsNamespace . $this->grabber->properties['contactsPageLexiconFilename']);
         if($parentResourceId = $this->getParentResourceId($templateId)){
-            $parentResourceLexiconFilename = $this->grabber->getResourceIdentifierById($parentResourceId);
-            $this->modx->lexicon->load($lexiconsNamespace . $parentResourceLexiconFilename);
+            if($parentResourceId !== $rid){
+                $parentResourceLexiconFilename = $this->grabber->getResourceIdentifierById($parentResourceId);
+                $this->modx->lexicon->load($lexiconsNamespace . $parentResourceLexiconFilename);
+            }
         }
         $resourceLexiconFilename = $this->grabber->getResourceIdentifierById($rid);
         $this->modx->lexicon->load($lexiconsNamespace . $resourceLexiconFilename);

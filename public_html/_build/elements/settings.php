@@ -191,4 +191,9 @@ return [
         'value' => '0',
         'area' => 'default',
     ],
+    'mpc_resource_lexicon_keys_path' => [
+        'xtype' => 'textfield',
+        'value' => 'components/migxpageconfigurator/services/resource_lexicon_keys.inc.php',
+        'area' => 'default',
+    ],
 ];
