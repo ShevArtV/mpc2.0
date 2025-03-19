@@ -56,8 +56,11 @@ class mpcLanguages {
   }
 
   setCookie(name, value, options = {}) {
+    const fullDomain = window.location.hostname;
+    const rootDomain = fullDomain.replace(/^[^.]*\./, '');
     options = {
       path: '/',
+      domain: '.' + rootDomain,
       ...options
     };
 
