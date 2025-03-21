@@ -124,7 +124,7 @@ class LexiconImport
                     include $this->paths['core'] . $this->paths['lexicons'] . $language . '/' . $filename;
                 }
                 if (!file_exists($languageDir)) {
-                    mkdir($languageDir);
+                    mkdir($languageDir, 0755, true);
                 }
 
                 $_lang = array_merge($_lang, $values);

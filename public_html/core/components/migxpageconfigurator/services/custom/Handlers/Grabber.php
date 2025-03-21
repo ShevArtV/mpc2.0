@@ -82,7 +82,7 @@ class Grabber extends Base
         if ($this->properties['useLexicons']) {
             $properties['basePathToLexiconFile'] = $this->properties['corePath'] . $properties['lexiconPath'] . $properties['defaultLanguageKey'] . '/';
             if (!file_exists($properties['basePathToLexiconFile'])) {
-                mkdir($properties['basePathToLexiconFile'], 0755);
+                mkdir($properties['basePathToLexiconFile'], 0755, true);
             }
             $properties['staticBlocksPageLexiconFilename'] = $this->getResourceIdentifierById($properties['staticBlocksPageId']);
             $properties['contactsPageLexiconFilename'] = $this->getResourceIdentifierById($properties['contactsPageId']);

@@ -108,7 +108,7 @@ class ExcelFileHandler
         }
         $writer = new Xlsx($spreadsheet);
         if (!is_dir($pathToReports)) {
-            mkdir($pathToReports, 0755);
+            mkdir($pathToReports, 0755, true);
         }
         $filePath = $this->assetsPath . $dir . $filename;
         $this->modx->invokeEvent('mpcOnBeforeSaveExcel', [
