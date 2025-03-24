@@ -1148,11 +1148,12 @@ class Grabber extends Base
      * @param string $value
      * @return string
      */
-    public function sanitizeValue(string $value): string
+    public function sanitizeValue(?string $value = ''): string
     {
-        $value = preg_replace_callback("/([^\\\\])'/", function ($match) {
-            return $match[1] . "\\'";
-        }, $value);
+        if($value === '') {
+            return '';
+        }
+        $value = preg_replace("/'([^']+)'/u", "«$1»", $value);
         $value = strip_tags($value, $this->properties['allowedTags']);
         $value = trim($value);
 
