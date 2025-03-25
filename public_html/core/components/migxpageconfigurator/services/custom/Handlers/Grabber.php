@@ -1153,7 +1153,7 @@ class Grabber extends Base
         if($value === '') {
             return '';
         }
-        $value = preg_replace("/'([^']+)'/u", "«$1»", $value);
+        $value = str_replace("'", '&apos;', $value);
         $value = strip_tags($value, $this->properties['allowedTags']);
         $value = trim($value);
 

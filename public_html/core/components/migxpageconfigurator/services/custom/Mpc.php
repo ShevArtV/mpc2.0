@@ -492,6 +492,13 @@ class Mpc
 
     public function loadLexicons(int $rid, ?int $templateId = 0)
     {
+        if ($setting = $this->modx->getObject('modContextSetting', [
+            'key' => 'cultureKey',
+            'context_key' => $this->modx->context->get('key')
+        ])) {
+            $this->modx->setOption('cultureKey', $setting->get('value'));
+        }
+
         $lexiconsNamespace = $this->properties['lexiconsNamespace'] . ':';
         $this->modx->lexicon->load($lexiconsNamespace . $this->grabber->properties['staticBlocksPageLexiconFilename']);
         $this->modx->lexicon->load($lexiconsNamespace . $this->grabber->properties['contactsPageLexiconFilename']);
