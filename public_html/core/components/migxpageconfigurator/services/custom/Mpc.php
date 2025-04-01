@@ -492,18 +492,11 @@ class Mpc
 
     public function loadLexicons(int $rid, ?int $templateId = 0)
     {
-        if ($setting = $this->modx->getObject('modContextSetting', [
-            'key' => 'cultureKey',
-            'context_key' => $this->modx->context->get('key')
-        ])) {
-            $this->modx->setOption('cultureKey', $setting->get('value'));
-        }
-
         $lexiconsNamespace = $this->properties['lexiconsNamespace'] . ':';
         $this->modx->lexicon->load($lexiconsNamespace . $this->grabber->properties['staticBlocksPageLexiconFilename']);
         $this->modx->lexicon->load($lexiconsNamespace . $this->grabber->properties['contactsPageLexiconFilename']);
-        if($parentResourceId = $this->getParentResourceId($templateId)){
-            if($parentResourceId !== $rid){
+        if ($parentResourceId = $this->getParentResourceId($templateId)) {
+            if ($parentResourceId !== $rid) {
                 $parentResourceLexiconFilename = $this->grabber->getResourceIdentifierById($parentResourceId);
                 $this->modx->lexicon->load($lexiconsNamespace . $parentResourceLexiconFilename);
             }
@@ -518,9 +511,36 @@ class Mpc
         $q->select('id');
         $q->where(['template' => $templateId, 'parent' => $this->grabber->properties['staticBlocksPageId']]);
         $q->prepare();
-        if($q->stmt->execute()){
+        if ($q->stmt->execute()) {
             return $q->stmt->fetchColumn();
         }
         return 0;
+    }
+
+    public function setLanguageSettings(){
+        $availableLanguages = $this->getContextSettingValue('mpc_available_languages');
+        $availableLanguages = explode(',', $availableLanguages);
+        if(!isset($_COOKIE['mpc_lang']) || !in_array($_COOKIE['mpc_lang'], $availableLanguages)){
+            $defaultLang = $this->getContextSettingValue('mpc_default_language');
+            $host = $this->getContextSettingValue('http_host');
+            setcookie('mpc_lang', $defaultLang, 0, '/', $host);
+            $_COOKIE['mpc_lang'] = $defaultLang;
+        }
+
+        if(!empty($_COOKIE['mpc_lang'])){
+            $this->modx->setOption('cultureKey', $_COOKIE['mpc_lang']);
+        }
+    }
+
+    private function getContextSettingValue($settingKey){
+        $settingValue = $this->modx->getOption($settingKey);
+        $q = $this->modx->newQuery('modContextSetting');
+        $q->select('value');
+        $q->where(['key' => $settingKey, 'context_key' => $this->modx->context->get('key')]);
+        $q->prepare();
+        if ($q->stmt->execute()) {
+            $settingValue = $q->stmt->fetchColumn();
+        }
+        return $settingValue;
     }
 }
