@@ -849,7 +849,11 @@ class Cutter extends Base
         $params = '';
         $value = explode('|', $value);
         $snippetName = $value[0];
-        $presetKey = str_replace('!', '', strtolower($value[0]));
+        if(strpos($value[0], '@FILE') === 0){
+            $presetKey = str_replace('@FILE', '', strtolower(pathinfo($value[0], PATHINFO_FILENAME)));
+        }else{
+            $presetKey = str_replace('!', '', strtolower($value[0]));
+        }
         $presetName = $value[1];
         if (isset($this->properties['presets'][$presetKey]) && isset($this->properties['presets'][$presetKey][$presetName])) {
             $preset = $this->properties['presets'][$presetKey][$presetName];
