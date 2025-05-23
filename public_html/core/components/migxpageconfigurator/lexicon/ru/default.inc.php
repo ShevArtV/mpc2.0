@@ -80,6 +80,8 @@ $_lang['setting_mpc_allow_modx_tags'] = 'Разрешить тэги Fenom и Mo
 $_lang['setting_mpc_allow_modx_tags_desc'] = '';
 $_lang['setting_mpc_resource_lexicon_keys_path'] = 'Путь к файлу ключей лексиконов ресурса';
 $_lang['setting_mpc_resource_lexicon_keys_path_desc'] = 'должен содержать массив $_rlang с ключами для хранения значений таких полей как longtitle, description и вообще любых полей которые нужно перевести, но которых нет в секциях';
+$_lang['setting_mpc_image_extensions'] = 'Расширения картинок';
+$_lang['setting_mpc_image_extensions_desc'] = '';
 
 $_lang['mpc_widget_export_btn'] = 'Экспортировать';
 $_lang['mpc_widget_export_choose_file'] = 'Выберите файл словаря';

@@ -6,8 +6,15 @@ class modDashboardWidgetMpcExportLexicons extends modDashboardWidgetInterface
     {
         $pdoTools = $this->modx->getService('pdoTools');
         $corePath = $this->modx->getOption('core_path', '', MODX_CORE_PATH);
+        $lexiconsPath = $this->modx->getOption('mpc_lexicon_path', '', 'components/migxpageconfigurator/lexicon/');
+        $path = $corePath . $lexiconsPath;
+        $defaultLanguageKey = $this->modx->getOption('mpc_default_language', '', 'ru');
         $chunkContent = file_get_contents($corePath . 'components/migxpageconfigurator/elements/chunks/widgets/mpc_export_lexicons.tpl');
-        return $pdoTools->getChunk('@INLINE '.$chunkContent, ['filelist' => $this->getFileList()]);
+        return $pdoTools->getChunk('@INLINE '.$chunkContent, [
+            'filelist' => $this->getFileList(),
+            'languages' => $this->getLanguages($path),
+            'defaultLanguageKey' => $defaultLanguageKey
+        ]);
     }
 
     private function getFileList(){
@@ -23,6 +30,12 @@ class modDashboardWidgetMpcExportLexicons extends modDashboardWidgetInterface
             });
         }
         return [];
+    }
+
+    private function getLanguages($path){
+        $languages = scandir($path);
+        unset($languages[0], $languages[1]);
+        return $languages;
     }
 }
 

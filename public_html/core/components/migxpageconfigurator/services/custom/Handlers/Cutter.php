@@ -882,7 +882,7 @@ class Cutter extends Base
                     $params .= "'$k' => '$v'," . PHP_EOL;
                 }
 
-                if ($k == 'toPls') {
+                if ($k == 'toPls' && $v) {
                     $firstSymbol = PHP_EOL . $firstSymbol . 'set $' . $v . ' = ';
                 }
             }

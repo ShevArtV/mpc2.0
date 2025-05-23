@@ -10,52 +10,20 @@ use MpcServices\Helpers\ExcelFileHandler;
 /**
  * @author Arthur Shevchenko (https://t.me/ShevArtV)
  */
-class LexiconExport
+class LexiconExport extends Base
 {
-    /**
-     * @var \modX
-     */
-    public \modX $modx;
-    /**
-     * @var array
-     */
-    public array $scriptProperties;
-    /**
-     * @var array
-     */
-    protected array $paths;
     /**
      * @var string
      */
     protected string $defaultLanguageKey;
-    /**
-     * @var ExcelFileHandler
-     */
-    private ExcelFileHandler $ExcelFileHandler;
-
-    /**
-     * @param \modX $modx
-     * @param array $scriptProperties
-     */
-    public function __construct(\modX $modx, array $scriptProperties)
-    {
-        $this->modx = $modx;
-        $this->scriptProperties = $scriptProperties;
-        $this->initialize();
-    }
 
     /**
      * @return void
      */
     protected function initialize()
     {
+        parent::initialize();
         $this->defaultLanguageKey = $this->modx->getOption('mpc_default_language', '', 'ru');
-        $this->paths = [
-            'base' => $this->modx->getOption('base_path', null, $_SERVER['DOCUMENT_ROOT'] . '/'),
-            'core' => $this->modx->getOption('core_path', null, MODX_CORE_PATH),
-            'lexicons' => $this->modx->getOption('mpc_lexicon_path', '', 'components/migxpageconfigurator/lexicon/'),
-        ];
-        $this->ExcelFileHandler = new ExcelFileHandler($this->modx);
     }
 
     /**
@@ -76,17 +44,30 @@ class LexiconExport
         ];
     }
 
-    public function loadSections(){
+    /**
+     * @return array
+     */
+    public function loadSections()
+    {
+        $configNames = $this->getAllConfigs();
         $pathToLexiconFile = $this->paths['core'] . $this->paths['lexicons'] . $this->defaultLanguageKey . '/' . $_POST['filename'];
         $optionLexicon = $this->modx->lexicon('mpc_widget_all_sections');
         $sections['all'] = '<option value="">' . $optionLexicon . '</option>' . PHP_EOL;
+        $usedConfigNames = [];
         if (file_exists($pathToLexiconFile)) {
             include $pathToLexiconFile;
-            foreach ($_lang as $k => $v) {
-                $parts = explode('_', $k);
-                if (!isset($sections[$parts[0]])) {
-                    $sections[$parts[0]] = '<option value="' . $parts[0] . '">' . $parts[0] . '</option>' . PHP_EOL;
+            $lexiconKeys = array_keys($_lang);
+            $result = array_filter($configNames, function ($config) use ($lexiconKeys) {
+                foreach ($lexiconKeys as $lexiconKey) {
+                    if (strpos($lexiconKey, $config) === 0) {
+                        return true;
+                    }
                 }
+                return false;
+            });
+            $usedConfigNames = array_merge($usedConfigNames, $result);
+            foreach ($usedConfigNames as $usedConfigName) {
+                $sections[$usedConfigName] = '<option value="' . $usedConfigName . '">' . $usedConfigName . '</option>' . PHP_EOL;
             }
         }
 
@@ -105,8 +86,24 @@ class LexiconExport
     private function getData(): array
     {
         $languages = scandir($this->paths['core'] . $this->paths['lexicons']);
-        $data = [];
         unset($languages[0], $languages[1]);
+        $data = [];
+        $selectedLanguages = $_POST['languages'] ? json_decode($_POST['languages']) : [];
+        $defaultLanguage = $selectedLanguages[] = $this->modx->getOption('mpc_default_language', '', 'ru');
+        $pathToLexiconFile = $this->paths['core'] . $this->paths['lexicons'] . $defaultLanguage . '/' . $_POST['filename'];
+        include $pathToLexiconFile;
+        $lexiconKeys = array_keys($_lang);
+        $priority = [$defaultLanguage => 1];
+        usort($languages, function ($a, $b) use ($priority) {
+            $aPriority = $priority[$a] ?? PHP_INT_MAX;
+            $bPriority = $priority[$b] ?? PHP_INT_MAX;
+
+            if ($aPriority !== $bPriority) {
+                return $aPriority <=> $bPriority;
+            }
+            return strcmp($a, $b);
+        });
+        $languages = array_intersect($languages, $selectedLanguages);
         foreach ($languages as $language) {
             $_lang = [];
             $pathToLexiconFile = $this->paths['core'] . $this->paths['lexicons'] . $language . '/' . $_POST['filename'];
@@ -114,14 +111,14 @@ class LexiconExport
                 include $pathToLexiconFile;
             }
 
-            foreach ($_lang as $k => $v) {
-                if($_POST['section'] && strpos($k, $_POST['section']) !== 0){
+            foreach ($lexiconKeys as $k) {
+                if ($_POST['section'] && strpos($k, $_POST['section']) !== 0) {
                     continue;
                 }
                 if (!isset($data[$k]['lexicon_key'])) {
                     $data[$k]['lexicon_key'] = $k;
                 }
-                $data[$k][$language] = $v;
+                $data[$k][$language] = $_lang[$k];
             }
         }
 

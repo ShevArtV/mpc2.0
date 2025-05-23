@@ -98,14 +98,38 @@ class Mpc
         }
         $this->grabber->updContent = $updContent ?? false;
         if (!$fileName) {
-            $fileNames = scandir($this->properties['pdotoolsElementsPath'] . $this->properties['pathToSrc']);
-            unset($fileNames[0], $fileNames[1]);
+            $templatePath = $this->properties['pdotoolsElementsPath'] . $this->properties['pathToSrc'];
+            $fileNames = $this->getFilesList($templatePath);
             foreach ($fileNames as $fileName) {
                 $this->handleFile($fileName);
             }
         } else {
             $this->handleFile($fileName);
         }
+    }
+
+    /**
+     * @param string $directory
+     * @return array
+     */
+    public function getFilesList(string $directory): array {
+        $files = [];
+        $directory = rtrim($directory, '/\\');
+        $iterator = new \RecursiveIteratorIterator(
+            new \RecursiveDirectoryIterator($directory, \RecursiveDirectoryIterator::SKIP_DOTS),
+            \RecursiveIteratorIterator::SELF_FIRST
+        );
+
+        $basePathLength = mb_strlen($directory) + 1;
+
+        foreach ($iterator as $file) {
+            if ($file->isFile()) {
+                $relativePath = substr($file->getPathname(), $basePathLength);
+                $files[] = str_replace('\\', '/', $relativePath);
+            }
+        }
+
+        return $files;
     }
 
     /**
@@ -503,6 +527,38 @@ class Mpc
         }
         $resourceLexiconFilename = $this->grabber->getResourceIdentifierById($rid);
         $this->modx->lexicon->load($lexiconsNamespace . $resourceLexiconFilename);
+    }
+
+    public function getResourceLexicons(int $rid, ?int $templateId = 0): array
+    {
+        $resourceSectionNames = $parentSectionNames = $lang = $_lang = [];
+        $resourceSectionNames = $this->cutter->getStaticSectionNames($rid, true);
+        if ($parentResourceId = $this->getParentResourceId($templateId)) {
+            if ($parentResourceId !== $rid) {
+                $parentResourceLexiconFilename = $this->grabber->getResourceIdentifierById($parentResourceId);
+                $parentSectionNames = $this->cutter->getStaticSectionNames($parentResourceId, true);
+            }
+        }
+        $sectionNames = array_merge($parentSectionNames, $resourceSectionNames);
+        $resourceLexiconFilename = $this->grabber->getResourceIdentifierById($rid);
+        $cultureKey = $this->modx->getOption('cultureKey');
+        $bathLexiconPath = $this->properties['corePath'] . 'components/' . $this->properties['lexiconsNamespace'] . '/lexicon/' . $cultureKey . '/';
+        $paths = [];
+        $paths[] = $bathLexiconPath . $this->grabber->properties['staticBlocksPageLexiconFilename'] . '.inc.php';
+        $paths[] = $bathLexiconPath . $this->grabber->properties['contactsPageLexiconFilename'] . '.inc.php';
+        if ($parentResourceLexiconFilename) {
+            $paths[] = $bathLexiconPath . $parentResourceLexiconFilename . '.inc.php';
+        }
+        $paths[] = $bathLexiconPath . $resourceLexiconFilename . '.inc.php';
+        foreach ($paths as $path) {
+            if (!file_exists($path)) {
+                continue;
+            }
+            include $path;
+
+            $lang = array_merge($lang, $_lang);
+        }
+        return $lang;
     }
 
     public function getParentResourceId(int $templateId): int

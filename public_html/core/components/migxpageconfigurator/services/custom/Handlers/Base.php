@@ -107,6 +107,9 @@ class Base
      */
     public function getItems(string $html, string $selector): ?\DOMNodeList
     {
+        if(empty($html)){
+            return null;
+        }
         $items = $this->parser->findByAttribute($html, $selector);
         if (!$items->count()) {
             return null;
@@ -124,18 +127,33 @@ class Base
     }
 
     /**
-     * @param \modResource $resource
+     * @param int $rid
+     * @param bool $all
      * @return array
      */
-    public function getStaticSectionNames(\modResource $resource): array
+    public function getStaticSectionNames(int $rid, bool $all = false): array
     {
-        if (!$config = $resource->getTVValue($this->properties['commonConfigTvName'])) {
+        $config = '';
+        $q = $this->modx->newQuery('modTemplateVarResource');
+        $q->leftJoin('modTemplateVar', 'TV', 'modTemplateVarResource.tmplvarid=TV.id');
+        $q->where(['TV.name' => $this->properties['commonConfigTvName'], 'modTemplateVarResource.contentid' => $rid]);
+        $q->select('modTemplateVarResource.value as value');
+        $q->prepare();
+        if($q->stmt->execute()){
+            $config = $q->stmt->fetchColumn();
+        }
+        /*if (!$config = $resource->getTVValue($this->properties['commonConfigTvName'])) {
+            return [];
+        }*/
+
+        if (!$config) {
             return [];
         }
+
         $config = json_decode($config, true);
         $output = [];
         foreach ($config as $item) {
-            if (!$item['is_static']) {
+            if (!$item['is_static'] && !$all) {
                 continue;
             }
             $output[] = $item['section_name'];

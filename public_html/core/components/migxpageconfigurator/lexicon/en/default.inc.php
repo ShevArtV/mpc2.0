@@ -79,7 +79,8 @@ $_lang['setting_mpc_allow_modx_tags'] = 'Allow Fenom and Modx tags in lexicons';
 $_lang['setting_mpc_allow_modx_tags_desc'] = '';
 $_lang['setting_mpc_resource_lexicon_keys_path'] = 'Resource lexicon key file path';
 $_lang['setting_mpc_resource_lexicon_keys_path_desc'] = 'must contain an array of $_rlang with keys to store the values of fields such as longtitle, description, and in general any fields that need to be translated but are not in the partitions';
-
+$_lang['setting_mpc_image_extensions'] = 'Image extensions';
+$_lang['setting_mpc_image_extensions_desc'] = '';
 
 $_lang['mpc_widget_export_btn'] = 'Export';
 $_lang['mpc_widget_export_choose_file'] = 'Select the lexicon file';

@@ -11,52 +11,18 @@ use MpcServices\Handlers\Grabber;
 /**
  * @author Arthur Shevchenko (https://t.me/ShevArtV)
  */
-class LexiconImport
+class LexiconImport extends Base
 {
-    /**
-     * @var \modX
-     */
-    public \modX $modx;
-    /**
-     * @var array
-     */
-    public array $scriptProperties;
-    /**
-     * @var array
-     */
-    protected array $paths;
-    /**
-     * @var ExcelFileHandler
-     */
-    private ExcelFileHandler $ExcelFileHandler;
-
-
-    /**
-     * @param \modX $modx
-     * @param array $scriptProperties
-     */
-    public function __construct(\modX $modx, array $scriptProperties)
-    {
-        $this->modx = $modx;
-        $this->scriptProperties = $scriptProperties;
-        $this->initialize();
-    }
-
     /**
      * @return void
      */
     protected function initialize()
     {
+        parent::initialize();
         $this->grabber = new Grabber($this->modx);
-        $this->paths = [
-            'base' => $this->modx->getOption('base_path', null, $_SERVER['DOCUMENT_ROOT'] . '/'),
-            'core' => $this->modx->getOption('core_path', null, MODX_CORE_PATH),
-            'assets' => $this->modx->getOption('assets_path', null, MODX_ASSETS_PATH),
-            'lexicons' => $this->modx->getOption('mpc_lexicon_path', '', 'components/migxpageconfigurator/lexicon/'),
-            'upload' => $this->modx->getOption('si_uploaddir', '', '[[+asseetsUrl]]components/sendit/uploaded_files/'),
-        ];
+        $this->paths['assets'] = $this->modx->getOption('assets_path', null, MODX_ASSETS_PATH);
+        $this->paths['upload'] = $this->modx->getOption('si_uploaddir', '', '[[+asseetsUrl]]components/sendit/uploaded_files/');
         $this->paths['upload'] = str_replace('[[+asseetsUrl]]', $this->paths['assets'], $this->paths['upload']) . session_id() . '/';
-        $this->ExcelFileHandler = new ExcelFileHandler($this->modx);
     }
 
     /**
@@ -105,6 +71,8 @@ class LexiconImport
      */
     private function import(array $data)
     {
+        $configNames = $this->getAllConfigs();
+        $this->grabber->properties['resource'] = $this->modx->newObject('modResource');
         foreach ($data as $filename => $content) {
             $lexicons = [];
             foreach ($content as $values) {
@@ -124,12 +92,24 @@ class LexiconImport
                     include $this->paths['core'] . $this->paths['lexicons'] . $language . '/' . $filename;
                 }
                 if (!file_exists($languageDir)) {
-                    mkdir($languageDir, 0755, true);
+                    mkdir($languageDir);
                 }
 
                 $_lang = array_merge($_lang, $values);
                 $content = '<?php' . PHP_EOL;
                 foreach ($_lang as $k => $v) {
+                    if (strpos($v, 'http') !== false) {
+                        $sectionName = '';
+                        foreach ($configNames as $configName) {
+                            if (strpos($k, $configName) === 0) {
+                                $sectionName = $configName;
+                                break;
+                            }
+                        }
+
+                        $this->grabber->imagesPath = $this->grabber->properties['imagesPath'] . $sectionName . '/';
+                        $v = $this->grabber->downloadImage($language . '-' . $v);
+                    }
                     $v = $this->grabber->sanitizeValue($v);
                     $content .= '$_lang[\'' . $k . '\'] = \'' . $v . '\';' . PHP_EOL;
                 }

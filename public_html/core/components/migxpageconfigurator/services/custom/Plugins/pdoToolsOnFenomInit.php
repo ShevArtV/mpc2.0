@@ -23,6 +23,7 @@ class pdoToolsOnFenomInit extends PluginHandler
         'include',
         'lexicon',
         'reslexicons',
+        'lexiconsarr',
     ];
 
     public function run()
@@ -65,6 +66,14 @@ class pdoToolsOnFenomInit extends PluginHandler
         $template = $args[1];
         $Mpc = new Mpc($this->modx);
         $Mpc->loadLexicons($id, $template);
+    }
+
+    private function lexiconsarr($args)
+    {
+        $id = $args[0];
+        $template = $args[1];
+        $Mpc = new Mpc($this->modx);
+        return $Mpc->getResourceLexicons($id, $template);
     }
 
     private function version($args)

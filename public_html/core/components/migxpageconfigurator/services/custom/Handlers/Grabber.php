@@ -41,7 +41,7 @@ class Grabber extends Base
     /**
      * @var string
      */
-    private string $imagesPath = '';
+    public string $imagesPath = '';
 
     /**
      * @var array
@@ -73,9 +73,14 @@ class Grabber extends Base
             'phoneFormat' => $this->modx->getOption('mpc_phone_format', '', '8 (\2) \3-\4-\5'),
             'imagesPath' => $this->modx->getOption('mpc_images_path', '', ''),
             'lexiconPath' => $this->modx->getOption('mpc_lexicon_path', '', 'components/migxpageconfigurator/lexicon/'),
-            'resourceLexiconKeysPath' => $this->modx->getOption('mpc_resource_lexicon_keys_path', '', 'components/migxpageconfigurator/services/resource_lexicon_keys.inc.php'),
+            'resourceLexiconKeysPath' => $this->modx->getOption(
+                'mpc_resource_lexicon_keys_path',
+                '',
+                'components/migxpageconfigurator/services/resource_lexicon_keys.inc.php'
+            ),
             'excludeLexiconFields' => $excludeLexiconFields,
             'allowModxTags' => $this->modx->getOption('mpc_allow_modx_tags', '', false),
+            'imageExtensions' => $this->modx->getOption('mpc_image_extensions', '', ''),
             'allowedTags' => explode(',', $allowedTags),
         ]);
         $this->properties['lexiconFilenameField'] = $this->modx->getOption('mpc_lexicon_filename_field', '', 'id');
@@ -92,6 +97,7 @@ class Grabber extends Base
             );
             $this->lexicons[$properties['contactsPageLexiconFilename']] = $this->getLexicons($properties['contactsPageLexiconFilename'], $properties['basePathToLexiconFile']);
         }
+        $properties['imageExtensions'] = explode(',', $properties['imageExtensions']);
         $this->properties = array_merge($this->properties, $properties);
         $this->modx->addPackage('migx', $this->properties['corePath'] . 'components/migx/model/');
         if ($this->debug) {
@@ -912,16 +918,23 @@ class Grabber extends Base
 
     /**
      * @param string $attrValue
+     * @param string $language
      * @return string
      */
-    private function downloadImage(string $attrValue): string
+    public function downloadImage(string $attrValue, string $language = ''): string
     {
         if (empty($this->properties['imagesPath'])) {
             return $attrValue;
         }
 
         $extension = pathinfo($attrValue, PATHINFO_EXTENSION);
+        if(!in_array($extension, $this->properties['imageExtensions'])){
+            return $attrValue;
+        }
         $fileName = pathinfo($attrValue, PATHINFO_FILENAME);
+        if ($language) {
+            $fileName = $language . '-' . $fileName;
+        }
         $this->modx->invokeEvent('mpcOnBeforeDownloadImage', [
             'fileName' => $fileName,
             'extention' => $extension,
@@ -931,17 +944,15 @@ class Grabber extends Base
 
         $fileName = isset($this->modx->event->returnedValues) && !empty($this->modx->event->returnedValues['fileName'])
             ? $this->modx->event->returnedValues['fileName'] : $fileName;
-        $imagesPath = isset($this->modx->event->returnedValues) && !empty($this->modx->event->returnedValues['imagesPath'])
-            ? $this->modx->event->returnedValues['imagesPath'] : $this->imagesPath;
 
-        $fullPathToDir = dirname(__FILE__, 7) . $imagesPath;
+        $fullPathToDir = dirname(__FILE__, 7) . $this->imagesPath;
         if (!file_exists($fullPathToDir)) {
             mkdir($fullPathToDir, 0777, true);
         }
 
         $fileName = $this->properties['resource']->cleanAlias($fileName);
 
-        if ($path = $this->download($attrValue, $imagesPath . $fileName . '.' . $extension)) {
+        if ($path = $this->download($attrValue, $this->imagesPath . $fileName . '.' . $extension)) {
             $attrValue = $path;
         }
         return $attrValue;
@@ -1044,7 +1055,8 @@ class Grabber extends Base
         return $media;
     }
 
-    private function getParentFieldName(array $options){
+    private function getParentFieldName(array $options)
+    {
         if ($options['parentFieldName']) {
             return $options['idx'] ? $options['parentFieldName'] . '_' . "{$options['fieldName']}_{$options['idx']}" : $options['parentFieldName'] . '_' . $options['fieldName'];
         } else {
@@ -1150,7 +1162,7 @@ class Grabber extends Base
      */
     public function sanitizeValue(?string $value = ''): string
     {
-        if($value === '') {
+        if ($value === '') {
             return '';
         }
         $value = str_replace("'", '&apos;', $value);

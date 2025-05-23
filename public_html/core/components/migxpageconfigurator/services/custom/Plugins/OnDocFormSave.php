@@ -30,7 +30,7 @@ class OnDocFormSave extends PluginHandler
             'parent' => $Mpc->cutter->properties['staticBlocksPageId']
         ])) {
             $fileName = $typeResource->get('introtext');
-            $Mpc->cutter->staticSectionNames = $Mpc->grabber->staticSectionNames = $Mpc->cutter->getStaticSectionNames($this->scriptProperties['resource']);
+            $Mpc->cutter->staticSectionNames = $Mpc->grabber->staticSectionNames = $Mpc->cutter->getStaticSectionNames($this->scriptProperties['id']);
             $Mpc->handleFile($fileName);
 
             if($typeResource->get('id') !== $this->scriptProperties['id']){
