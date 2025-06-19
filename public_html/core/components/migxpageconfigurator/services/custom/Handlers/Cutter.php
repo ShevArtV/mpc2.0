@@ -6,6 +6,10 @@
 
 namespace MpcServices\Handlers;
 
+use DiDom\Document;
+use DiDom\Element;
+use DiDom\Exceptions\InvalidSelectorException;
+
 /**
  * @author Arthur Shevchenko (https://t.me/ShevArtV)
  */
@@ -122,7 +126,7 @@ class Cutter extends Base
                     if ($item->hasAttribute('data-mpc-unwrap')) {
                         $itemHtmlNew = $pls;
                     } else {
-                        $item->nodeValue = $pls;
+                        $item->setInnerHtml($pls);
                     }
                     break;
             }
@@ -176,7 +180,7 @@ class Cutter extends Base
                         }
                         $field->setAttribute('href', $complexName);
                     }
-                    $field->nodeValue = "{\$contacts['$placement']['$key']['fvalue']}";
+                    $field->setInnerHtml("{\$contacts['$placement']['$key']['fvalue']}");
                     $replacement[] = $this->parser->getHTMLString($field);
                 } else {
                     if ($field->hasAttribute('src')) {
@@ -241,15 +245,15 @@ class Cutter extends Base
     }
 
     /**
-     * @param \DOMNodeList $innerChunks
+     * @param array $innerChunks
      * @return void
      */
-    private function parseInnerChunks(\DOMNodeList $innerChunks): void
+    private function parseInnerChunks(array $innerChunks): void
     {
         foreach ($innerChunks as $innerChunk) {
-            if (!property_exists($innerChunk, 'nodeValue')) {
+            /*if (!property_exists($innerChunk, 'nodeValue')) {
                 continue;
-            }
+            }*/
             $chunkName = $innerChunk->getAttribute('data-mpc-chunk');
 
             if (in_array($chunkName, $this->properties['chunkNames'])) {
@@ -278,10 +282,10 @@ class Cutter extends Base
     }
 
     /**
-     * @param \DOMElement $section
+     * @param Element $section
      * @return void
      */
-    private function createSectionFiles(\DOMElement $section): void
+    private function createSectionFiles(Element $section): void
     {
         $sectionName = trim($section->getAttribute('data-mpc-section'));
         $this->properties['isSectionStatic'] = $section->hasAttribute('data-mpc-static');
@@ -295,11 +299,11 @@ class Cutter extends Base
     }
 
     /**
-     * @param \DOMElement $element
+     * @param Element $element
      * @param string $pathToFile
      * @return void
      */
-    private function putToFile(\DOMElement $element, string $pathToFile): void
+    private function putToFile(Element $element, string $pathToFile): void
     {
         $html = $this->parser->getHTMLString($element);
         $sectionName = trim($element->getAttribute('data-mpc-name'));
@@ -357,12 +361,9 @@ class Cutter extends Base
      */
     private function unwrapBlock(string $html): string
     {
-        if ($unwrap = $this->getItems($html, '[data-mpc-unwrap]')) {
+        if ($unwrap = $this->parser->findByAttribute($html, '[data-mpc-unwrap]')) {
             foreach ($unwrap as $attr) {
-                $attrValue = '';
-                foreach ($attr->childNodes as $childNode) {
-                    $attrValue .= $this->parser->getHTMLString($childNode);
-                }
+                $attrValue = $attr->innerHTML();
                 $search = $this->parser->getHTMLString($attr);
                 $html = str_replace($search, $attrValue, $html);
             }
@@ -373,6 +374,7 @@ class Cutter extends Base
     /**
      * @param array $properties
      * @return array
+     * @throws InvalidSelectorException
      */
     private function setPlaceholders(array $properties): array
     {
@@ -433,15 +435,14 @@ class Cutter extends Base
                     $sampleKey = 'foreach';
                 }
                 $html = $this->unwrapBlock($props['html']);
-                $html = htmlentities($html);
                 $fieldHTMLNew = str_replace(['##', 'subject', '^', 'html', 'limit', 'offset'],
                     [$firstSymbol, $complexName, $props['level'], $html, $limit, $offset],
                     $this->properties['samples'][$sampleKey]);
                 if (!$field->hasAttribute('data-mpc-unwrap')) {
-                    $field->nodeValue = $fieldHTMLNew;
+                    $field->setInnerHtml($fieldHTMLNew);
                     $fieldHTMLNew = $this->parser->getHTMLString($field);
                 } else {
-                    $fieldHTMLNew = urldecode(html_entity_decode($fieldHTMLNew));
+                    //$fieldHTMLNew = urldecode(html_entity_decode($fieldHTMLNew));
                     $fieldHTMLNew = str_replace(['</source>', '</path>'], '', $fieldHTMLNew);
                 }
 
@@ -460,7 +461,7 @@ class Cutter extends Base
 
             $fieldHTMLNew = isset($this->modx->event->returnedValues) && !empty($this->modx->event->returnedValues['fieldHTMLNew'])
                 ? $this->modx->event->returnedValues['fieldHTMLNew'] : $fieldHTMLNew;
-
+            //$this->modx->log(1, print_r([$fieldHTML, $fieldHTMLNew, $properties['html']], 1));
             if (!empty($fieldHTMLNew)) {
                 $properties['html'] = str_replace($fieldHTML, $fieldHTMLNew, $properties['html']);
             }
@@ -472,25 +473,25 @@ class Cutter extends Base
 
     private function getParentNode($node, $attrName)
     {
-        if ($node->parentNode->tagName === 'html') {
-            return $node->parentNode;
+        if ($node->parent() instanceof Document) {
+            return $node->parent();
         }
-        if ($node->parentNode->hasAttribute($attrName)) {
-            return $node->parentNode;
+        if ($node->parent()->hasAttribute($attrName)) {
+            return $node->parent();
         }
-        if ($node->parentNode->hasAttribute('data-mpc-section')) {
-            return $node->parentNode;
+        if ($node->parent()->hasAttribute('data-mpc-section')) {
+            return $node->parent();
         }
-        return $this->getParentNode($node->parentNode, $attrName);
+        return $this->getParentNode($node->parent(), $attrName);
     }
 
     /**
-     * @param \DOMElement $row
+     * @param Element $row
      * @param string $fieldName
      * @param array $properties
      * @return string
      */
-    private function setBackgroundPlaceholder(\DOMElement $row, string $fieldName, array $properties): string
+    private function setBackgroundPlaceholder(Element $row, string $fieldName, array $properties): string
     {
         $html = '';
         if ($style = $row->getAttribute('style')) {
@@ -526,12 +527,12 @@ class Cutter extends Base
     }
 
     /**
-     * @param \DOMElement $row
+     * @param Element $row
      * @param string $fieldName
      * @param array $properties
      * @return string
      */
-    private function setImgPlaceholder(\DOMElement $row, string $fieldName, array $properties): string
+    private function setImgPlaceholder(Element $row, string $fieldName, array $properties): string
     {
         list($firstSymbol, $complexName) = $this->getSymbolComplex($row, $fieldName, $properties['level'], $properties['isStatic']);
         $imgAttrs = ['width', 'height', 'alt'];
@@ -574,12 +575,12 @@ class Cutter extends Base
     }
 
     /**
-     * @param \DOMElement $row
+     * @param Element $row
      * @param string $fieldName
      * @param array $properties
      * @return string
      */
-    private function setMediaPlaceholder(\DOMElement $row, string $fieldName, array $properties): string
+    private function setMediaPlaceholder(Element $row, string $fieldName, array $properties): string
     {
         $pls = '';
         list($firstSymbol, $complexName) = $this->getSymbolComplex($row, $fieldName, $properties['level'], $properties['isStatic']);
@@ -595,7 +596,7 @@ class Cutter extends Base
         $row = $this->setAttributes($row, $firstSymbol, $complexName);
         $html = $this->parser->getHTMLString($row);
 
-        $sources = $row->getElementsByTagName('source');
+        $sources = $row->first('source');
         if ($sources->length) {
             $k = $sources->length - 1;
             $source = $this->setAttributes($sources[$k], $firstSymbol, '$source');
@@ -629,7 +630,7 @@ class Cutter extends Base
             $pls .= str_replace($search, $replace, $this->properties['samples']['media']);
         }
 
-        $images = $row->getElementsByTagName('img');
+        $images = $row->first('img');
         if ($images->length) {
             $img = $this->setAttributes($images[$images->length - 1], $firstSymbol, $complexName . '.img[0]');
             if (!$img->hasAttribute('data-mpc-nothumb') && !empty($this->properties['thumbSnippet'])) {
@@ -679,7 +680,7 @@ class Cutter extends Base
         if ($params['width']) {
             $width = $params['complexName'] . '.width';
             if ($this->properties['useLexicons'] && in_array('image', $this->properties['translatableContentTypes'])) {
-                $width = '{'. $params['complexName'] . '.width}';
+                $width = '{' . $params['complexName'] . '.width}';
             }
             if ($params['height']) {
                 $pls = $params['setValues'] ? $params['width'] : "'~$width~'";
@@ -691,7 +692,7 @@ class Cutter extends Base
         if ($params['height']) {
             $height = $params['complexName'] . '.height';
             if ($this->properties['useLexicons'] && in_array('image', $this->properties['translatableContentTypes'])) {
-                $height = '{'. $params['complexName'] . '.height}';
+                $height = '{' . $params['complexName'] . '.height}';
             }
             $pls = $params['setValues'] ? $params['height'] : "'~$height";
             $thumbParams .= "&h=$pls";
@@ -709,12 +710,12 @@ class Cutter extends Base
     }
 
     /**
-     * @param \DOMElement $row
+     * @param Element $row
      * @param string $firstSymbol
      * @param string $complexName
-     * @return \DOMElement
+     * @return Element
      */
-    private function setAttributes(\DOMElement $row, string $firstSymbol, string $complexName): \DOMElement
+    private function setAttributes(Element $row, string $firstSymbol, string $complexName): Element
     {
         $allowedAttrs = [
             'src',
@@ -742,12 +743,13 @@ class Cutter extends Base
     }
 
     /**
-     * @param \DOMElement $row
+     * @param Element $row
      * @param string $fieldName
      * @param array $properties
      * @return string
+     * @throws InvalidSelectorException
      */
-    private function setDefaultPlaceholder(\DOMElement $row, string $fieldName, array $properties): string
+    private function setDefaultPlaceholder(Element $row, string $fieldName, array $properties): string
     {
         list($firstSymbol, $complexName) = $this->getSymbolComplex($row, $fieldName, $properties['level'], $properties['isStatic']);
         if ($row->hasAttribute('href')) {
@@ -758,24 +760,27 @@ class Cutter extends Base
             }
             $row->setAttribute('href', $pls);
         } else {
-            $row->nodeValue = "{$firstSymbol}{$complexName}}";
+            $row->setInnerHtml("$firstSymbol$complexName}");
         }
         $html = $this->parser->getHTMLString($row);
         if ($row->hasAttribute('data-mpc-if')) {
             $condition = $row->getAttribute('data-mpc-if') ?: $complexName;
             $html = $this->wrapInCondition($condition, $html, $firstSymbol);
         }
+        if ($row->hasAttribute('href')) {
+            $html = urldecode($html);
+        }
         return $html;
     }
 
     /**
-     * @param \DOMElement $row
+     * @param Element $row
      * @param string $fieldName
      * @param int|null $level
      * @param bool|null $isStatic
      * @return array
      */
-    private function getSymbolComplex(\DOMElement $row, string $fieldName, ?int $level = 0, ?bool $isStatic = false): array
+    private function getSymbolComplex(Element $row, string $fieldName, ?int $level = 0, ?bool $isStatic = false): array
     {
         $firstSymbol = $isStatic ? '##' : (trim($row->getAttribute('data-mpc-symbol')) ?: '{');
         $rid = (int)$row->getAttribute('data-mpc-rid') ?: '';
@@ -811,6 +816,7 @@ class Cutter extends Base
     /**
      * @param array $properties
      * @return array
+     * @throws InvalidSelectorException
      */
     private function setSnippetTags(array $properties): array
     {
@@ -824,7 +830,7 @@ class Cutter extends Base
                 $snippetHTml = $this->parser->getHTMLString($snippet);
 
                 if (!$snippet->hasAttribute('data-mpc-unwrap')) {
-                    $snippet->nodeValue = $call;
+                    $snippet->setInnerHtml($call);
                     $call = $this->parser->getHTMLString($snippet);
                 }
 
@@ -849,9 +855,9 @@ class Cutter extends Base
         $params = '';
         $value = explode('|', $value);
         $snippetName = $value[0];
-        if(strpos($value[0], '@FILE') === 0){
+        if (strpos($value[0], '@FILE') === 0) {
             $presetKey = str_replace('@FILE', '', strtolower(pathinfo($value[0], PATHINFO_FILENAME)));
-        }else{
+        } else {
             $presetKey = str_replace('!', '', strtolower($value[0]));
         }
         $presetName = $value[1];
@@ -921,6 +927,7 @@ class Cutter extends Base
      *
      * @param array $properties
      * @return array
+     * @throws InvalidSelectorException
      */
     private function setParseChunks(array $properties): array
     {
@@ -940,6 +947,7 @@ class Cutter extends Base
     /**
      * @param array $properties
      * @return array
+     * @throws InvalidSelectorException
      */
     private function setIncludeChunks(array $properties): array
     {
@@ -959,6 +967,7 @@ class Cutter extends Base
      *
      * @param array $properties
      * @return array
+     * @throws InvalidSelectorException
      */
     private function removeHiddenPlaceholders(array $properties): array
     {

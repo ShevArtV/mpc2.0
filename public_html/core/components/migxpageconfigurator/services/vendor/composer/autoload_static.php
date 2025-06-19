@@ -33,6 +33,10 @@ class ComposerStaticInitb0d621c1866a2fb84413ace03b6db2df
             'MpcServices\\' => 12,
             'Matrix\\' => 7,
         ),
+        'D' => 
+        array (
+            'DiDom\\' => 6,
+        ),
         'C' => 
         array (
             'Composer\\Pcre\\' => 14,
@@ -77,6 +81,10 @@ class ComposerStaticInitb0d621c1866a2fb84413ace03b6db2df
         'Matrix\\' => 
         array (
             0 => __DIR__ . '/..' . '/markbaker/matrix/classes/src',
+        ),
+        'DiDom\\' => 
+        array (
+            0 => __DIR__ . '/..' . '/imangazaliev/didom/src/DiDom',
         ),
         'Composer\\Pcre\\' => 
         array (

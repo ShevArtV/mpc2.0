@@ -15,6 +15,7 @@ return array(
     'MyCLabs\\Enum\\' => array($vendorDir . '/myclabs/php-enum/src'),
     'MpcServices\\' => array($baseDir . '/custom'),
     'Matrix\\' => array($vendorDir . '/markbaker/matrix/classes/src'),
+    'DiDom\\' => array($vendorDir . '/imangazaliev/didom/src/DiDom'),
     'Composer\\Pcre\\' => array($vendorDir . '/composer/pcre/src'),
     'Complex\\' => array($vendorDir . '/markbaker/complex/classes/src'),
 );

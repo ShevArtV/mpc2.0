@@ -108,7 +108,9 @@ class LexiconImport extends Base
                         }
 
                         $this->grabber->imagesPath = $this->grabber->properties['imagesPath'] . $sectionName . '/';
-                        $v = $this->grabber->downloadImage($language . '-' . $v);
+                        if ($this->grabber->checkImageExtension($v)) {
+                            $v = $this->grabber->downloadImage($language . '-' . $v);
+                        }
                     }
                     $v = $this->grabber->sanitizeValue($v);
                     $content .= '$_lang[\'' . $k . '\'] = \'' . $v . '\';' . PHP_EOL;

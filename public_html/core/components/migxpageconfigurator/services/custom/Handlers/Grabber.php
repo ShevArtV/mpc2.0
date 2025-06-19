@@ -6,6 +6,8 @@
 
 namespace MpcServices\Handlers;
 
+use DiDom\Element;
+use DiDom\Exceptions\InvalidSelectorException;
 use MpcServices\Helpers\Logging;
 use MpcServices\Helpers\Response;
 use MpcServices\Processors\Template;
@@ -169,7 +171,7 @@ class Grabber extends Base
                 'value' => ''
             ];
 
-            switch ($item->nodeName) {
+            switch ($item->tagName()) {
                 case 'link':
                     $data['value'] = $item->getAttribute('href');
                     break;
@@ -177,7 +179,7 @@ class Grabber extends Base
                     $data['value'] = $item->getAttribute('src');
                     break;
                 default:
-                    $data['value'] = str_replace('{', '{ ', $item->nodeValue);
+                    $data['value'] = str_replace('{', '{ ', $item->innerHTML());
                     break;
             }
 
@@ -495,7 +497,9 @@ class Grabber extends Base
             return;
         }
 
-        $this->createLexicons($this->lexicons);
+        if (!$this->fromPlugin) {
+            $this->createLexicons($this->lexicons);
+        }
 
         $this->response->success(__METHOD__, 'Section processing is complete.');
     }
@@ -570,11 +574,11 @@ class Grabber extends Base
 
 
     /**
-     * @param \DOMElement $section
+     * @param Element $section
      * @param array $properties
      * @return array
      */
-    private function createSectionConfig(\DOMElement $section, array $properties): array
+    private function createSectionConfig(Element $section, array $properties): array
     {
         $properties['defaultFormTabs'][1]['fields'] = $this->getSectionFields($section, $properties['defaultFormTabs'][1]['fields']);
         $properties['defaultFormTabs'][0]['fields'][2]['default'] = $properties['fileNameVis']; // устанавливаем имя файла секции
@@ -602,11 +606,11 @@ class Grabber extends Base
     }
 
     /**
-     * @param \DOMElement $section
+     * @param Element $section
      * @param array $defaultFields
      * @return array
      */
-    private function getSectionFields(\DOMElement $section, array $defaultFields): array
+    private function getSectionFields(Element $section, array $defaultFields): array
     {
         $result = array();
         if (!$entries = $this->getItems($this->parser->getHTMLString($section), '[data-mpc-field]')) {
@@ -651,12 +655,12 @@ class Grabber extends Base
     }
 
     /**
-     * @param \DOMElement $section
+     * @param Element $section
      * @param array $properties
      * @param int|null $i
      * @return array
      */
-    private function grabSection(\DOMElement $section, array $properties, ?int $i = 1): array
+    private function grabSection(Element $section, array $properties, ?int $i = 1): array
     {
         $sectionName = trim($section->getAttribute('data-mpc-name'));
         $this->sectionLexiconPrefix = trim($section->getAttribute('data-mpc-lexicon')) ?? $properties['sectionName'];
@@ -781,13 +785,13 @@ class Grabber extends Base
         foreach ($entries as $key => $row) {
             $fieldName = $row->getAttribute($fieldAttrName);
             $lexiconOptions = ['fieldName' => $options['fieldName'] ?? $fieldName, 'parentFieldName' => $options['parentFieldName'] ?? '', 'idx' => $idx];
-            if ($row->tagName === 'img' && !in_array($fieldName, ['list_images', 'list_pictures'])) {
+            if ($row->tagName() === 'img' && !in_array($fieldName, ['list_images', 'list_pictures'])) {
                 $fields[$fieldName] = $this->getImageValue($row, $lexiconOptions);
-            } elseif ($row->tagName === 'picture' && !in_array($fieldName, ['list_images', 'list_pictures'])) {
+            } elseif ($row->tagName() === 'picture' && !in_array($fieldName, ['list_images', 'list_pictures'])) {
                 $fields[$fieldName] = $this->getPictureValue($row, $lexiconOptions);
             } elseif ($fieldName === 'bg_img') {
                 $fields[$fieldName] = $this->getBackgroundValue($row, $lexiconOptions);
-            } elseif (in_array($row->tagName, ['video', 'audio']) && !in_array($fieldName, ['list_audios', 'list_videos'])) {
+            } elseif (in_array($row->tagName(), ['video', 'audio']) && !in_array($fieldName, ['list_audios', 'list_videos'])) {
                 $fields[$fieldName] = $this->getMediaValue($row, $lexiconOptions);
             } elseif (in_array($fieldName, ['list_images', 'list_pictures', 'list_audios', 'list_videos'])) {
                 $mediaLists[$fieldName][] = $row;
@@ -864,11 +868,11 @@ class Grabber extends Base
     }
 
     /**
-     * @param \DOMElement $row
+     * @param Element $row
      * @param array|null $options
      * @return string
      */
-    private function getImageValue(\DOMElement $row, ?array $options = []): string
+    private function getImageValue(Element $row, ?array $options = []): string
     {
         $attrs = ['src', 'alt', 'width', 'height'];
         $value[0]['MIGX_id'] = 1;
@@ -891,12 +895,12 @@ class Grabber extends Base
     }
 
     /**
-     * @param \DOMElement $row
+     * @param Element $row
      * @param int|null $idx
      * @param bool|null $isPicture
      * @return array
      */
-    private function getSourceValue(\DOMElement $row, ?int $idx = 1, ?bool $isPicture = true): array
+    private function getSourceValue(Element $row, ?int $idx = 1, ?bool $isPicture = true): array
     {
         $attrs = ['type', 'media'];
         if (!$isPicture) {
@@ -927,8 +931,7 @@ class Grabber extends Base
             return $attrValue;
         }
 
-        $extension = pathinfo($attrValue, PATHINFO_EXTENSION);
-        if(!in_array($extension, $this->properties['imageExtensions'])){
+        if (!$extension = $this->checkImageExtension($attrValue)) {
             return $attrValue;
         }
         $fileName = pathinfo($attrValue, PATHINFO_FILENAME);
@@ -959,21 +962,31 @@ class Grabber extends Base
     }
 
     /**
-     * @param \DOMElement $element
+     * @param string $attrValue
+     * @return string
+     */
+    public function checkImageExtension(string $attrValue): string
+    {
+        $extension = pathinfo($attrValue, PATHINFO_EXTENSION);
+        return in_array($extension, $this->properties['imageExtensions']) ? $extension : '';
+    }
+
+    /**
+     * @param Element $element
      * @param array|null $options
      * @return string
      */
-    private function getPictureValue(\DOMElement $element, ?array $options = []): string
+    private function getPictureValue(Element $element, ?array $options = []): string
     {
         $picture[0]['MIGX_id'] = 1;
         $picture[0]['preview'] = '';
         $picture[0]['img'] = [];
         $picture[0]['sources'] = [];
-        if ($img = $element->getElementsByTagName('img')) {
-            $picture[0]['img'] = $this->getImageValue($img[0], $options);
-            $picture[0]['preview'] = $img[0]->getAttribute('src');
+        if ($img = $element->first('img')) {
+            $picture[0]['img'] = $this->getImageValue($img, $options);
+            $picture[0]['preview'] = $img->getAttribute('src');
         }
-        if ($sources = $element->getElementsByTagName('source')) {
+        if ($sources = $element->first('source')) {
             $options['parentFieldName'] = $options['idx'] ? "{$options['fieldName']}_{$options['idx']}" : $options['fieldName'];
             $options['fieldName'] = 'source';
             foreach ($sources as $k => $source) {
@@ -988,11 +1001,12 @@ class Grabber extends Base
     }
 
     /**
-     * @param \DOMElement $element
+     * @param Element $element
      * @param array|null $options
      * @return array
+     * @throws InvalidSelectorException
      */
-    private function getMediaValue(\DOMElement $element, ?array $options = []): array
+    private function getMediaValue(Element $element, ?array $options = []): array
     {
         $useLexicons = (in_array('video', $this->properties['translatableContentTypes']) || in_array('audio', $this->properties['translatableContentTypes']));
 
@@ -1005,7 +1019,7 @@ class Grabber extends Base
             'muted' => 'boolean',
             'preload' => 'boolean',
         ];
-        if ($element->nodeName === 'video') {
+        if ($element->tagName() === 'video') {
             $attrs = array_merge($attrs, [
                 'src' => 'string',
                 'width' => 'number',
@@ -1019,7 +1033,7 @@ class Grabber extends Base
             if ($type === 'boolean') {
                 $media[0][$attr] = $element->hasAttribute($attr) ? 1 : 0;
             } else {
-                $media[0][$attr] = $element->getAttribute($attr);
+                $media[0][$attr] = $element->getAttribute($attr) ?: '';
             }
             if ($attr === 'poster') {
                 $parentFieldName = $this->getParentFieldName($options);
@@ -1028,6 +1042,7 @@ class Grabber extends Base
                     'parentFieldName' => $parentFieldName,
                     'idx' => 0,
                 ];
+
                 $media[0][$attr] = in_array('poster', $this->properties['translatableContentTypes']) ? $this->setLexicons(
                     $media[0][$attr],
                     $lexiconOptions
@@ -1037,7 +1052,7 @@ class Grabber extends Base
                 $media[0][$attr] = $useLexicons ? $this->setLexicons($media[0][$attr], $options) : $media[0][$attr];
             }
         }
-        if ($sources = $element->getElementsByTagName('source')) {
+        if ($sources = $element->first('source')) {
             $parentFieldName = $this->getParentFieldName($options);
             $lexiconOptions = [
                 'fieldName' => 'source',
@@ -1065,11 +1080,11 @@ class Grabber extends Base
     }
 
     /**
-     * @param \DOMElement $element
+     * @param Element $element
      * @param array|null $options
      * @return string
      */
-    private function getBackgroundValue(\DOMElement $element, ?array $options = []): string
+    private function getBackgroundValue(Element $element, ?array $options = []): string
     {
         if ($style = $element->getAttribute('style')) {
             if (strpos($style, 'background') !== false) {
@@ -1086,21 +1101,21 @@ class Grabber extends Base
     }
 
     /**
-     * @param \DOMElement $element
+     * @param Element $element
      * @param array|null $options
      * @return string
      */
-    private function getValue(\DOMElement $element, ?array $options = []): string
+    private function getValue(Element $element, ?array $options = []): string
     {
         $result = '';
         if ($href = $element->getAttribute('href')) {
             $result = $href;
-        } elseif ($element->childNodes->count()) {
-            foreach ($element->childNodes as $childNode) {
+        } elseif ($children = $element->children()) {
+            foreach ($children as $childNode) {
                 $result .= $this->parser->getHTMLString($childNode);
             }
         } else {
-            $result = trim($element->nodeValue);
+            $result = trim($element->innerHtml());
         }
         return in_array('text', $this->properties['translatableContentTypes']) && !empty($options) ? $this->setLexicons($result, $options) : $result;
     }

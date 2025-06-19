@@ -6,6 +6,7 @@
 
 namespace MpcServices\Handlers;
 
+use DiDom\Exceptions\InvalidSelectorException;
 use MpcServices\Helpers\Logging;
 use MpcServices\Helpers\Response;
 
@@ -103,15 +104,16 @@ class Base
     /**
      * @param string $html
      * @param string $selector
-     * @return \DOMNodeList|null
+     * @return array|null
+     * @throws InvalidSelectorException
      */
-    public function getItems(string $html, string $selector): ?\DOMNodeList
+    public function getItems(string $html, string $selector): ?array
     {
         if(empty($html)){
             return null;
         }
         $items = $this->parser->findByAttribute($html, $selector);
-        if (!$items->count()) {
+        if (!count($items)) {
             return null;
         }
         return $items;
