@@ -25,28 +25,35 @@ class OnManagerPageInit extends PluginHandler
         );
     }
 
-   private function plugSendIt(){
-       require_once $this->corePath . 'components/sendit/services/sendit.class.php';
+    private function plugSendIt(){
+        require_once $this->corePath . 'components/sendit/services/sendit.class.php';
 
-       $jsConfigPath = $this->modx->getOption('si_js_config_path', '', './sendit.inc.js');
-       $cookies = !empty($_COOKIE['SendIt']) ? json_decode($_COOKIE['SendIt'], 1) : [];
+        $jsConfigPath = $this->modx->getOption('si_js_config_path');
+        $jsPath = $this->modx->getOption('si_frontend_js');
+        $jsPath = str_replace('[[+assetsUrl]]', '/assets/', $jsPath);
+        $cookies = !empty($_COOKIE['SendIt']) ? json_decode($_COOKIE['SendIt'], 1) : [];
 
-       $data = [
-           'sitoken' => md5($_SERVER['REMOTE_ADDR'] . time()),
-           'sitrusted' => '0',
-           'sijsconfigpath' => $jsConfigPath
-       ];
-       \SendIt::setSession($this->modx, [
-           'sitoken' => $data['sitoken'],
-           'sendingLimits' => []
-       ]);
+        $SendIt = new \SendIt($this->modx);
+        $SendIt->getWebConfig();
+        $webConfig = json_encode($SendIt->webConfig, JSON_UNESCAPED_UNICODE);
 
-       $data = array_merge($cookies, $data);
-       setcookie('SendIt', json_encode($data), 0, '/');
-       $this->modx->regClientStartupHTMLBlock(
-           '
-            <script type="module" src="/assets/components/sendit/js/web/sendit.js"></script>            
+        $data = [
+            'sitoken' => md5($_SERVER['REMOTE_ADDR'] . time()),
+            'sitrusted' => '0',
+            'sijsconfigpath' => $jsConfigPath
+        ];
+        \SendIt::setSession($this->modx, [
+            'sitoken' => $data['sitoken'],
+            'sendingLimits' => []
+        ]);
+
+        $data = array_merge($cookies, $data);
+        setcookie('SendIt', json_encode($data), 0, '/');
+        $this->modx->regClientStartupHTMLBlock(
             '
-       );
-   }
+           <script> window.siConfig = '.$webConfig.'; </script>
+            <script type="module" src="'.$jsPath.'"></script>            
+            '
+        );
+    }
 }

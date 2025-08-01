@@ -1,5 +1,7 @@
 <?php
-
+/*
+/usr/local/php/php-7.4/bin/php -d display_errors -d error_reporting=E_ALL _build/build.php
+*/
 if (!defined('MODX_CORE_PATH')) {
     $path = dirname(__FILE__);
     while (!file_exists($path . '/core/config/config.inc.php') && (strlen($path) > 1)) {
@@ -14,7 +16,7 @@ return [
     'name' => 'MigxPageConfigurator',
     'name_lower' => 'migxpageconfigurator',
     'version' => '2.2.0',
-    'release' => 'beta23',
+    'release' => 'beta24',
     // Install package to site right after build
     'install' => false,
     // Which elements should be updated on package upgrade

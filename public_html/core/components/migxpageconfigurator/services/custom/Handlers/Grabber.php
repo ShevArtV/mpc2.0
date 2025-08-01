@@ -179,7 +179,7 @@ class Grabber extends Base
                     $data['value'] = $item->getAttribute('src');
                     break;
                 default:
-                    $data['value'] = str_replace('{', '{ ', $item->innerHTML());
+                    $data['value'] = str_replace('{', '{ ', $item->nodeValue);
                     break;
             }
 
@@ -1052,7 +1052,7 @@ class Grabber extends Base
                 $media[0][$attr] = $useLexicons ? $this->setLexicons($media[0][$attr], $options) : $media[0][$attr];
             }
         }
-        if ($sources = $element->first('source')) {
+        if ($sources = $element->find('source')) {
             $parentFieldName = $this->getParentFieldName($options);
             $lexiconOptions = [
                 'fieldName' => 'source',
@@ -1112,7 +1112,7 @@ class Grabber extends Base
             $result = $href;
         } elseif ($children = $element->children()) {
             foreach ($children as $childNode) {
-                $result .= $this->parser->getHTMLString($childNode);
+                $result .=  ' ' . trim($this->parser->getHTMLString($childNode));
             }
         } else {
             $result = trim($element->innerHtml());
@@ -1122,14 +1122,14 @@ class Grabber extends Base
 
 
     /**
-     * @param string $value
-     * @param string $fieldName
+     * @param string|null $value
+     * @param array|null $options
      * @return string
      */
-    private function setLexicons(string $value, ?array $options = []): string
+    private function setLexicons(?string $value = '', ?array $options = []): string
     {
-        if (!$this->properties['useLexicons']) {
-            return $value;
+        if (!$this->properties['useLexicons'] || !$value) {
+            return $value ?? '';
         }
         $fieldName = $options['fieldName'] ?? '';
         $parentFieldName = $options['parentFieldName'] ?? '';

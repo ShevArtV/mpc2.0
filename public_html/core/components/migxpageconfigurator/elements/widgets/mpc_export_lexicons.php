@@ -4,6 +4,7 @@ class modDashboardWidgetMpcExportLexicons extends modDashboardWidgetInterface
 {
     public function render()
     {
+        $this->modx->lexicon->load('migxpageconfigurator:default');
         $pdoTools = $this->modx->getService('pdoTools');
         $corePath = $this->modx->getOption('core_path', '', MODX_CORE_PATH);
         $lexiconsPath = $this->modx->getOption('mpc_lexicon_path', '', 'components/migxpageconfigurator/lexicon/');

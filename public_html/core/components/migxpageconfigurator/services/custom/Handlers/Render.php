@@ -77,7 +77,7 @@ class Render extends Base
         $resourceData = isset($this->modx->event->returnedValues) && !empty($this->modx->event->returnedValues['resourceData'])
             ? $this->modx->event->returnedValues['resourceData'] : $resourceData;
 
-        return $this->putToFile($resourceData);
+        return !empty($resourceData['sections']) && $this->putToFile($resourceData);
     }
 
     /**
