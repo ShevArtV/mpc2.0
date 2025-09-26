@@ -126,9 +126,14 @@ return [
         'value' => 'data-svg',
         'area' => 'default',
     ],
-    'mpc_images_path' => [
+    'mpc_download_paths' => [
         'xtype' => 'textfield',
-        'value' => '',
+        'value' => '{"images":"","videos":"","audios":"","others":""}',
+        'area' => 'default',
+    ],
+    'mpc_download_extensions' => [
+        'xtype' => 'textfield',
+        'value' => 'jpg,jpeg,png,webp,mp4,mp3,txt',
         'area' => 'default',
     ],
     'mpc_lazyload_enabled' => [

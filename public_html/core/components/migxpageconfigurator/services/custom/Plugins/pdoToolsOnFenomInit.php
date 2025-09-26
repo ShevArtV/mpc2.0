@@ -51,8 +51,8 @@ class pdoToolsOnFenomInit extends PluginHandler
     private function lexicon($args)
     {
         $key = $args[0];
-        $language = $args[1] ?: $this->modx->getOption('cultureKey');
-        $params = $args[2] ?: [];
+        $language = $args[1] ?? $this->modx->getOption('cultureKey');
+        $params = $args[2] ?? [];
         $result = $this->modx->lexicon($key, $params, $language);
         if($result === $key){
             return '';
@@ -80,7 +80,7 @@ class pdoToolsOnFenomInit extends PluginHandler
     {
         $path = $args[0];
         $dir = $args[1] ?? 'basePath';
-        $filepath = $this->$dir . $path;
+        $filepath = $this->$dir . rtrim(trim($path),'/');
         if (file_exists($filepath)) {
             $path .= '?v=' . date('dmYHis', filemtime($filepath));
         }

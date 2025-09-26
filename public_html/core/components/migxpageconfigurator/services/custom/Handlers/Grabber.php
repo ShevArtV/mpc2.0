@@ -20,6 +20,14 @@ class Grabber extends Base
     /**
      * @var array
      */
+    private array $downloadMethodsByTagName = [
+        'picture' => 'downloadImage',
+        'video' => 'downloadVideo',
+        'audio' => 'downloadAudio',
+    ];
+    /**
+     * @var array
+     */
     public array $resourceValues = [];
     /**
      * @var bool
@@ -29,6 +37,10 @@ class Grabber extends Base
      * @var string
      */
     private string $fileName = '';
+    /**
+     * @var string
+     */
+    private string $currentSectionName = '';
 
     /**
      * @var bool
@@ -43,12 +55,21 @@ class Grabber extends Base
     /**
      * @var string
      */
-    public string $imagesPath = '';
+    public string $downloadPath = '';
 
     /**
      * @var array
      */
     public array $lexicons = [];
+    /**
+     * @var array
+     */
+    public array $downloadPaths = [
+        'images' => '',
+        'videos' => '',
+        'audios' => '',
+        'others' => '',
+    ];
 
     /**
      * @var string
@@ -68,12 +89,14 @@ class Grabber extends Base
         if (file_exists($excludeLexiconFieldsPath)) {
             include $excludeLexiconFieldsPath;
         }
+        $downloadPaths = $this->modx->getOption('mpc_download_paths', '', $this->downloadPaths);
+        $downloadPaths = is_array($downloadPaths) ? $downloadPaths : json_decode($downloadPaths, true);
         $allowedTags = $this->modx->getOption('mpc_allowed_tags', '', '');
         $properties = array_merge($this->properties, [
             'startPageId' => $this->modx->getOption('site_start', null, 1),
             'phoneRegExp' => $this->modx->getOption('mpc_phone_regexp', '', '/(\d)(\d{3})(\d{3})(\d{2})(\d{2})$/'),
             'phoneFormat' => $this->modx->getOption('mpc_phone_format', '', '8 (\2) \3-\4-\5'),
-            'imagesPath' => $this->modx->getOption('mpc_images_path', '', ''),
+            'downloadPaths' => $downloadPaths,
             'lexiconPath' => $this->modx->getOption('mpc_lexicon_path', '', 'components/migxpageconfigurator/lexicon/'),
             'resourceLexiconKeysPath' => $this->modx->getOption(
                 'mpc_resource_lexicon_keys_path',
@@ -82,7 +105,7 @@ class Grabber extends Base
             ),
             'excludeLexiconFields' => $excludeLexiconFields,
             'allowModxTags' => $this->modx->getOption('mpc_allow_modx_tags', '', false),
-            'imageExtensions' => $this->modx->getOption('mpc_image_extensions', '', ''),
+            'downloadExtensions' => $this->modx->getOption('mpc_download_extensions', '', ''),
             'allowedTags' => explode(',', $allowedTags),
         ]);
         $this->properties['lexiconFilenameField'] = $this->modx->getOption('mpc_lexicon_filename_field', '', 'id');
@@ -99,7 +122,7 @@ class Grabber extends Base
             );
             $this->lexicons[$properties['contactsPageLexiconFilename']] = $this->getLexicons($properties['contactsPageLexiconFilename'], $properties['basePathToLexiconFile']);
         }
-        $properties['imageExtensions'] = explode(',', $properties['imageExtensions']);
+        $properties['downloadExtensions'] = explode(',', $properties['downloadExtensions']);
         $this->properties = array_merge($this->properties, $properties);
         $this->modx->addPackage('migx', $this->properties['corePath'] . 'components/migx/model/');
         if ($this->debug) {
@@ -453,6 +476,7 @@ class Grabber extends Base
         $i = 0;
         $sectionValues = [];
         foreach ($sections as $section) {
+            $this->currentSectionName = '';
             $i++;
             $sectionName = trim($section->getAttribute('data-mpc-section'));
             $fileName = $sectionName . $this->properties['extension'];
@@ -666,7 +690,7 @@ class Grabber extends Base
         $this->sectionLexiconPrefix = trim($section->getAttribute('data-mpc-lexicon')) ?? $properties['sectionName'];
         $this->sectionIsStatic = $section->hasAttribute('data-mpc-static');
         $sectionId = $properties['sectionName'] . '_' . str_replace(['.', ',', ' '], '', microtime(true));
-        $this->imagesPath = $this->properties['imagesPath'] . $properties['sectionName'] . '/';
+        $this->currentSectionName = $properties['sectionName'];
 
         // заполняем содержимое полей
         $fieldsValues = $this->getFieldsValues($this->parser->getHTMLString($section));
@@ -707,6 +731,7 @@ class Grabber extends Base
         if (!$path) {
             return '';
         }
+
         $fullPath = dirname(__FILE__, 7) . $path;
         if (file_exists($fullPath)) {
             return $path;
@@ -908,12 +933,17 @@ class Grabber extends Base
         } else {
             $attrs = array_merge($attrs, ['srcset', 'sizes', 'height', 'width']);
         }
+        $parent = $row->parent();
+        if ($parent->tagName() === $row->tagName()) {
+            $parent = $parent->parent();
+        }
 
+        $downloadMethod = $this->downloadMethodsByTagName[$parent->tagName()];
         $value['MIGX_id'] = $idx;
         foreach ($attrs as $attr) {
             $attrValue = $row->getAttribute($attr);
-            if ($attr === 'srcset' && strpos($row->getAttribute($attr), 'http') !== false) {
-                $attrValue = $this->downloadImage($attrValue);
+            if (in_array($attr, ['srcset', 'src']) && strpos($row->getAttribute($attr), 'http') !== false) {
+                $attrValue = method_exists($this, $downloadMethod) ? $this->$downloadMethod($attrValue) : $attrValue;
             }
             $value[$attr] = $attrValue;
         }
@@ -927,35 +957,67 @@ class Grabber extends Base
      */
     public function downloadImage(string $attrValue, string $language = ''): string
     {
-        if (empty($this->properties['imagesPath'])) {
+        return $this->downloadFile($attrValue, 'images', $language);
+    }
+
+    /**
+     * @param string $attrValue
+     * @param string $language
+     * @return string
+     */
+    public function downloadVideo(string $attrValue, string $language = ''): string
+    {
+        return $this->downloadFile($attrValue, 'videos', $language);
+    }
+
+    /**
+     * @param string $attrValue
+     * @param string $language
+     * @return string
+     */
+    public function downloadAudio(string $attrValue, string $language = ''): string
+    {
+        return $this->downloadFile($attrValue, 'audios', $language);
+    }
+
+
+    public function downloadFile(string $attrValue, string $type = 'others', string $language = ''): string
+    {
+        if (empty($this->properties['downloadPaths'][$type])) {
             return $attrValue;
         }
 
-        if (!$extension = $this->checkImageExtension($attrValue)) {
+        if (!$extension = $this->checkDownloadExtension($attrValue)) {
             return $attrValue;
         }
+
+        $this->downloadPath = $this->currentSectionName
+            ? $this->properties['downloadPaths'][$type] . $this->currentSectionName . '/'
+            : $this->properties['downloadPaths'][$type];
+
         $fileName = pathinfo($attrValue, PATHINFO_FILENAME);
         if ($language) {
             $fileName = $language . '-' . $fileName;
         }
-        $this->modx->invokeEvent('mpcOnBeforeDownloadImage', [
+        $this->modx->invokeEvent('mpcOnBeforeDownloadFile', [
             'fileName' => $fileName,
-            'extention' => $extension,
-            'imagesPath' => $this->imagesPath,
+            'extension' => $extension,
+            'type' => $type,
+            'downloadPath' => $this->downloadPath,
             'Grabber' => $this
         ]);
 
         $fileName = isset($this->modx->event->returnedValues) && !empty($this->modx->event->returnedValues['fileName'])
             ? $this->modx->event->returnedValues['fileName'] : $fileName;
 
-        $fullPathToDir = dirname(__FILE__, 7) . $this->imagesPath;
+
+        $fullPathToDir = dirname(__FILE__, 7) . $this->downloadPath;
         if (!file_exists($fullPathToDir)) {
             mkdir($fullPathToDir, 0777, true);
         }
 
         $fileName = $this->properties['resource']->cleanAlias($fileName);
-
-        if ($path = $this->download($attrValue, $this->imagesPath . $fileName . '.' . $extension)) {
+        if ($path = $this->download($attrValue, $this->downloadPath . $fileName . '.' . $extension)) {
             $attrValue = $path;
         }
         return $attrValue;
@@ -965,10 +1027,10 @@ class Grabber extends Base
      * @param string $attrValue
      * @return string
      */
-    public function checkImageExtension(string $attrValue): string
+    public function checkDownloadExtension(string $attrValue): string
     {
         $extension = pathinfo($attrValue, PATHINFO_EXTENSION);
-        return in_array($extension, $this->properties['imageExtensions']) ? $extension : '';
+        return in_array($extension, $this->properties['downloadExtensions']) ? $extension : '';
     }
 
     /**
@@ -986,7 +1048,7 @@ class Grabber extends Base
             $picture[0]['img'] = $this->getImageValue($img, $options);
             $picture[0]['preview'] = $img->getAttribute('src');
         }
-        if ($sources = $element->first('source')) {
+        if ($sources = $element->find('source')) {
             $options['parentFieldName'] = $options['idx'] ? "{$options['fieldName']}_{$options['idx']}" : $options['fieldName'];
             $options['fieldName'] = 'source';
             foreach ($sources as $k => $source) {
@@ -1036,6 +1098,9 @@ class Grabber extends Base
                 $media[0][$attr] = $element->getAttribute($attr) ?: '';
             }
             if ($attr === 'poster') {
+                if (strpos($media[0][$attr], 'http') !== false) {
+                    $media[0][$attr] = $this->downloadImage($media[0][$attr]);
+                }
                 $parentFieldName = $this->getParentFieldName($options);
                 $lexiconOptions = [
                     'fieldName' => 'poster',
@@ -1049,6 +1114,10 @@ class Grabber extends Base
                 ) : $media[0][$attr];
             }
             if ($attr === 'src') {
+                if (strpos($media[0][$attr], 'http') !== false) {
+                    $downloadMethod = $this->downloadMethodsByTagName[$element->tagName()];
+                    $media[0][$attr] = method_exists($this, $downloadMethod)  ? $this->$downloadMethod($media[0][$attr]) : $media[0][$attr];
+                }
                 $media[0][$attr] = $useLexicons ? $this->setLexicons($media[0][$attr], $options) : $media[0][$attr];
             }
         }
@@ -1107,13 +1176,14 @@ class Grabber extends Base
      */
     private function getValue(Element $element, ?array $options = []): string
     {
-        $result = '';
         if ($href = $element->getAttribute('href')) {
             $result = $href;
         } elseif ($children = $element->children()) {
+            $tmp = [];
             foreach ($children as $childNode) {
-                $result .=  ' ' . trim($this->parser->getHTMLString($childNode));
+                $tmp[] = trim($this->parser->getHTMLString($childNode));
             }
+            $result = implode(' ', $tmp);
         } else {
             $result = trim($element->innerHtml());
         }
@@ -1122,8 +1192,8 @@ class Grabber extends Base
 
 
     /**
-     * @param string|null $value
-     * @param array|null $options
+     * @param string $value
+     * @param string $fieldName
      * @return string
      */
     private function setLexicons(?string $value = '', ?array $options = []): string
@@ -1135,11 +1205,11 @@ class Grabber extends Base
         $parentFieldName = $options['parentFieldName'] ?? '';
 
         if (in_array($fieldName, $this->properties['excludeLexiconFields'])) {
-            return $value;
+            return $value ?? '';
         }
 
         if ($parentFieldName && in_array($parentFieldName, $this->properties['excludeLexiconFields'])) {
-            return $value;
+            return $value ?? '';
         }
 
         $options['prefix'] = $options['prefix'] ?? $this->sectionLexiconPrefix;

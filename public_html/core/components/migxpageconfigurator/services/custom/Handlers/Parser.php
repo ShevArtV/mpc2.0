@@ -42,11 +42,16 @@ class Parser
 
     /**
      * @param Element $element
+     * @param bool $inner
      * @return string
      */
-    public function getHTMLString(Element $element): string
+    public function getHTMLString(Element $element, ?bool $inner = false): string
     {
-        $html = urldecode(html_entity_decode($element->html(), ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+        $method = $inner ? 'innerHTML' : 'html';
+        $html = html_entity_decode($element->$method(), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $html = str_replace('+', '|plus|', $html);
+        $html = urldecode($html);
+        $html = str_replace('|plus|', '+', $html);
         return str_replace(['</img>','</source>'], '', $html);
     }
 }

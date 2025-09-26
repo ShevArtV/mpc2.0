@@ -66,12 +66,20 @@ class ExcelFileHandler
 
     private function getColumnIndex(int $number, string $index = ''): string
     {
-        $c = $number / 26;
-        if ($c > 1) {
-            $index .= $this->getColumnIndex($c, $index);
-            $number = $number - floor($c) * 26;
+        if ($number <= 0) {
+            return $index;
         }
-        return $index . chr($number + 64);
+
+        $number--;
+
+        $remainder = $number % 26;
+        $quotient = (int)($number / 26);
+
+        if ($quotient > 0) {
+            $index = $this->getColumnIndex($quotient, $index);
+        }
+
+        return $index . chr($remainder + 65);
     }
 
     private function getFileData($data, ?array $exclude = []): array
@@ -97,12 +105,14 @@ class ExcelFileHandler
         $spreadsheet = new Spreadsheet();
         $sheet = $spreadsheet->getActiveSheet();
         $pathToReports = $this->assetsPath . $dir;
+        $filePath = $this->assetsPath . $dir . $filename;
         foreach ($data as $cell => $value) {
             $sheet->setCellValue($cell, is_array($value) ? implode('; ', $value) : $value);
             $this->modx->invokeEvent('mpcOnAddCellToExcel', [
                 'cell' => $cell,
                 'sheet' => $sheet,
                 'spreadsheet' => $spreadsheet,
+                'filePath' => $filePath,
                 'ExcelFileHandler' => $this
             ]);
         }
@@ -110,7 +120,7 @@ class ExcelFileHandler
         if (!is_dir($pathToReports)) {
             mkdir($pathToReports, 0755, true);
         }
-        $filePath = $this->assetsPath . $dir . $filename;
+
         $this->modx->invokeEvent('mpcOnBeforeSaveExcel', [
             'filePath' => $filePath,
             'sheet' => $sheet,
@@ -123,18 +133,18 @@ class ExcelFileHandler
         return '/' . str_replace($this->basePath, '', $filePath);
     }
 
-    public function getDataFromFile($path)
+    public function getDataFromFile(string $path): array
     {
         $spreadsheet = IOFactory::load($path);
         $file_keys = array_flip($this->fields);
         $listeners = [];
 
         $cells = $spreadsheet->getActiveSheet()->getCellCollection();
-
+        $lastCol = 'Z';
         for ($row = 1; $row <= $cells->getHighestRow(); $row++) {
             $c = 0;
             if ($row === 1) {
-                for ($col = 'A'; $col <= $cells->getHighestColumn(); $col++) {
+                for ($col = 'A'; $col <= $lastCol; $col++) {
                     $cell = $cells->get($col . $row);
                     if ($cell) {
                         $value = $cell->getValue();
@@ -142,7 +152,10 @@ class ExcelFileHandler
                     }
                 }
             } else {
-                for ($col = 'A'; $col <= $cells->getHighestColumn(); $col++) {
+                for ($col = 'A'; $col <= $lastCol; $col++) {
+                    if(!isset($fieldLinks[$c])){
+                        continue;
+                    }
                     $cell = $cells->get($col . $row);
                     $listeners[$row][$fieldLinks[$c]] = $cell ? $cell->getFormattedValue() : '';
                     $c++;
