@@ -112,7 +112,8 @@ class Mpc
      * @param string $directory
      * @return array
      */
-    public function getFilesList(string $directory): array {
+    public function getFilesList(string $directory): array
+    {
         $files = [];
         $directory = rtrim($directory, '/\\');
         $iterator = new \RecursiveIteratorIterator(
@@ -529,11 +530,11 @@ class Mpc
         $this->modx->lexicon->load($lexiconsNamespace . $resourceLexiconFilename);
     }
 
-    public function getResourceLexicons(int $rid, ?int $templateId = 0): array
+    public function getResourceLexicons(int $rid, ?int $templateId): array
     {
         $resourceSectionNames = $parentSectionNames = $lang = $_lang = [];
         $resourceSectionNames = $this->cutter->getStaticSectionNames($rid, true);
-        if ($parentResourceId = $this->getParentResourceId($templateId)) {
+        if ($parentResourceId = $this->getParentResourceId($templateId ?: 0)) {
             if ($parentResourceId !== $rid) {
                 $parentResourceLexiconFilename = $this->grabber->getResourceIdentifierById($parentResourceId);
                 $parentSectionNames = $this->cutter->getStaticSectionNames($parentResourceId, true);
@@ -573,22 +574,24 @@ class Mpc
         return 0;
     }
 
-    public function setLanguageSettings(){
+    public function setLanguageSettings()
+    {
         $availableLanguages = $this->getContextSettingValue('mpc_available_languages');
         $availableLanguages = explode(',', $availableLanguages);
-        if(!isset($_COOKIE['mpc_lang']) || !in_array($_COOKIE['mpc_lang'], $availableLanguages)){
+        if (!isset($_COOKIE['mpc_lang']) || !in_array($_COOKIE['mpc_lang'], $availableLanguages)) {
             $defaultLang = $this->getContextSettingValue('mpc_default_language');
             $host = $this->getContextSettingValue('http_host');
             setcookie('mpc_lang', $defaultLang, 0, '/', $host);
             $_COOKIE['mpc_lang'] = $defaultLang;
         }
 
-        if(!empty($_COOKIE['mpc_lang'])){
+        if (!empty($_COOKIE['mpc_lang'])) {
             $this->modx->setOption('cultureKey', $_COOKIE['mpc_lang']);
         }
     }
 
-    private function getContextSettingValue($settingKey){
+    private function getContextSettingValue($settingKey)
+    {
         $settingValue = $this->modx->getOption($settingKey);
         $q = $this->modx->newQuery('modContextSetting');
         $q->select('value');
