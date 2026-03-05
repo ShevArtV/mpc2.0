@@ -166,6 +166,11 @@ return [
         'value' => 'alias',
         'area' => 'default',
     ],
+    'mpc_cmp_resource_label_field' => [
+        'xtype' => 'textfield',
+        'value' => 'pagetitle',
+        'area' => 'default',
+    ],
     'mpc_lexicon_path' => [
         'xtype' => 'textfield',
         'value' => 'components/migxpageconfigurator/lexicon/',

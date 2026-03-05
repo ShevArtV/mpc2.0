@@ -119,8 +119,10 @@ class OnDocFormSave extends PluginHandler
         $lexicons[$resourceLexiconFilename] = $Mpc->grabber->getLexicons($resourceLexiconFilename, $Mpc->grabber->properties['basePathToLexiconFile']);
         $lexicons[$staticBlocksPageLexiconFilename] = $Mpc->grabber->getLexicons($staticBlocksPageLexiconFilename, $Mpc->grabber->properties['basePathToLexiconFile']);
 
+        $allGrabberLexicons = array_merge(...array_values($Mpc->grabber->lexicons ?: [[]]));
+
         foreach ($config as $item) {
-            $result = $this->filterByPrefix($Mpc->grabber->lexicons[$typeResourceLexiconFilename], $item['lexicon_prefix'] ?? $item['MIGX_formname']);
+            $result = $this->filterByPrefix($allGrabberLexicons, $item['lexicon_prefix'] ?? $item['MIGX_formname']);
             if ($item['is_static']) {
                 $lexicons[$staticBlocksPageLexiconFilename] = array_merge($result, $lexicons[$staticBlocksPageLexiconFilename]);
             } else {
