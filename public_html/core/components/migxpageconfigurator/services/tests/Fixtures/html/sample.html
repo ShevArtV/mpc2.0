@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <title data-mpc-info="site_name">Название сайта</title>
+    <link data-mpc-info="site_url" href="https://example.com" rel="canonical">
+</head>
+<body>
+
+<header>
+    <img data-mpc-info="logo" src="images/logo.png" alt="Логотип">
+    <nav>
+        <a data-mpc-info="site_url" href="https://example.com" data-mpc-if="$_modx->config['site_url']">Главная</a>
+    </nav>
+</header>
+
+<section data-mpc-section="about" data-mpc-name="about" data-mpc-lexicon="about_">
+
+    <h2 data-mpc-field="title">Заголовок секции</h2>
+
+    <p data-mpc-field="text">Текст описания секции о компании.</p>
+
+    <img data-mpc-field="image" src="images/about.jpg" width="800" height="600" alt="Изображение секции">
+
+    <div data-mpc-field="bg_img" class="hero" style="background-image: url('images/bg.jpg'); width: 1920px; height: 600px;"></div>
+
+    <div data-mpc-field="items">
+        <article data-mpc-item="items">
+            <h3 data-mpc-field="item_title">Заголовок элемента</h3>
+            <p data-mpc-field="item_text">Текст элемента</p>
+        </article>
+    </div>
+
+</section>
+
+<section data-mpc-section="contacts" data-mpc-name="contacts">
+
+    <h2 data-mpc-field="title">Контакты</h2>
+
+    <div data-mpc-contact="phone|header" data-mpc-key="phone_header">
+        <a data-mpc-cfield="value" href="tel:+79991234567">+7 (999) 123-45-67</a>
+        <span data-mpc-cfield="caption">Позвонить нам</span>
+    </div>
+
+    <div data-mpc-field="address" data-mpc-if="$address">Адрес компании</div>
+
+</section>
+
+<footer>
+    <p data-mpc-info="site_name">© Название сайта</p>
+</footer>
+
+</body>
+</html>

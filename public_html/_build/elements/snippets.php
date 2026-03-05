@@ -16,4 +16,9 @@ return [
         'description' => 'обрабатывает запрос с виджетов',
         'properties' => []
     ],
+    'mpcThumb' => [
+        'file' => 'snippet.mpcthumb',
+        'description' => 'обёртка над pThumb с проверкой существования файла',
+        'properties' => []
+    ],
 ];

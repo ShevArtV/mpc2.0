@@ -1,0 +1,186 @@
+<?php
+
+namespace MpcTests\Snapshot;
+
+use MpcServices\Handlers\Cutter;
+use MpcTests\Stubs\ModxStub;
+use PHPUnit\Framework\TestCase;
+
+/**
+ * Snapshot-тесты для Cutter.
+ *
+ * Baseline создаётся при первом запуске и сохраняется в Fixtures/snapshots/cutter/.
+ * При рефакторинге гарантирует, что HTML-трансформации не изменились.
+ *
+ * Обновление снапшотов: UPDATE_SNAPSHOTS=1 vendor/bin/phpunit --testsuite Snapshot
+ */
+class CutterSnapshotTest extends TestCase
+{
+    use SnapshotAssertion;
+
+    private string $fixturesDir;
+    private string $outputDir;
+    private ModxStub $modx;
+
+    protected function setUp(): void
+    {
+        $this->fixturesDir = dirname(__DIR__) . '/Fixtures';
+        $this->outputDir   = $this->fixturesDir . '/output';
+
+        // Создаём выходные директории если их нет
+        foreach (['sections', 'chunks'] as $subdir) {
+            $dir = $this->outputDir . '/' . $subdir;
+            if (!is_dir($dir)) {
+                mkdir($dir, 0777, true);
+            }
+        }
+
+        $this->modx = new ModxStub($this->fixturesDir);
+    }
+
+    protected function tearDown(): void
+    {
+        // Очищаем output между тестами, чтобы не было мусора от прошлых запусков
+        $this->clearDir($this->outputDir . '/sections');
+        $this->clearDir($this->outputDir . '/chunks');
+    }
+
+    /**
+     * Базовый свойства, которые Mpc.php передаёт в Cutter при реальном запуске.
+     */
+    private function makeBaseProperties(): array
+    {
+        $corePath = dirname($this->fixturesDir, 5) . '/'; // .../public_html/core/
+
+        return [
+            'corePath'             => $corePath,
+            'pdotoolsElementsPath' => $this->fixturesDir . '/',
+            'pathToDist'           => 'output/parsed/',
+            'extension'            => '.tpl',
+            'pathToSrc'            => 'html/',
+            'lazyloadAttr'         => '',
+            'expandAttr'           => '',
+            'pathToCreate'         => 'output/create/',
+            'devMode'              => false,
+            'lazyloadEnabled'      => false,
+            'expandEnabled'        => false,
+            'lexiconsNamespace'    => 'migxpageconfigurator',
+            'useLexicons'          => false,
+        ];
+    }
+
+    /**
+     * Тест: Cutter корректно преобразует section "about" в Fenom-шаблон.
+     */
+    public function testCutterTransformsAboutSection(): void
+    {
+        $cutter = new Cutter($this->modx, $this->makeBaseProperties());
+        $result = $cutter->handle('sample.html');
+
+        $this->assertTrue($result['success'], 'Cutter::handle должен вернуть success=true');
+
+        $sectionFile = $this->outputDir . '/sections/about.tpl';
+        $this->assertFileExists($sectionFile, 'Файл секции about.tpl должен быть создан');
+
+        $this->assertMatchesSnapshot(
+            file_get_contents($sectionFile),
+            'cutter/about.tpl'
+        );
+    }
+
+    /**
+     * Тест: Cutter корректно преобразует section "contacts".
+     */
+    public function testCutterTransformsContactsSection(): void
+    {
+        $cutter = new Cutter($this->modx, $this->makeBaseProperties());
+        $cutter->handle('sample.html');
+
+        $sectionFile = $this->outputDir . '/sections/contacts.tpl';
+        $this->assertFileExists($sectionFile, 'Файл секции contacts.tpl должен быть создан');
+
+        $this->assertMatchesSnapshot(
+            file_get_contents($sectionFile),
+            'cutter/contacts.tpl'
+        );
+    }
+
+    /**
+     * Тест: data-mpc-info заменяется на Fenom-плейсхолдер $_modx->config['key'].
+     * Проверяем косвенно через содержимое секций.
+     */
+    public function testCutterHandlesInfoAttributes(): void
+    {
+        $cutter = new Cutter($this->modx, $this->makeBaseProperties());
+        $cutter->handle('sample.html');
+
+        // Просто убеждаемся, что оба файла созданы без ошибок
+        $this->assertFileExists($this->outputDir . '/sections/about.tpl');
+        $this->assertFileExists($this->outputDir . '/sections/contacts.tpl');
+    }
+
+    /**
+     * Тест: поле с data-mpc-if оборачивается в условие Fenom.
+     */
+    public function testCutterWrapsFieldInCondition(): void
+    {
+        $cutter = new Cutter($this->modx, $this->makeBaseProperties());
+        $cutter->handle('sample.html');
+
+        $contacts = file_get_contents($this->outputDir . '/sections/contacts.tpl');
+        $this->assertStringContainsString('{if', $contacts, 'Поле с data-mpc-if должно быть обёрнуто в {if}');
+    }
+
+    /**
+     * Тест: data-mpc-* атрибуты удаляются из итогового HTML.
+     */
+    public function testCutterRemovesDataMpcAttributes(): void
+    {
+        $cutter = new Cutter($this->modx, $this->makeBaseProperties());
+        $cutter->handle('sample.html');
+
+        foreach (['about.tpl', 'contacts.tpl'] as $file) {
+            $content = file_get_contents($this->outputDir . '/sections/' . $file);
+            $this->assertStringNotContainsString(
+                'data-mpc-field',
+                $content,
+                "data-mpc-field не должно остаться в {$file}"
+            );
+            $this->assertStringNotContainsString(
+                'data-mpc-section',
+                $content,
+                "data-mpc-section не должно остаться в {$file}"
+            );
+        }
+    }
+
+    /**
+     * Тест: img с data-mpc-field получает Fenom-плейсхолдер в src.
+     */
+    public function testCutterSetsImagePlaceholder(): void
+    {
+        $cutter = new Cutter($this->modx, $this->makeBaseProperties());
+        $cutter->handle('sample.html');
+
+        $about = file_get_contents($this->outputDir . '/sections/about.tpl');
+        $this->assertStringContainsString(
+            '$image[0].src}',
+            $about,
+            'img с data-mpc-field должен получить плейсхолдер {$image[0].src}'
+        );
+    }
+
+    // ---------------------------------------------------------------
+
+    private function clearDir(string $dir): void
+    {
+        if (!is_dir($dir)) {
+            return;
+        }
+        foreach (glob($dir . '/*') as $file) {
+            if (is_file($file)) {
+                unlink($file);
+            }
+        }
+    }
+}

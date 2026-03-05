@@ -25,9 +25,6 @@ return [
     'mpcOnGetNewHtml' => [
         'groupname' => 'MigxPageConfigurator',
     ],
-    'OnGetFormParams' => [
-        'groupname' => 'MigxPageConfigurator',
-    ],
     'OnManagerPageInit' => [
         'groupname' => 'MigxPageConfigurator',
     ],

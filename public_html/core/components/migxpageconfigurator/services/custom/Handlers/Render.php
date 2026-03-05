@@ -293,7 +293,18 @@ class Render extends Base
             $sets .= '{/if}' . PHP_EOL;
             $section['resource'] = $resourceData; // передаем на страницу все поля ресурса
             $chunkName = $section['MIGX_formname']; // получаем имя чанка
-            $chunk = $this->properties['sectionChunkPrefix'] . strtolower($chunkName) . $this->properties['extension']; // получаем путь к чанку
+            $chunkBaseName = strtolower($chunkName);
+            $sectionsDir = $this->properties['pdotoolsElementsPath'] . $this->properties['pathToSections'];
+            $unstaticFilePath = $sectionsDir . $chunkBaseName . '_unstatic' . $this->properties['extension'];
+
+            // Если секция была статичной (есть _unstatic), но в данном ресурсе она нестатичная — берём _unstatic чанк
+            if (!$section['is_static'] && file_exists($unstaticFilePath)) {
+                $chunkSuffix = $chunkBaseName . '_unstatic';
+            } else {
+                $chunkSuffix = $chunkBaseName;
+            }
+            $chunk = $this->properties['sectionChunkPrefix'] . $chunkSuffix . $this->properties['extension']; // получаем путь к чанку
+
             $tmp = $this->pdo->parseChunk($chunk, $section); // парсим чанк
             if ($section['is_static']) {
                 $tmp = $sets . $tmp;

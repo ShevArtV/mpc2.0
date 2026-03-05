@@ -38,6 +38,8 @@ class Mpc
     protected array $properties;
     public Render $render;
 
+    private array $parentResourceIdCache = [];
+
     /**
      * @param \modX $modx
      */
@@ -518,60 +520,52 @@ class Mpc
     public function loadLexicons(int $rid, ?int $templateId = 0)
     {
         $lexiconsNamespace = $this->properties['lexiconsNamespace'] . ':';
-        $this->modx->lexicon->load($lexiconsNamespace . $this->grabber->properties['staticBlocksPageLexiconFilename']);
-        $this->modx->lexicon->load($lexiconsNamespace . $this->grabber->properties['contactsPageLexiconFilename']);
-        if ($parentResourceId = $this->getParentResourceId($templateId)) {
-            if ($parentResourceId !== $rid) {
-                $parentResourceLexiconFilename = $this->grabber->getResourceIdentifierById($parentResourceId);
-                $this->modx->lexicon->load($lexiconsNamespace . $parentResourceLexiconFilename);
-            }
+        foreach ($this->getLexiconFilenames($rid, $templateId ?: 0) as $filename) {
+            $this->modx->lexicon->load($lexiconsNamespace . $filename);
         }
-        $resourceLexiconFilename = $this->grabber->getResourceIdentifierById($rid);
-        $this->modx->lexicon->load($lexiconsNamespace . $resourceLexiconFilename);
     }
 
     public function getResourceLexicons(int $rid, ?int $templateId): array
     {
-        $resourceSectionNames = $parentSectionNames = $lang = $_lang = [];
-        $resourceSectionNames = $this->cutter->getStaticSectionNames($rid, true);
-        if ($parentResourceId = $this->getParentResourceId($templateId ?: 0)) {
-            if ($parentResourceId !== $rid) {
-                $parentResourceLexiconFilename = $this->grabber->getResourceIdentifierById($parentResourceId);
-                $parentSectionNames = $this->cutter->getStaticSectionNames($parentResourceId, true);
-            }
-        }
-        $sectionNames = array_merge($parentSectionNames, $resourceSectionNames);
-        $resourceLexiconFilename = $this->grabber->getResourceIdentifierById($rid);
+        $lang = $_lang = [];
         $cultureKey = $this->modx->getOption('cultureKey');
-        $bathLexiconPath = $this->properties['corePath'] . 'components/' . $this->properties['lexiconsNamespace'] . '/lexicon/' . $cultureKey . '/';
-        $paths = [];
-        $paths[] = $bathLexiconPath . $this->grabber->properties['staticBlocksPageLexiconFilename'] . '.inc.php';
-        $paths[] = $bathLexiconPath . $this->grabber->properties['contactsPageLexiconFilename'] . '.inc.php';
-        if ($parentResourceLexiconFilename) {
-            $paths[] = $bathLexiconPath . $parentResourceLexiconFilename . '.inc.php';
-        }
-        $paths[] = $bathLexiconPath . $resourceLexiconFilename . '.inc.php';
-        foreach ($paths as $path) {
+        $baseLexiconPath = $this->properties['corePath'] . 'components/' . $this->properties['lexiconsNamespace'] . '/lexicon/' . $cultureKey . '/';
+        foreach ($this->getLexiconFilenames($rid, $templateId ?: 0) as $filename) {
+            $path = $baseLexiconPath . $filename . '.inc.php';
             if (!file_exists($path)) {
                 continue;
             }
             include $path;
-
             $lang = array_merge($lang, $_lang);
         }
         return $lang;
     }
 
+    private function getLexiconFilenames(int $rid, int $templateId): array
+    {
+        $names = [];
+        $names[] = $this->grabber->properties['staticBlocksPageLexiconFilename'];
+        $names[] = $this->grabber->properties['contactsPageLexiconFilename'];
+        if ($parentResourceId = $this->getParentResourceId($templateId)) {
+            if ($parentResourceId !== $rid) {
+                $names[] = $this->grabber->getResourceIdentifierById($parentResourceId);
+            }
+        }
+        $names[] = $this->grabber->getResourceIdentifierById($rid);
+        return $names;
+    }
+
     public function getParentResourceId(int $templateId): int
     {
+        if (isset($this->parentResourceIdCache[$templateId])) {
+            return $this->parentResourceIdCache[$templateId];
+        }
         $q = $this->modx->newQuery('modResource');
         $q->select('id');
         $q->where(['template' => $templateId, 'parent' => $this->grabber->properties['staticBlocksPageId']]);
         $q->prepare();
-        if ($q->stmt->execute()) {
-            return $q->stmt->fetchColumn();
-        }
-        return 0;
+        $result = $q->stmt->execute() ? (int)$q->stmt->fetchColumn() : 0;
+        return $this->parentResourceIdCache[$templateId] = $result;
     }
 
     public function setLanguageSettings()

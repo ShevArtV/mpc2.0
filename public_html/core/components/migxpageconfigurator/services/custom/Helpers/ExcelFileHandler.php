@@ -38,7 +38,7 @@ class ExcelFileHandler
     private function initialize()
     {
         $this->assetsPath = $this->modx->getOption('assets_path', '', MODX_ASSETS_PATH);
-        $this->basePath = $this->modx->getOption('base_path', '', MODX_ASSETS_PATH);
+        $this->basePath = $this->modx->getOption('base_path', '', MODX_BASE_PATH);
     }
 
     public function generateFile(array $data, string $filename, ?string $dir): string
@@ -89,7 +89,6 @@ class ExcelFileHandler
             $col = 1;
             foreach ($values as $key => $value) {
                 if (in_array($key, $exclude)) {
-                    unset($values[$key]);
                     continue;
                 }
                 $index = $this->getColumnIndex($col);
@@ -138,9 +137,11 @@ class ExcelFileHandler
         $spreadsheet = IOFactory::load($path);
         $file_keys = array_flip($this->fields);
         $listeners = [];
+        $fieldLinks = [];
 
-        $cells = $spreadsheet->getActiveSheet()->getCellCollection();
-        $lastCol = 'Z';
+        $sheet = $spreadsheet->getActiveSheet();
+        $cells = $sheet->getCellCollection();
+        $lastCol = $sheet->getHighestColumn();
         for ($row = 1; $row <= $cells->getHighestRow(); $row++) {
             $c = 0;
             if ($row === 1) {

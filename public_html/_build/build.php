@@ -708,6 +708,16 @@ class modExtraPackage
             }
         }
 
+        // Пересобираем vendor без dev-зависимостей (PHPUnit и др. не нужны на сервере)
+        $servicesPath = $this->config['core'] . 'components/migxpageconfigurator/services/';
+        if (file_exists($servicesPath . 'composer.json')) {
+            $composer = trim(shell_exec('which composer 2>/dev/null') ?: shell_exec('which composer.phar 2>/dev/null'));
+            if ($composer) {
+                $this->modx->log(modX::LOG_LEVEL_INFO, 'Running composer install --no-dev in services/...');
+                shell_exec('cd ' . escapeshellarg($servicesPath) . ' && ' . escapeshellarg($composer) . ' install --no-dev --no-interaction --optimize-autoloader 2>&1');
+            }
+        }
+
         // Create main vehicle
         /** @var modTransportVehicle $vehicle */
         $vehicle = $this->builder->createVehicle($this->category, $this->category_attributes);
@@ -744,6 +754,11 @@ class modExtraPackage
 
         $this->modx->log(modX::LOG_LEVEL_INFO, 'Packing up transport package zip...');
         $this->builder->pack();
+
+        // Восстанавливаем dev-зависимости для локальной разработки
+        if (file_exists($servicesPath . 'composer.json') && isset($composer) && $composer) {
+            shell_exec('cd ' . escapeshellarg($servicesPath) . ' && ' . escapeshellarg($composer) . ' install --no-interaction 2>&1');
+        }
 
         if (!empty($this->config['install'])) {
             $this->install();

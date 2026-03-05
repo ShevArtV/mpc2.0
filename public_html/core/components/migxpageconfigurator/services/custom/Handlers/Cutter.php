@@ -2,13 +2,16 @@
 
 /**
  * Сервис для нарезки шаблона на чанки и секции и расстановки плейсхолдеров.
+ *
+ * Тонкий фасад: оркестрирует четыре специализированных подкласса из Cutter/.
  */
 
 namespace MpcServices\Handlers;
 
-use DiDom\Document;
-use DiDom\Element;
-use DiDom\Exceptions\InvalidSelectorException;
+use MpcServices\Handlers\Cutter\PlaceholderProcessor;
+use MpcServices\Handlers\Cutter\SnippetCallBuilder;
+use MpcServices\Handlers\Cutter\SpecialTagProcessor;
+use MpcServices\Handlers\Cutter\SectionFileWriter;
 
 /**
  * @author Arthur Shevchenko (https://t.me/ShevArtV)
@@ -16,9 +19,35 @@ use DiDom\Exceptions\InvalidSelectorException;
 class Cutter extends Base
 {
     /**
+     * Полный HTML загруженного файла-шаблона.
+     *
      * @var string
      */
     private string $html = '';
+
+    /**
+     * @var PlaceholderProcessor
+     */
+    private PlaceholderProcessor $placeholderProcessor;
+
+    /**
+     * @var SnippetCallBuilder
+     */
+    private SnippetCallBuilder $snippetCallBuilder;
+
+    /**
+     * @var SpecialTagProcessor
+     */
+    private SpecialTagProcessor $specialTagProcessor;
+
+    /**
+     * @var SectionFileWriter
+     */
+    private SectionFileWriter $sectionFileWriter;
+
+    // ---------------------------------------------------------------
+    // Инициализация
+    // ---------------------------------------------------------------
 
     /**
      * @return void
@@ -28,60 +57,99 @@ class Cutter extends Base
         parent::initialize();
 
         $properties = [
-            'pathToChunks' => $this->modx->getOption('mpc_path_to_chunks', null, 'chunks/'),
-            'chunkNames' => [],
-            'pattern' => '/(\s)*?data-mpc-(nolazy|copy|symbol|if|static|name|item|unwrap|section|snippet|chunk|include|parse|remove|attr|field|cfield|contact|ctx|info|lim|off|nothumb|thumb|lexicon|key)(-){0,1}([0-9]*)(=".*?"){0,1}(\s)*?/',
-            'wrapperName' => $this->modx->getOption('mpc_wrapper_name', null, 'wrapper'),
-            'thumbFormat' => $this->modx->getOption('mpc_thumb_format', null, 'png'),
-            'fakeImgPath' => $this->modx->getOption('mpc_fake_img_path', null, 'assets/components/migxpageconfigurator/images/fake-img.png'),
-            'pathToPresets' => $this->modx->getOption('mpc_path_to_presets', null, 'components/migxpageconfigurator/elements/presets/'),
-            'pathToSamples' => $this->modx->getOption('mpc_path_to_samples', null, 'components/migxpageconfigurator/elements/samples/'),
-            'presets' => [],
+            'pathToChunks'      => $this->modx->getOption('mpc_path_to_chunks', null, 'chunks/'),
+            'chunkNames'        => [],
+            'pattern'           => '/(\s)*?data-mpc-(nolazy|copy|symbol|if|static|name|item|unwrap|section|snippet|chunk|include|parse|remove|attr|field|cfield|contact|ctx|info|lim|off|nothumb|thumb|lexicon|key)(-){0,1}([0-9]*)(=".*?"){0,1}(\s)*?/',
+            'wrapperName'       => $this->modx->getOption('mpc_wrapper_name', null, 'wrapper'),
+            'thumbFormat'       => $this->modx->getOption('mpc_thumb_format', null, 'png'),
+            'fakeImgPath'       => $this->modx->getOption('mpc_fake_img_path', null, 'assets/components/migxpageconfigurator/images/fake-img.png'),
+            'pathToPresets'     => $this->modx->getOption('mpc_path_to_presets', null, 'components/migxpageconfigurator/elements/presets/'),
+            'pathToSamples'     => $this->modx->getOption('mpc_path_to_samples', null, 'components/migxpageconfigurator/elements/samples/'),
+            'presets'           => [],
             'commonThumbParams' => $this->modx->getOption('mpc_common_thumb_params', null, ''),
-            'thumbSnippet' => $this->modx->getOption('mpc_thumb_snippet', null, '')
+            'thumbSnippet'      => $this->modx->getOption('mpc_thumb_snippet', null, ''),
         ];
         $this->properties = array_merge($this->properties, $properties);
+
         $this->getPresets();
         $this->getSamples();
+
+        $this->placeholderProcessor = new PlaceholderProcessor(
+            $this->modx,
+            $this->properties,
+            $this->parser
+        );
+
+        $this->snippetCallBuilder = new SnippetCallBuilder($this->properties);
+
+        $this->specialTagProcessor = new SpecialTagProcessor(
+            $this->properties,
+            $this->parser,
+            $this->snippetCallBuilder,
+            $this->placeholderProcessor
+        );
+
+        $this->sectionFileWriter = new SectionFileWriter(
+            $this->properties,
+            $this->parser,
+            $this->placeholderProcessor,
+            $this->specialTagProcessor
+        );
     }
 
+    // ---------------------------------------------------------------
+    // Загрузка пресетов и сэмплов
+    // ---------------------------------------------------------------
+
     /**
+     * Загружает файлы пресетов в $this->properties['presets'].
+     *
      * @return void
      */
     private function getPresets(): void
     {
         $pathToPresets = $this->properties['pdotoolsElementsPath'] . $this->properties['pathToPresets'];
-        if (file_exists($pathToPresets)) {
-            $files = scandir($pathToPresets);
-            unset($files[0], $files[1]);
-            if (count($files)) {
-                foreach ($files as $file) {
-                    $presetsFilePath = $pathToPresets . $file;
-                    $this->properties['presets'][str_replace('.inc.php', '', $file)] = include($presetsFilePath);
-                }
+        if (!file_exists($pathToPresets)) {
+            return;
+        }
+        $files = scandir($pathToPresets);
+        unset($files[0], $files[1]);
+        if (count($files)) {
+            foreach ($files as $file) {
+                $presetsFilePath = $pathToPresets . $file;
+                $this->properties['presets'][str_replace('.inc.php', '', $file)] = include($presetsFilePath);
             }
         }
     }
 
     /**
+     * Загружает файлы шаблонов-сэмплов (Fenom-фрагменты) в $this->properties['samples'].
+     *
      * @return void
      */
     private function getSamples(): void
     {
         $pathToSamples = $this->properties['corePath'] . $this->properties['pathToSamples'];
-        if (file_exists($pathToSamples)) {
-            $files = scandir($pathToSamples);
-            unset($files[0], $files[1]);
-            if (count($files)) {
-                foreach ($files as $file) {
-                    $presetsFilePath = $pathToSamples . $file;
-                    $this->properties['samples'][str_replace('.tpl', '', $file)] = file_get_contents($presetsFilePath);
-                }
+        if (!file_exists($pathToSamples)) {
+            return;
+        }
+        $files = scandir($pathToSamples);
+        unset($files[0], $files[1]);
+        if (count($files)) {
+            foreach ($files as $file) {
+                $presetsFilePath = $pathToSamples . $file;
+                $this->properties['samples'][str_replace('.tpl', '', $file)] = file_get_contents($presetsFilePath);
             }
         }
     }
 
+    // ---------------------------------------------------------------
+    // Публичный API
+    // ---------------------------------------------------------------
+
     /**
+     * Точка входа: загружает файл и запускает все этапы обработки.
+     *
      * @param string $fileName
      * @return array
      */
@@ -95,6 +163,8 @@ class Cutter extends Base
             return $this->response->error(__METHOD__, "File $fileName is empty");
         }
 
+        $this->sectionFileWriter->setFullHtml($this->html);
+
         $this->handleInformation();
         $this->handleContacts();
         $this->handleSections();
@@ -102,7 +172,13 @@ class Cutter extends Base
         return $this->response->success(__METHOD__, "Processing of file $fileName is completed");
     }
 
+    // ---------------------------------------------------------------
+    // Внутренние этапы обработки
+    // ---------------------------------------------------------------
+
     /**
+     * Заменяет [data-mpc-info] элементы на плейсхолдеры из $_modx->config.
+     *
      * @return void
      */
     private function handleInformation(): void
@@ -111,11 +187,12 @@ class Cutter extends Base
             return;
         }
         foreach ($items as $item) {
-            $infoKey = $item->getAttribute('data-mpc-info');
-            $itemHtml = $this->parser->getHTMLString($item);
+            $infoKey     = $item->getAttribute('data-mpc-info');
+            $itemHtml    = $this->parser->getHTMLString($item);
             $itemHtmlNew = '';
-            $pls = "{\$_modx->config['$infoKey']}";
-            switch ($item->nodeName) {
+            $pls         = "{\$_modx->config['$infoKey']}";
+
+            switch ($item->tagName()) {
                 case 'link':
                     $item->setAttribute('href', $pls);
                     break;
@@ -130,17 +207,21 @@ class Cutter extends Base
                     }
                     break;
             }
+
             $itemHtmlNew = $itemHtmlNew ?: $this->parser->getHTMLString($item);
 
             if ($item->hasAttribute('data-mpc-if')) {
-                $condition = $item->getAttribute('data-mpc-if') ?: "\$_modx->config['$infoKey']";
-                $itemHtmlNew = $this->wrapInCondition($condition, $itemHtmlNew);
+                $condition   = $item->getAttribute('data-mpc-if') ?: "\$_modx->config['$infoKey']";
+                $itemHtmlNew = $this->placeholderProcessor->wrapInCondition($condition, $itemHtmlNew);
             }
+
             $this->html = str_replace($itemHtml, $itemHtmlNew, $this->html);
         }
     }
 
     /**
+     * Заменяет [data-mpc-contact] блоки на Fenom-плейсхолдеры контактов.
+     *
      * @return void
      */
     private function handleContacts(): void
@@ -148,7 +229,9 @@ class Cutter extends Base
         if (!$items = $this->getItems($this->html, '[data-mpc-contact]')) {
             return;
         }
-        $search = [];
+
+        $search      = [];
+        $replacement = [];
 
         foreach ($items as $item) {
             if (!$fields = $this->getItems($this->parser->getHTMLString($item), '[data-mpc-cfield]')) {
@@ -158,18 +241,19 @@ class Cutter extends Base
             if (!$valueField = $this->getItems($this->parser->getHTMLString($item), '[data-mpc-cfield="value"]')[0]) {
                 continue;
             }
-            if ($href = $valueField->getAttribute('href')) {
-                $value = $href;
-            } else {
-                $value = trim($valueField->textContent);
-            }
-            $key = $item->getAttribute('data-mpc-key') ?: $this->getContactKey($value);
-            $type = $contactAttrValue[0];
+
+            $href  = $valueField->getAttribute('href');
+            $value = $href ?: trim($valueField->textContent);
+
+            $key       = $item->getAttribute('data-mpc-key') ?: $this->getContactKey($value);
+            $type      = $contactAttrValue[0];
             $placement = $contactAttrValue[1] ?? 'default';
+
             foreach ($fields as $field) {
-                $fieldName = $field->getAttribute('data-mpc-cfield');
+                $fieldName   = $field->getAttribute('data-mpc-cfield');
                 $complexName = "{\$contacts['$placement']['$key']['$fieldName']}";
-                $search[] = $this->parser->getHTMLString($field);
+                $search[]    = $this->parser->getHTMLString($field);
+
                 if ($fieldName === 'value') {
                     if ($field->hasAttribute('href')) {
                         if ($type === 'phone') {
@@ -184,15 +268,15 @@ class Cutter extends Base
                     $replacement[] = $this->parser->getHTMLString($field);
                 } else {
                     if ($field->hasAttribute('src')) {
-                        if ($field->nodeName === 'img') {
+                        if ($field->tagName() === 'img') {
                             if (!$field->hasAttribute('data-mpc-nothumb') && !empty($this->properties['thumbSnippet'])) {
-                                $complexName = $this->getThumb([
-                                    'width' => $field->getAttribute('width'),
-                                    'height' => $field->getAttribute('height'),
+                                $complexName = $this->placeholderProcessor->getThumb([
+                                    'width'       => $field->getAttribute('width'),
+                                    'height'      => $field->getAttribute('height'),
                                     'thumbParams' => $field->getAttribute('data-mpc-thumb'),
                                     'firstSymbol' => '{',
                                     'complexName' => "\$contacts['$placement']['$key']['$fieldName']",
-                                    'srcAttr' => ''
+                                    'srcAttr'     => '',
                                 ]);
                             }
 
@@ -205,7 +289,6 @@ class Cutter extends Base
                         } else {
                             $field->setAttribute('src', $complexName);
                         }
-
 
                         $replacement[] = $this->parser->getHTMLString($field);
                     } else {
@@ -221,6 +304,8 @@ class Cutter extends Base
     }
 
     /**
+     * Обходит все [data-mpc-section] и создаёт для каждой секции .tpl файлы.
+     *
      * @return void
      */
     private function handleSections(): void
@@ -230,754 +315,16 @@ class Cutter extends Base
         }
 
         foreach ($sections as $section) {
-            $isCopy = $section->hasAttribute('data-mpc-copy');
-            if ($isCopy) {
+            // Секции-копии не обрабатываем
+            if ($section->hasAttribute('data-mpc-copy')) {
                 continue;
             }
 
             if ($innerChunks = $this->getItems($this->parser->getHTMLString($section), '[data-mpc-chunk]')) {
-                $this->parseInnerChunks($innerChunks);
+                $this->sectionFileWriter->parseInnerChunks($innerChunks);
             }
 
-            // если секция НЕ является копией аналогичной из другого шаблона - создаем для неё файлы return !empty($newResourceData[$key][0]) ? count($newResourceData[$key]) : 0;
-            $this->createSectionFiles($section);
+            $this->sectionFileWriter->createSectionFiles($section);
         }
     }
-
-    /**
-     * @param array $innerChunks
-     * @return void
-     */
-    private function parseInnerChunks(array $innerChunks): void
-    {
-        foreach ($innerChunks as $innerChunk) {
-            /*if (!property_exists($innerChunk, 'nodeValue')) {
-                continue;
-            }*/
-            $chunkName = $innerChunk->getAttribute('data-mpc-chunk');
-
-            if (in_array($chunkName, $this->properties['chunkNames'])) {
-                continue;
-            }
-            $this->properties['chunkNames'][] = $chunkName;
-            if ($subInnerChunks = $this->getItems($this->parser->getHTMLString($innerChunk), '[data-mpc-chunk]')) {
-                $this->parseInnerChunks($subInnerChunks);
-            }
-
-            $dirName = explode('/', $chunkName);
-            if (count($dirName) > 1) {
-                unset($dirName[count($dirName) - 1]);
-                $dirName = implode('/', $dirName);
-            } else {
-                $dirName = '';
-            }
-            $baseDir = $this->properties['pdotoolsElementsPath'] . $this->properties['pathToChunks'];
-            if (!is_dir($baseDir . $dirName)) {
-                mkdir($baseDir . $dirName, 0777, true);
-            }
-            $path = $baseDir . $chunkName;
-
-            $this->putToFile($innerChunk, $path);
-        }
-    }
-
-    /**
-     * @param Element $section
-     * @return void
-     */
-    private function createSectionFiles(Element $section): void
-    {
-        $sectionName = trim($section->getAttribute('data-mpc-section'));
-        $this->properties['isSectionStatic'] = $section->hasAttribute('data-mpc-static');
-        $fileName = $sectionName . $this->properties['extension'];
-        if (!file_exists($this->properties['pdotoolsElementsPath'] . $this->properties['pathToSections'])) {
-            mkdir($this->properties['pdotoolsElementsPath'] . $this->properties['pathToSections'], 0777, true);
-        }
-        $pathToFile = $this->properties['pdotoolsElementsPath'] . $this->properties['pathToSections'] . $fileName;
-
-        $this->putToFile($section, $pathToFile);
-    }
-
-    /**
-     * @param Element $element
-     * @param string $pathToFile
-     * @return void
-     */
-    private function putToFile(Element $element, string $pathToFile): void
-    {
-        $html = $this->parser->getHTMLString($element);
-        $sectionName = trim($element->getAttribute('data-mpc-name'));
-        $sectionLexiconPrefix = trim($element->getAttribute('data-mpc-lexicon'));
-        $properties = [
-            'html' => $html,
-            'element' => $element,
-            'fieldAttrName' => 'data-mpc-field',
-            'itemAttrName' => 'data-mpc-item',
-            'level' => 0,
-            'sectionLexiconPrefix' => $sectionLexiconPrefix,
-            'isStatic' => $element->hasAttribute('data-mpc-static')
-        ];
-        $properties = $this->setPlaceholders($properties);
-        $properties = $this->setSnippetTags($properties);
-        if (!$properties['element']->hasAttribute('data-mpc-parse')) {
-            $properties = $this->setParseChunks($properties);
-        }
-        if (!$properties['element']->hasAttribute('data-mpc-include')) {
-            $properties = $this->setIncludeChunks($properties);
-        }
-
-        $properties = $this->removeHiddenPlaceholders($properties);
-
-        if ($attrs = $this->getItems($properties['html'], '[data-mpc-attr]')) {
-            foreach ($attrs as $attr) {
-                $attrValue = $attr->getAttribute('data-mpc-attr');
-                $search = 'data-mpc-attr="' . $attrValue . '"';
-                $properties['html'] = str_replace($search, $attrValue, $properties['html']);
-            }
-        }
-
-        $properties['html'] = $this->unwrapBlock($properties['html']);
-
-        if (strpos($element->getAttribute('data-mpc-section'), $this->properties['wrapperName']) !== false) {
-            $properties['html'] = preg_replace('/<body(.*?)>(.*?)<\/body>/s', '<body\1>' . $properties['html'] . '</body>', $this->html);
-        }
-
-        $properties['html'] = str_replace('`', '"', $properties['html']);
-        $properties['html'] = preg_replace($this->properties['pattern'], '', $properties['html']);
-
-        if ($element->hasAttribute('data-mpc-if')) {
-            $condition = $element->getAttribute('data-mpc-if');
-            $firstSymbol = $element->getAttribute('data-mpc-symbol') ?: '{';
-            $properties['html'] = $this->wrapInCondition($condition, $properties['html'], $firstSymbol);
-        }
-
-        file_put_contents($pathToFile, $properties['html']);
-        //$this->modx->log(1, $properties['html']);
-    }
-
-    /**
-     * @param string $html
-     * @return string
-     */
-    private function unwrapBlock(string $html): string
-    {
-        if ($unwrap = $this->parser->findByAttribute($html, '[data-mpc-unwrap]')) {
-            foreach ($unwrap as $attr) {
-                $attrValue = $attr->innerHTML();
-                $search = $this->parser->getHTMLString($attr);
-                $html = str_replace($search, $attrValue, $html);
-            }
-        }
-        return $html;
-    }
-
-    /**
-     * @param array $properties
-     * @return array
-     * @throws InvalidSelectorException
-     */
-    private function setPlaceholders(array $properties): array
-    {
-        $fieldAttrName = $properties['level'] ? $properties['fieldAttrName'] . '-' . $properties['level'] : $properties['fieldAttrName'];
-        $itemAttrName = $properties['level'] ? $properties['itemAttrName'] . '-' . $properties['level'] : $properties['itemAttrName'];
-        if (!$fields = $this->getItems($properties['html'], '[' . $fieldAttrName . ']')) {
-            return $properties;
-        }
-
-        $mediaLists = [];
-        foreach ($fields as $field) {
-            $fieldName = $field->getAttribute($fieldAttrName);
-            $properties['fieldName'] = $fieldName;
-            $fieldHTML = $this->parser->getHTMLString($field);
-            if ($fieldName === 'bg_img') {
-                $fieldHTMLNew = $this->setBackgroundPlaceholder($field, $fieldName, $properties);
-            } elseif ($field->tagName === 'img' && !in_array($fieldName, ['list_images', 'list_pictures'])) {
-                $fieldHTMLNew = $this->setImgPlaceholder($field, $fieldName, $properties);
-            } elseif (in_array($field->tagName, ['video', 'audio', 'picture']) && !in_array($fieldName, ['list_pictures', 'list_audios', 'list_videos'])) {
-                $fieldHTMLNew = $this->setMediaPlaceholder($field, $fieldName, $properties);
-            } elseif (in_array($fieldName, ['list_images', 'list_pictures', 'list_audios', 'list_videos'])) {
-                $parentNode = $this->getParentNode($properties['parentElement'] ?? $field, $fieldAttrName);
-                if ($parentNode != $properties['element']) {
-                    continue;
-                }
-                $prefix = '';
-                if ($properties['parentElement']) {
-                    $prefix = 'item' . $properties['level'] . '.';
-                    $fieldName = strpos($fieldName, $prefix) === 0 ? $fieldName : $prefix . $fieldName;
-                }
-                $k = isset($mediaLists[$fieldName]) ? count($mediaLists[$fieldName]) : 0;
-                $listProperties['level'] = $k;
-                $listProperties = array_merge($properties, $listProperties);
-                if ($fieldName === $prefix . 'list_images') {
-                    $fieldHTMLNew = $this->setImgPlaceholder($field, $fieldName . "[$k].img", $listProperties);
-                } else {
-                    $fieldHTMLNew = $this->setMediaPlaceholder($field, $fieldName . "[$k]." . $field->nodeName, $listProperties);
-                }
-                $mediaLists[$fieldName][] = $field;
-            } elseif ($items = $this->getItems($fieldHTML, '[' . $itemAttrName . ']')) {
-                list($firstSymbol, $complexName) = $this->getSymbolComplex($field, $fieldName, $properties['level'], $properties['isStatic']);
-                $props['html'] = $this->parser->getHTMLString($items[0]);
-                $props['element'] = $items[0];
-                $props['parentElement'] = $this->getParentNode($items[0], $fieldAttrName);
-                $props['level'] = $properties['level'] + 1;
-                $properties['parentFieldName'] = $fieldName;
-                $properties['fieldName'] = preg_replace('/^\$/', '', $complexName);
-                $props = $this->setPlaceholders(array_merge($properties, $props));
-                $limit = $field->getAttribute('data-mpc-lim');
-                $offset = $field->getAttribute('data-mpc-off');
-                if ($limit && $offset) {
-                    $sampleKey = 'foreach_limit_offset';
-                } elseif ($limit && !$offset) {
-                    $sampleKey = 'foreach_limit';
-                } elseif (!$limit && $offset) {
-                    $sampleKey = 'foreach_offset';
-                } else {
-                    $sampleKey = 'foreach';
-                }
-                $html = $this->unwrapBlock($props['html']);
-                $fieldHTMLNew = str_replace(['##', 'subject', '^', 'html', 'limit', 'offset'],
-                    [$firstSymbol, $complexName, $props['level'], $html, $limit, $offset],
-                    $this->properties['samples'][$sampleKey]);
-                if (!$field->hasAttribute('data-mpc-unwrap')) {
-                    $field->setInnerHtml($fieldHTMLNew);
-                    $fieldHTMLNew = $this->parser->getHTMLString($field);
-                } else {
-                    //$fieldHTMLNew = urldecode(html_entity_decode($fieldHTMLNew));
-                    $fieldHTMLNew = str_replace(['</source>', '</path>'], '', $fieldHTMLNew);
-                }
-
-                if ($field->hasAttribute('data-mpc-if')) {
-                    $condition = $field->getAttribute('data-mpc-if') ?: $complexName;
-                    $fieldHTMLNew = $this->wrapInCondition($condition, $fieldHTMLNew, $firstSymbol);
-                }
-            } else {
-                $fieldHTMLNew = $this->setDefaultPlaceholder($field, $fieldName, $properties);
-            }
-
-            $this->modx->invokeEvent('mpcOnGetNewHtml', [
-                'fieldHTMLNew' => $fieldHTMLNew,
-                'Grabber' => $this
-            ]);
-
-            $fieldHTMLNew = isset($this->modx->event->returnedValues) && !empty($this->modx->event->returnedValues['fieldHTMLNew'])
-                ? $this->modx->event->returnedValues['fieldHTMLNew'] : $fieldHTMLNew;
-            //$this->modx->log(1, print_r([$fieldHTML, $fieldHTMLNew, $properties['html']], 1));
-            if (!empty($fieldHTMLNew)) {
-                $properties['html'] = str_replace($fieldHTML, $fieldHTMLNew, $properties['html']);
-            }
-        }
-
-        //$this->modx->log(1, print_r($properties['html'], 1));
-        return $properties;
-    }
-
-    private function getParentNode($node, $attrName)
-    {
-        if ($node->parent() instanceof Document) {
-            return $node->parent();
-        }
-        if ($node->parent()->hasAttribute($attrName)) {
-            return $node->parent();
-        }
-        if ($node->parent()->hasAttribute('data-mpc-section')) {
-            return $node->parent();
-        }
-        return $this->getParentNode($node->parent(), $attrName);
-    }
-
-    /**
-     * @param Element $row
-     * @param string $fieldName
-     * @param array $properties
-     * @return string
-     */
-    private function setBackgroundPlaceholder(Element $row, string $fieldName, array $properties): string
-    {
-        $html = '';
-        if ($style = $row->getAttribute('style')) {
-            list($firstSymbol, $complexName) = $this->getSymbolComplex($row, $fieldName, $properties['level'], $properties['isStatic']);
-            preg_match('/width:(.*?);/', $style, $width);
-            preg_match('/height:(.*?);/', $style, $height);
-            if (!$row->hasAttribute('data-mpc-nothumb')) {
-                $src = $this->getThumb([
-                    'width' => (int)$width[1],
-                    'height' => (int)$height[1],
-                    'thumbParams' => $row->getAttribute('data-mpc-thumb'),
-                    'firstSymbol' => $firstSymbol,
-                    'complexName' => $complexName,
-                    'srcAttr' => '',
-                    'setValues' => true,
-                ]);
-            } else {
-                $src = "{$firstSymbol}{$complexName}}";
-            }
-
-
-            if ($this->properties['lazyloadAttr'] && !$row->hasAttribute('data-mpc-nolazy')) {
-                $row->setAttribute($this->properties['lazyloadAttr'], 'bg:' . $src);
-                $row->removeAttribute('style');
-            } else {
-                $style = preg_replace('/url\(\'(.*?)\'\)/', "url('" . $src . "')", $style);
-                $row->setAttribute('style', $style);
-            }
-
-            $html = $this->parser->getHTMLString($row);
-        }
-        return $html;
-    }
-
-    /**
-     * @param Element $row
-     * @param string $fieldName
-     * @param array $properties
-     * @return string
-     */
-    private function setImgPlaceholder(Element $row, string $fieldName, array $properties): string
-    {
-        list($firstSymbol, $complexName) = $this->getSymbolComplex($row, $fieldName, $properties['level'], $properties['isStatic']);
-        $imgAttrs = ['width', 'height', 'alt'];
-        $complexName .= '[0]';
-        $prefix = "{$firstSymbol}{$complexName}";
-        if (!$row->hasAttribute('data-mpc-nothumb')) {
-            $src = $this->getThumb([
-                'width' => $row->hasAttribute('width'),
-                'height' => $row->hasAttribute('height'),
-                'thumbParams' => $row->getAttribute('data-mpc-thumb'),
-                'firstSymbol' => $firstSymbol,
-                'complexName' => $complexName,
-                'srcAttr' => 'src',
-            ]);
-        } else {
-            $src = "$prefix.src}";
-        }
-
-
-        if ($this->properties['lazyloadAttr'] && !$row->hasAttribute('data-mpc-nolazy')) {
-            $row->setAttribute($this->properties['lazyloadAttr'], $src);
-            $row->setAttribute('src', $this->properties['fakeImgPath']);
-        } else {
-            $row->setAttribute('src', $src);
-        }
-
-        foreach ($imgAttrs as $attr) {
-            if (!$row->hasAttribute($attr)) {
-                continue;
-            }
-            $row->setAttribute($attr, "$prefix.{$attr}}");
-        }
-
-        $html = $this->parser->getHTMLString($row);
-        if ($row->hasAttribute('data-mpc-if')) {
-            $condition = $row->getAttribute('data-mpc-if') ?: $complexName;
-            $html = $this->wrapInCondition($condition, $html, $firstSymbol);
-        }
-        return $html;
-    }
-
-    /**
-     * @param Element $row
-     * @param string $fieldName
-     * @param array $properties
-     * @return string
-     */
-    private function setMediaPlaceholder(Element $row, string $fieldName, array $properties): string
-    {
-        $pls = '';
-        list($firstSymbol, $complexName) = $this->getSymbolComplex($row, $fieldName, $properties['level'], $properties['isStatic']);
-        $complexName .= '[0]';
-        if ($row->hasAttribute('src')) {
-            if ($this->properties['lazyloadAttr'] && !$row->hasAttribute('data-mpc-nolazy')) {
-                $row->setAttribute($this->properties['lazyloadAttr'], "{$firstSymbol}{$complexName}.src}");
-                $row->removeAttribute('src');
-            } else {
-                $row->setAttribute('src', "{$firstSymbol}{$complexName}.src}");
-            }
-        }
-        $row = $this->setAttributes($row, $firstSymbol, $complexName);
-        $html = $this->parser->getHTMLString($row);
-
-        $sources = $row->first('source');
-        if ($sources->length) {
-            $k = $sources->length - 1;
-            $source = $this->setAttributes($sources[$k], $firstSymbol, '$source');
-            $search = ['##', 'complexName', 'html'];
-            $replace = [$firstSymbol, $complexName];
-            if ($this->properties['lazyloadAttr'] && !$row->hasAttribute('data-mpc-nolazy')) {
-                if ($row->nodeName === 'picture') {
-                    $attr = 'srcset';
-                    if (!$source->hasAttribute('data-mpc-nothumb') && !empty($this->properties['thumbSnippet'])) {
-                        $src = $this->getThumb([
-                            'width' => $source->hasAttribute('width'),
-                            'height' => $source->hasAttribute('height'),
-                            'thumbParams' => $source->getAttribute('data-mpc-thumb'),
-                            'firstSymbol' => $firstSymbol,
-                            'complexName' => '$source',
-                            'srcAttr' => 'srcset',
-                        ]);
-                    } else {
-                        $src = "{$firstSymbol}\$source.$attr}";
-                    }
-                } else {
-                    $attr = 'src';
-                    $src = "{$firstSymbol}\$source.$attr}";
-                }
-                $attr = $row->nodeName === 'picture' ? 'srcset' : 'src';
-                $source->setAttribute($this->properties['lazyloadAttr'], $src);
-                $source->removeAttribute($attr);
-            }
-            $sourceHtml = $this->parser->getHTMLString($source);
-            $replace[] = str_replace('</source>', '', $sourceHtml);
-            $pls .= str_replace($search, $replace, $this->properties['samples']['media']);
-        }
-
-        $images = $row->first('img');
-        if ($images->length) {
-            $img = $this->setAttributes($images[$images->length - 1], $firstSymbol, $complexName . '.img[0]');
-            if (!$img->hasAttribute('data-mpc-nothumb') && !empty($this->properties['thumbSnippet'])) {
-                $src = $this->getThumb([
-                    'width' => $img->hasAttribute('width'),
-                    'height' => $img->hasAttribute('height'),
-                    'thumbParams' => $img->getAttribute('data-mpc-thumb'),
-                    'firstSymbol' => $firstSymbol,
-                    'complexName' => $complexName . '.img[0]',
-                    'srcAttr' => 'src',
-                ]);
-            } else {
-                $src = "{$firstSymbol}{$complexName}.img[0].src}";
-            }
-
-            if ($this->properties['lazyloadAttr'] && !$row->hasAttribute('data-mpc-nolazy')) {
-                $img->setAttribute($this->properties['lazyloadAttr'], $src);
-                $img->setAttribute('src', $this->properties['fakeImgPath']);
-            }
-            $pls .= $this->parser->getHTMLString($img);
-        }
-
-        if ($pls) {
-            $html = preg_replace(
-                '/<' . $row->nodeName . '(.*?)>(.*?)<\/' . $row->nodeName . '>/s',
-                '<' . $row->nodeName . '\1>' . PHP_EOL . $pls . PHP_EOL . '</' . $row->nodeName . '>',
-                $html
-            );
-        }
-
-        if ($row->hasAttribute('data-mpc-if')) {
-            $condition = $row->getAttribute('data-mpc-if') ?: $complexName;
-            $html = $this->wrapInCondition($condition, $html, $firstSymbol);
-        }
-        return $html;
-    }
-
-    /**
-     * @param array $params
-     * @return string
-     */
-    private function getThumb(array $params): string
-    {
-        $snippetName = $this->properties['thumbSnippet'];
-        $thumbParams = $params['thumbParams'] ?: $this->properties['commonThumbParams'];
-        $src = $params['srcAttr'] ? "{$params['complexName']}.{$params['srcAttr']}" : $params['complexName'];
-        if ($params['width']) {
-            $width = $params['complexName'] . '.width';
-            if ($this->properties['useLexicons'] && in_array('image', $this->properties['translatableContentTypes'])) {
-                $width = '{' . $params['complexName'] . '.width}';
-            }
-            if ($params['height']) {
-                $pls = $params['setValues'] ? $params['width'] : "'~$width~'";
-            } else {
-                $pls = $params['setValues'] ? $params['width'] : "'~$width";
-            }
-            $thumbParams .= "&w=$pls";
-        }
-        if ($params['height']) {
-            $height = $params['complexName'] . '.height';
-            if ($this->properties['useLexicons'] && in_array('image', $this->properties['translatableContentTypes'])) {
-                $height = '{' . $params['complexName'] . '.height}';
-            }
-            $pls = $params['setValues'] ? $params['height'] : "'~$height";
-            $thumbParams .= "&h=$pls";
-        }
-        if (!$params['height'] && !$params['width']) {
-            $thumbParams .= "'";
-        }
-
-        if ($this->properties['useLexicons'] && in_array('image', $this->properties['translatableContentTypes'])) {
-            $src = !$this->properties['isSectionStatic'] ? '{' . $src . '}' : $src;
-            $params['firstSymbol'] = '##';
-        }
-
-        return "{$params['firstSymbol']}'$snippetName' | snippet: [ 'input' => $src, 'options' => '{$thumbParams}]}";
-    }
-
-    /**
-     * @param Element $row
-     * @param string $firstSymbol
-     * @param string $complexName
-     * @return Element
-     */
-    private function setAttributes(Element $row, string $firstSymbol, string $complexName): Element
-    {
-        $allowedAttrs = [
-            'src',
-            'srcset',
-            'loop',
-            'media',
-            'type',
-            'sizes',
-            'autoplay',
-            'controls',
-            'preload',
-            'muted',
-            'height',
-            'width',
-            'poster',
-            'alt'
-        ];
-        foreach ($row->attributes as $attr) {
-            if (!in_array($attr->nodeName, $allowedAttrs)) {
-                continue;
-            }
-            $row->setAttribute($attr->nodeName, "{$firstSymbol}{$complexName}.{$attr->nodeName}}");
-        }
-        return $row;
-    }
-
-    /**
-     * @param Element $row
-     * @param string $fieldName
-     * @param array $properties
-     * @return string
-     * @throws InvalidSelectorException
-     */
-    private function setDefaultPlaceholder(Element $row, string $fieldName, array $properties): string
-    {
-        list($firstSymbol, $complexName) = $this->getSymbolComplex($row, $fieldName, $properties['level'], $properties['isStatic']);
-        if ($row->hasAttribute('href')) {
-            if ((int)$row->getAttribute('href')) {
-                $pls = "{$firstSymbol}{$complexName} | url}";
-            } else {
-                $pls = "{$firstSymbol}{$complexName}}";
-            }
-            $row->setAttribute('href', $pls);
-        } else {
-            $row->setInnerHtml("$firstSymbol$complexName}");
-        }
-        $html = $this->parser->getHTMLString($row);
-        if ($row->hasAttribute('data-mpc-if')) {
-            $condition = $row->getAttribute('data-mpc-if') ?: $complexName;
-            $html = $this->wrapInCondition($condition, $html, $firstSymbol);
-        }
-        if ($row->hasAttribute('href')) {
-            $html = urldecode($html);
-        }
-        return $html;
-    }
-
-    /**
-     * @param Element $row
-     * @param string $fieldName
-     * @param int|null $level
-     * @param bool|null $isStatic
-     * @return array
-     */
-    private function getSymbolComplex(Element $row, string $fieldName, ?int $level = 0, ?bool $isStatic = false): array
-    {
-        $firstSymbol = $isStatic ? '##' : (trim($row->getAttribute('data-mpc-symbol')) ?: '{');
-        $rid = (int)$row->getAttribute('data-mpc-rid') ?: '';
-        $table = $row->getAttribute('data-mpc-table') ?: 'config';
-
-        if ($table === 'config') {
-            if (strpos($fieldName, 'list_images') !== false
-                || strpos($fieldName, 'list_pictures') !== false
-                || strpos($fieldName, 'list_videos') !== false
-                || strpos($fieldName, 'list_audios') !== false
-            ) {
-                $complexName = "\${$fieldName}";
-            } else {
-                $complexName = $level > 0 ? "\$item{$level}.{$fieldName}" : "\${$fieldName}";
-            }
-        } else {
-            $complexName = "($rid | resource: '$fieldName')";
-        }
-        return [$firstSymbol, $complexName];
-    }
-
-    /**
-     * @param string $conditions
-     * @param string $html
-     * @param string|null $firstSymbol
-     * @return string
-     */
-    private function wrapInCondition(string $conditions, string $html, ?string $firstSymbol = '{'): string
-    {
-        return str_replace(['##', 'condition', 'html'], [$firstSymbol, $conditions, $html], $this->properties['samples']['if']);
-    }
-
-    /**
-     * @param array $properties
-     * @return array
-     * @throws InvalidSelectorException
-     */
-    private function setSnippetTags(array $properties): array
-    {
-        if (!$snippets = $this->getItems($properties['html'], '[data-mpc-snippet]')) {
-            return $properties;
-        }
-        foreach ($snippets as $snippet) {
-            $firstSymbol = trim($snippet->getAttribute('data-mpc-symbol')) ?: '##';
-            if ($value = trim($snippet->getAttribute('data-mpc-snippet'))) {
-                $call = $this->getSnippetCall($value, $firstSymbol);
-                $snippetHTml = $this->parser->getHTMLString($snippet);
-
-                if (!$snippet->hasAttribute('data-mpc-unwrap')) {
-                    $snippet->setInnerHtml($call);
-                    $call = $this->parser->getHTMLString($snippet);
-                }
-
-                if ($snippet->hasAttribute('data-mpc-if')) {
-                    $condition = $snippet->getAttribute('data-mpc-if') ?: $call;
-                    $call = $this->wrapInCondition($condition, $call, $firstSymbol);
-                }
-
-                $properties['html'] = str_replace($snippetHTml, $call, $properties['html']);
-            }
-        }
-        return $properties;
-    }
-
-    /**
-     * @param string $value
-     * @param string $firstSymbol
-     * @return string
-     */
-    public function getSnippetCall(string $value, string $firstSymbol): string
-    {
-        $params = '';
-        $value = explode('|', $value);
-        $snippetName = $value[0];
-        if (strpos($value[0], '@FILE') === 0) {
-            $presetKey = str_replace('@FILE', '', strtolower(pathinfo($value[0], PATHINFO_FILENAME)));
-        } else {
-            $presetKey = str_replace('!', '', strtolower($value[0]));
-        }
-        $presetName = $value[1];
-        if (isset($this->properties['presets'][$presetKey]) && isset($this->properties['presets'][$presetKey][$presetName])) {
-            $preset = $this->properties['presets'][$presetKey][$presetName];
-            if ($preset['extends']) {
-                if (strpos($preset['extends'], '.') === false) {
-                    $preset['extends'] = $presetKey . '.' . $preset['extends'];
-                }
-                $extendsPreset = $this->getExtends($preset['extends'], []);
-                $preset = array_merge($extendsPreset, $preset);
-                unset($preset['extends']);
-            }
-
-            foreach ($preset as $k => $v) {
-                if (is_array($v)) {
-                    $v = json_encode($v);
-                    $v = str_replace('{', '{ ', $v);
-                    $v = str_replace('##', '{', $v);
-                }
-                if (strpos($v, '#/') === 0) {
-                    $v = str_replace('#/', '@FILE ' . $this->properties['pathToChunks'], $v);
-                }
-
-                if (strpos($v, '$') === 0 || strpos($v, '[') === 0 || strpos($v, '"') === 0) {
-                    $params .= "'$k' => $v," . PHP_EOL;
-                } else {
-                    $params .= "'$k' => '$v'," . PHP_EOL;
-                }
-
-                if ($k == 'toPls' && $v) {
-                    $firstSymbol = PHP_EOL . $firstSymbol . 'set $' . $v . ' = ';
-                }
-            }
-        }
-
-
-        if ($params) {
-            $call = PHP_EOL . "$firstSymbol'$snippetName' | snippet: [
-                        $params
-                        ]}" . PHP_EOL;
-        } else {
-            $call = PHP_EOL . "$firstSymbol'$snippetName' | snippet: []}" . PHP_EOL;
-        }
-        return $call;
-    }
-
-    /**
-     * @param string $preset
-     * @param array|null $extends
-     * @return array
-     */
-    private function getExtends(string $preset, ?array $extends = []): array
-    {
-        $preset = explode('.', $preset);
-        $presetData = $this->properties['presets'][$preset[0]][$preset[1]];
-        if ($presetData && is_array($presetData)) {
-            $extends = array_merge($extends, $presetData);
-            if ($presetData['extends']) {
-                $extends = $this->getExtends($presetData['extends'], $extends);
-            }
-        }
-        return $extends;
-    }
-
-    /**
-     *
-     * @param array $properties
-     * @return array
-     * @throws InvalidSelectorException
-     */
-    private function setParseChunks(array $properties): array
-    {
-        if ($parses = $this->getItems($properties['html'], '[data-mpc-parse]')) {
-            foreach ($parses as $parse) {
-                $symbol = trim($parse->getAttribute('data-mpc-symbol')) ?: '##';
-                $params = trim($parse->getAttribute('data-mpc-parse'));
-                $path = $this->properties['pathToChunks'] . trim($parse->getAttribute('data-mpc-chunk'));
-                $parseHtml = $this->parser->getHTMLString($parse);
-                $parseHtmlNew = $symbol . '$_modx->parseChunk("@FILE ' . $path . '", ' . $params . ')}';
-                $properties['html'] = str_replace($parseHtml, $parseHtmlNew, $properties['html']);
-            }
-        }
-        return $properties;
-    }
-
-    /**
-     * @param array $properties
-     * @return array
-     * @throws InvalidSelectorException
-     */
-    private function setIncludeChunks(array $properties): array
-    {
-        if ($includes = $this->getItems($properties['html'], '[data-mpc-include]')) {
-            foreach ($includes as $include) {
-                $path = $this->properties['pathToChunks'] . trim($include->getAttribute('data-mpc-chunk'));
-                $symbol = trim($include->getAttribute('data-mpc-symbol')) ?: '{';
-                $includeHtml = $this->parser->getHTMLString($include);
-                $includeHtmlNew = $symbol . 'include "file:' . $path . '"}';
-                $properties['html'] = str_replace($includeHtml, $includeHtmlNew, $properties['html']);
-            }
-        }
-        return $properties;
-    }
-
-    /**
-     *
-     * @param array $properties
-     * @return array
-     * @throws InvalidSelectorException
-     */
-    private function removeHiddenPlaceholders(array $properties): array
-    {
-        if ($hiddenPls = $this->getItems($properties['html'], '[data-mpc-remove]')) {
-            foreach ($hiddenPls as $hidden) {
-                $hiddenHtml = $this->parser->getHTMLString($hidden);
-                $properties['html'] = str_replace($hiddenHtml, '', $properties['html']);
-            }
-        }
-        return $properties;
-    }
-
 }
