@@ -18,7 +18,8 @@ class MigxpageconfiguratorLexiconsExportProcessor extends modProcessor
             return $this->failure($this->modx->lexicon('mpc_err_no_filename'));
         }
 
-        $lexiconBase   = $corePath . 'lexicon/';
+        $lexiconBase   = $this->modx->getOption('core_path')
+            . $this->modx->getOption('mpc_lexicon_path', null, 'components/migxpageconfigurator/lexicon/');
         $defaultLang   = $this->modx->getOption('mpc_default_language', null, 'ru');
         $staticFile    = $this->modx->getOption('mpc_static_blocks_page_lexicon_filename', null, 'static');
 

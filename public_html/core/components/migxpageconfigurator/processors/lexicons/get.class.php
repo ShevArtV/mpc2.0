@@ -13,9 +13,8 @@ class MigxpageconfiguratorLexiconsGetProcessor extends modProcessor
             return $this->failure($this->modx->lexicon('mpc_err_no_filename'));
         }
 
-        $corePath    = $this->modx->getOption('migxpageconfigurator_core_path', null,
-            $this->modx->getOption('core_path') . 'components/migxpageconfigurator/');
-        $lexiconBase = $corePath . 'lexicon/';
+        $lexiconBase = $this->modx->getOption('core_path')
+            . $this->modx->getOption('mpc_lexicon_path', null, 'components/migxpageconfigurator/lexicon/');
         $defaultLang = $this->modx->getOption('mpc_default_language', null, 'ru');
         $incFile     = $filename . '.inc.php';
 

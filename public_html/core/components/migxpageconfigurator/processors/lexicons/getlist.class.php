@@ -6,9 +6,8 @@ class MigxpageconfiguratorLexiconsGetlistProcessor extends modProcessor
 {
     public function process()
     {
-        $corePath      = $this->modx->getOption('migxpageconfigurator_core_path', null,
-            $this->modx->getOption('core_path') . 'components/migxpageconfigurator/');
-        $lexiconBase   = $corePath . 'lexicon/';
+        $lexiconBase   = $this->modx->getOption('core_path')
+            . $this->modx->getOption('mpc_lexicon_path', null, 'components/migxpageconfigurator/lexicon/');
         $defaultLang   = $this->modx->getOption('mpc_default_language', null, 'ru');
         $filenameField = $this->modx->getOption('mpc_lexicon_filename_field', null, 'alias');
         $labelField    = $this->modx->getOption('mpc_cmp_resource_label_field', null, 'pagetitle');

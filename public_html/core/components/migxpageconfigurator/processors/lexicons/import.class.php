@@ -22,7 +22,8 @@ class MigxpageconfiguratorLexiconsImportProcessor extends modProcessor
 
         $tmpFile      = $_FILES['file']['tmp_name'];
         $originalName = basename($_FILES['file']['name'] ?? '');
-        $lexiconBase    = $corePath . 'lexicon/';
+        $lexiconBase    = $this->modx->getOption('core_path')
+            . $this->modx->getOption('mpc_lexicon_path', null, 'components/migxpageconfigurator/lexicon/');
         $staticFile     = $this->modx->getOption('mpc_static_blocks_page_lexicon_filename', null, 'static');
         $allowedTags    = trim($this->modx->getOption('mpc_allowed_tags', null, ''));
         $allowModxTags  = (bool)$this->modx->getOption('mpc_allow_modx_tags', null, false);

@@ -13,7 +13,8 @@ class MigxpageconfiguratorLexiconsExportallProcessor extends modProcessor
 
         require_once $corePath . 'services/vendor/autoload.php';
 
-        $lexiconBase = $corePath . 'lexicon/';
+        $lexiconBase = $this->modx->getOption('core_path')
+            . $this->modx->getOption('mpc_lexicon_path', null, 'components/migxpageconfigurator/lexicon/');
         $defaultLang = $this->modx->getOption('mpc_default_language', null, 'ru');
 
         $requestedLangs = $this->getProperty('languages', '');
