@@ -14,10 +14,7 @@ MPC.page.Lexicons = Ext.extend(Ext.Panel, {
 
         var langGrid      = new MPC.grid.Languages({ id: 'mpc-languages-grid' });
         var lexiconsGrid  = new MPC.grid.LexiconKeys({ id: 'mpc-lexicons-grid' });
-        var resourcesGrid = new MPC.grid.Resources({
-            id:           'mpc-resources-grid',
-            getLanguages: function () { return langGrid.getActiveLanguages(); },
-        });
+        var resourcesGrid = new MPC.grid.Resources({ id: 'mpc-resources-grid' });
 
         Ext.applyIf(config, {
             layout: 'border',
@@ -56,6 +53,8 @@ MPC.page.Lexicons = Ext.extend(Ext.Panel, {
         });
 
         MPC.page.Lexicons.superclass.constructor.call(this, config);
+
+        lexiconsGrid.resourcesGrid = resourcesGrid;
 
         // Clicking a resource loads its lexicons with currently active languages
         resourcesGrid.on('rowclick', function (grid, idx) {
@@ -204,10 +203,13 @@ MPC.grid.Resources = Ext.extend(Ext.grid.GridPanel, {
                 },
                 '->',
                 {
-                    text:    'Экспорт выбранных (ZIP)',
-                    iconCls: 'icon-zip',
-                    handler: this.exportSelected,
-                    scope:   this,
+                    xtype:      'textfield',
+                    emptyText:  'Поиск...',
+                    width:      140,
+                    enableKeyEvents: true,
+                    listeners: {
+                        keyup: { fn: this.onSearchKeyUp, scope: this, buffer: 300 },
+                    },
                 },
             ],
         });
@@ -215,35 +217,14 @@ MPC.grid.Resources = Ext.extend(Ext.grid.GridPanel, {
         MPC.grid.Resources.superclass.constructor.call(this, config);
     },
 
-    exportSelected: function () {
-        var selected = this.getSelectionModel().getSelections();
-        if (!selected.length) {
-            MODx.msg.alert('Внимание', 'Выберите хотя бы один ресурс');
-            return;
-        }
-        var filenames = [];
-        for (var i = 0; i < selected.length; i++) {
-            filenames.push(selected[i].get('filename'));
-        }
-        var langs = this.getLanguages ? this.getLanguages() : [];
-        Ext.Ajax.request({
-            url:     MPC.config.connector_url,
-            params:  {
-                action:    'lexicons/exportall',
-                filenames: filenames.join(','),
-                languages: langs.join(','),
-            },
-            timeout: 120000,
-            success: function (resp) {
-                var obj = Ext.decode(resp.responseText);
-                if (obj.success) {
-                    window.location.href = obj.object.filePath;
-                } else {
-                    MODx.msg.alert('Ошибка', obj.message);
-                }
-            },
+    onSearchKeyUp: function (field) {
+        var val = field.getValue().toLowerCase();
+        this.store.filterBy(function (rec) {
+            if (!val) { return true; }
+            return (rec.get('title') || '').toLowerCase().indexOf(val) !== -1;
         });
     },
+
 });
 
 
@@ -270,6 +251,12 @@ MPC.grid.LexiconKeys = Ext.extend(Ext.grid.EditorGridPanel, {
             ]}),
             tbar: [
                 '->',
+                {
+                    text:    'Экспорт выбранных (ZIP)',
+                    iconCls: 'icon-zip',
+                    handler: this.exportSelected,
+                    scope:   this,
+                },
                 {
                     text:    'Экспорт',
                     iconCls: 'icon-xlsx',
@@ -377,6 +364,37 @@ MPC.grid.LexiconKeys = Ext.extend(Ext.grid.EditorGridPanel, {
             },
             failure: function () {
                 MODx.msg.alert('Ошибка', 'Не удалось сохранить значение');
+            },
+        });
+    },
+
+    exportSelected: function () {
+        if (!this.resourcesGrid) { return; }
+        var selected = this.resourcesGrid.getSelectionModel().getSelections();
+        if (!selected.length) {
+            MODx.msg.alert('Внимание', 'Выберите хотя бы один ресурс');
+            return;
+        }
+        var filenames = [];
+        for (var i = 0; i < selected.length; i++) {
+            filenames.push(selected[i].get('filename'));
+        }
+        var langs = (this.activeLanguages || []);
+        Ext.Ajax.request({
+            url:     MPC.config.connector_url,
+            params:  {
+                action:    'lexicons/exportall',
+                filenames: filenames.join(','),
+                languages: langs.join(','),
+            },
+            timeout: 120000,
+            success: function (resp) {
+                var obj = Ext.decode(resp.responseText);
+                if (obj.success) {
+                    window.location.href = obj.object.filePath;
+                } else {
+                    MODx.msg.alert('Ошибка', obj.message);
+                }
             },
         });
     },
