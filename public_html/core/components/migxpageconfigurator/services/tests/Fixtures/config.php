@@ -60,5 +60,6 @@ return [
     'mpc_resource_lexicon_keys_path' => '',
     'mpc_allow_modx_tags'           => false,
     'mpc_download_extensions'       => '',
+    'mpc_mime_to_ext'               => '{}',
     'mpc_lexicon_filename_field'    => 'id',
 ];

@@ -27,13 +27,51 @@ class MediaDownloader
 
     public function checkDownloadExtension(string $attrValue): string
     {
-        $extension = pathinfo($attrValue, PATHINFO_EXTENSION);
+        $path = parse_url($attrValue, PHP_URL_PATH) ?: $attrValue;
+        $extension = strtolower(pathinfo($path, PATHINFO_EXTENSION));
+        return in_array($extension, $this->properties['downloadExtensions']) ? $extension : '';
+    }
+
+    public function detectExtensionByContentType(string $url): string
+    {
+        $ch = curl_init($url);
+        curl_setopt($ch, CURLOPT_NOBODY, true);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+        curl_setopt($ch, CURLOPT_MAXREDIRS, 5);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
+        curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (compatible; MPC/2.0)');
+        curl_exec($ch);
+        $contentType = curl_getinfo($ch, CURLINFO_CONTENT_TYPE);
+        curl_close($ch);
+
+        if (!$contentType) {
+            return '';
+        }
+
+        $mime = strtolower(explode(';', $contentType)[0]);
+        $mimeToExt = $this->properties['mimeToExt'] ?? [];
+        $extension = $mimeToExt[$mime] ?? '';
+
         return in_array($extension, $this->properties['downloadExtensions']) ? $extension : '';
     }
 
     protected function getBaseDir(): string
     {
         return dirname(__FILE__, 8);
+    }
+
+    public function sanitizeFileName(string $name): string
+    {
+        if (function_exists('transliterator_transliterate')) {
+            $name = transliterator_transliterate('Any-Latin; Latin-ASCII', $name);
+        }
+        $name = strtolower(trim($name));
+        $name = preg_replace('/[^a-z0-9_\-]/', '-', $name);
+        $name = preg_replace('/-+/', '-', $name);
+        return trim($name, '-');
     }
 
     public function download(string $url, string $path): string
@@ -51,10 +89,21 @@ class MediaDownloader
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
         curl_setopt($ch, CURLOPT_HEADER, false);
+        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+        curl_setopt($ch, CURLOPT_MAXREDIRS, 5);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 30);
+        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
+        curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (compatible; MPC/2.0)');
         $content = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         curl_close($ch);
 
-        return ($content && file_put_contents($fullPath, $content)) ? $path : '';
+        if (!$content || $httpCode >= 400) {
+            $this->modx->log(\modX::LOG_LEVEL_ERROR, "[MPC MediaDownloader] Failed to download: $url (HTTP $httpCode)");
+            return '';
+        }
+
+        return file_put_contents($fullPath, $content) ? $path : '';
     }
 
     public function downloadImage(string $attrValue, string $language = ''): string
@@ -78,7 +127,10 @@ class MediaDownloader
             return $attrValue;
         }
 
-        if (!$extension = $this->checkDownloadExtension($attrValue)) {
+        $extension = $this->checkDownloadExtension($attrValue)
+            ?: $this->detectExtensionByContentType($attrValue);
+
+        if (!$extension) {
             return $attrValue;
         }
 
@@ -86,7 +138,8 @@ class MediaDownloader
             ? $this->properties['downloadPaths'][$type] . $this->currentSectionName . '/'
             : $this->properties['downloadPaths'][$type];
 
-        $fileName = pathinfo($attrValue, PATHINFO_FILENAME);
+        $urlPath  = parse_url($attrValue, PHP_URL_PATH) ?: $attrValue;
+        $fileName = pathinfo($urlPath, PATHINFO_FILENAME);
         if ($language) {
             $fileName = $language . '-' . $fileName;
         }
@@ -107,7 +160,7 @@ class MediaDownloader
             mkdir($fullPathToDir, 0777, true);
         }
 
-        $fileName = $this->properties['resource']->cleanAlias($fileName);
+        $fileName = $this->sanitizeFileName($fileName);
         if ($path = $this->download($attrValue, $this->downloadPath . $fileName . '.' . $extension)) {
             $attrValue = $path;
         }

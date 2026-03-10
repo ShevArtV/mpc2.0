@@ -75,6 +75,10 @@ class Grabber extends Base
         $downloadPaths = $this->modx->getOption('mpc_download_paths', '', ['images' => '', 'videos' => '', 'audios' => '', 'others' => '']);
         $downloadPaths = is_array($downloadPaths) ? $downloadPaths : (json_decode($downloadPaths, true) ?: []);
 
+        $defaultMimeToExt = '{"image/jpeg":"jpg","image/png":"png","image/gif":"gif","image/webp":"webp","image/svg+xml":"svg","image/avif":"avif","video/mp4":"mp4","video/webm":"webm","video/ogg":"ogv","audio/mpeg":"mp3","audio/ogg":"ogg","audio/wav":"wav","audio/webm":"webm","text/plain":"txt","application/pdf":"pdf"}';
+        $mimeToExt = $this->modx->getOption('mpc_mime_to_ext', '', $defaultMimeToExt);
+        $mimeToExt = is_array($mimeToExt) ? $mimeToExt : (json_decode($mimeToExt, true) ?: []);
+
         $this->properties = array_merge($this->properties, [
             'startPageId'             => $this->modx->getOption('site_start', null, 1),
             'phoneRegExp'             => $this->modx->getOption('mpc_phone_regexp', '', '/(\d)(\d{3})(\d{3})(\d{2})(\d{2})$/'),
@@ -85,6 +89,7 @@ class Grabber extends Base
             'excludeLexiconFields'    => $excludeLexiconFields,
             'allowModxTags'           => $this->modx->getOption('mpc_allow_modx_tags', '', false),
             'downloadExtensions'      => explode(',', $this->modx->getOption('mpc_download_extensions', '', '')),
+            'mimeToExt'               => $mimeToExt,
             'allowedTags'             => explode(',', $this->modx->getOption('mpc_allowed_tags', '', '')),
             'lexiconFilenameField'    => $this->modx->getOption('mpc_lexicon_filename_field', '', 'id'),
         ]);

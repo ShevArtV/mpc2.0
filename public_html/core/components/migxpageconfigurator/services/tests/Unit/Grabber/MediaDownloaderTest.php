@@ -18,16 +18,32 @@ class TestableMediaDownloader extends MediaDownloader
     public array $downloadCalls = [];
     /** Возвращаемый контент (null = имитировать ошибку curl) */
     public ?string $httpContent = 'fake-image-content';
+    /** Имитация Content-Type для detectExtensionByContentType ('' = не определён) */
+    public string $fakeContentType = '';
+
+    private array $testProps;
 
     public function __construct(\modX $modx, array $properties, string $baseDir)
     {
         parent::__construct($modx, $properties);
+        $this->testProps = $properties;
         $this->baseDir = rtrim($baseDir, '/');
     }
 
     protected function getBaseDir(): string
     {
         return $this->baseDir;
+    }
+
+    public function detectExtensionByContentType(string $url): string
+    {
+        if (!$this->fakeContentType) {
+            return '';
+        }
+        $mime = strtolower(explode(';', $this->fakeContentType)[0]);
+        $mimeToExt = $this->testProps['mimeToExt'] ?? [];
+        $extension = $mimeToExt[$mime] ?? '';
+        return in_array($extension, $this->testProps['downloadExtensions']) ? $extension : '';
     }
 
     public function download(string $url, string $path): string
@@ -87,14 +103,6 @@ class MediaDownloaderTest extends TestCase
         rmdir($dir);
     }
 
-    private function makeResource(): object
-    {
-        return new class {
-            public function get(string $key): mixed { return 42; }
-            public function cleanAlias(string $s): string { return $s; }
-        };
-    }
-
     private function makeDownloader(array $extraProps = []): TestableMediaDownloader
     {
         $modx = new ModxStub();
@@ -107,7 +115,10 @@ class MediaDownloaderTest extends TestCase
                 'audios' => '/assets/audios/',
                 'others' => '/assets/others/',
             ],
-            'resource' => $this->makeResource(),
+            'mimeToExt' => [
+                'image/jpeg' => 'jpg', 'image/png' => 'png', 'image/webp' => 'webp',
+                'video/mp4' => 'mp4', 'audio/mpeg' => 'mp3',
+            ],
         ], $extraProps);
 
         return new TestableMediaDownloader($modx, $props, $this->tmpDir);
@@ -135,10 +146,110 @@ class MediaDownloaderTest extends TestCase
         $this->assertEquals('', $d->checkDownloadExtension('https://example.com/noextension'));
     }
 
-    public function testCheckDownloadExtensionCaseSensitive(): void
+    public function testCheckDownloadExtensionCaseInsensitive(): void
     {
         $d = $this->makeDownloader(['downloadExtensions' => ['jpg']]);
-        $this->assertEquals('', $d->checkDownloadExtension('https://example.com/photo.JPG'));
+        $this->assertEquals('jpg', $d->checkDownloadExtension('https://example.com/photo.JPG'));
+    }
+
+    // -----------------------------------------------------------------------
+    // sanitizeFileName
+    // -----------------------------------------------------------------------
+
+    public function testSanitizeFileNameRemovesSpecialChars(): void
+    {
+        $d = $this->makeDownloader();
+        $this->assertEquals('hello-world', $d->sanitizeFileName('hello world!'));
+    }
+
+    public function testSanitizeFileNameCollapsesMultipleDashes(): void
+    {
+        $d = $this->makeDownloader();
+        $this->assertEquals('a-b', $d->sanitizeFileName('a---b'));
+    }
+
+    public function testSanitizeFileNameHandlesCyrillic(): void
+    {
+        $d = $this->makeDownloader();
+        $result = $d->sanitizeFileName('фото');
+        $this->assertMatchesRegularExpression('/^[a-z0-9_\-]+$/', $result);
+    }
+
+    public function testSanitizeFileNameTrimsEdgeDashes(): void
+    {
+        $d = $this->makeDownloader();
+        $this->assertEquals('file', $d->sanitizeFileName('--file--'));
+    }
+
+    // -----------------------------------------------------------------------
+    // detectExtensionByContentType
+    // -----------------------------------------------------------------------
+
+    public function testDetectExtensionByContentTypeReturnsJpgForImageJpeg(): void
+    {
+        $d = $this->makeDownloader();
+        $d->fakeContentType = 'image/jpeg';
+        $this->assertEquals('jpg', $d->detectExtensionByContentType('https://example.com/download/123'));
+    }
+
+    public function testDetectExtensionByContentTypeReturnsMp4ForVideoMp4(): void
+    {
+        $d = $this->makeDownloader();
+        $d->fakeContentType = 'video/mp4';
+        $this->assertEquals('mp4', $d->detectExtensionByContentType('https://example.com/download/456'));
+    }
+
+    public function testDetectExtensionByContentTypeReturnsEmptyForUnknownMime(): void
+    {
+        $d = $this->makeDownloader();
+        $d->fakeContentType = 'application/octet-stream';
+        $this->assertEquals('', $d->detectExtensionByContentType('https://example.com/download/789'));
+    }
+
+    public function testDetectExtensionByContentTypeReturnsEmptyWhenNoResponse(): void
+    {
+        $d = $this->makeDownloader();
+        $d->fakeContentType = '';
+        $this->assertEquals('', $d->detectExtensionByContentType('https://example.com/download/000'));
+    }
+
+    public function testDetectExtensionByContentTypeStripsCharset(): void
+    {
+        $d = $this->makeDownloader();
+        $d->fakeContentType = 'image/png; charset=utf-8';
+        $this->assertEquals('png', $d->detectExtensionByContentType('https://example.com/download/111'));
+    }
+
+    public function testDetectExtensionByContentTypeRespectsAllowedExtensions(): void
+    {
+        $d = $this->makeDownloader(['downloadExtensions' => ['jpg']]);
+        $d->fakeContentType = 'image/png';
+        $this->assertEquals('', $d->detectExtensionByContentType('https://example.com/download/222'));
+    }
+
+    // -----------------------------------------------------------------------
+    // downloadFile() с фоллбэком на Content-Type
+    // -----------------------------------------------------------------------
+
+    public function testDownloadFileFallsBackToContentType(): void
+    {
+        $d = $this->makeDownloader();
+        $d->fakeContentType = 'image/jpeg';
+        $result = $d->downloadFile('https://example.com/download/12345/', 'images');
+
+        $this->assertStringStartsWith('/assets/images/', $result);
+        $this->assertStringEndsWith('.jpg', $result);
+        $this->assertCount(1, $d->downloadCalls);
+    }
+
+    public function testDownloadFileReturnsOriginalWhenBothDetectionsFail(): void
+    {
+        $d = $this->makeDownloader();
+        $d->fakeContentType = '';
+        $result = $d->downloadFile('https://example.com/download/no-ext/', 'images');
+
+        $this->assertEquals('https://example.com/download/no-ext/', $result);
+        $this->assertEmpty($d->downloadCalls);
     }
 
     // -----------------------------------------------------------------------

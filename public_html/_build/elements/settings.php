@@ -136,6 +136,11 @@ return [
         'value' => 'jpg,jpeg,png,webp,mp4,mp3,txt',
         'area' => 'default',
     ],
+    'mpc_mime_to_ext' => [
+        'xtype' => 'textarea',
+        'value' => '{"image/jpeg":"jpg","image/png":"png","image/gif":"gif","image/webp":"webp","image/svg+xml":"svg","image/avif":"avif","video/mp4":"mp4","video/webm":"webm","video/ogg":"ogv","audio/mpeg":"mp3","audio/ogg":"ogg","audio/wav":"wav","audio/webm":"webm","text/plain":"txt","application/pdf":"pdf"}',
+        'area' => 'default',
+    ],
     'mpc_lazyload_enabled' => [
         'xtype' => 'combo-boolean',
         'value' => '1',
@@ -199,6 +204,16 @@ return [
     'mpc_allow_modx_tags' =>  [
         'xtype' => 'combo-boolean',
         'value' => '0',
+        'area' => 'default',
+    ],
+    'mpc_wrapper_name' => [
+        'xtype' => 'textfield',
+        'value' => 'wrapper',
+        'area' => 'default',
+    ],
+    'mpc_path_to_samples' => [
+        'xtype' => 'textfield',
+        'value' => 'components/migxpageconfigurator/elements/samples/',
         'area' => 'default',
     ],
     'mpc_resource_lexicon_keys_path' => [
