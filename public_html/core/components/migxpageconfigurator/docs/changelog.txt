@@ -10,6 +10,7 @@
 - Добавил определение расширения файла по Content-Type для URL без расширения (HEAD-запрос).
 - Добавил системную настройку mpc_mime_to_ext — маппинг MIME-типов к расширениям файлов (JSON).
 - Исправил опечатку в EN-лексиконе: setting_mpc_mpc_thumb_snippet → setting_mpc_thumb_snippet.
+- Заменил PhpSpreadsheet на OpenSpout — размер пакета уменьшен в ~2.5 раза.
 - Удалил дубликат setting_mpc_phone_regexp_desc в EN-лексиконе.
 
 2.3.1-rc

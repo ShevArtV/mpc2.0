@@ -89,7 +89,8 @@ class MigxpageconfiguratorLexiconsImportProcessor extends modProcessor
         bool   $allowModxTags
     ): array {
         try {
-            $spreadsheet = \PhpOffice\PhpSpreadsheet\IOFactory::load($tmpFile);
+            $reader = \OpenSpout\Reader\Common\Creator\ReaderFactory::createFromType('xlsx');
+            $reader->open($tmpFile);
         } catch (\Exception $e) {
             return ['count' => 0, 'errors' => [$this->modx->lexicon('mpc_err_cannot_read_file') . ': ' . $e->getMessage()]];
         }
@@ -97,8 +98,8 @@ class MigxpageconfiguratorLexiconsImportProcessor extends modProcessor
         $baseName = preg_replace('/_lexicons$/', '', basename($originalName, '.xlsx'));
         $errors   = [];
 
-        foreach ($spreadsheet->getAllSheets() as $sheet) {
-            $title = $sheet->getTitle();
+        foreach ($reader->getSheetIterator() as $sheet) {
+            $title = $sheet->getName();
             if ($title === 'Resource') {
                 $targetFilename = $baseName . '.inc.php';
             } elseif ($title === 'Static') {
@@ -115,13 +116,13 @@ class MigxpageconfiguratorLexiconsImportProcessor extends modProcessor
             $this->processSheet($sheet, $lexiconBase, $targetFilename, $allowedTags, $allowModxTags);
         }
 
+        $reader->close();
+
         return ['count' => empty($errors) ? 1 : 0, 'errors' => $errors];
     }
 
     private function sanitizeValue(string $value, string $allowedTags, bool $allowModxTags): string
     {
-        // Strip disallowed HTML tags
-        // Setting stores tags as comma-separated: "b,i,a" → convert to ["b","i","a"] for strip_tags()
         if ($allowedTags !== '') {
             $tagList = array_filter(array_map('trim', explode(',', $allowedTags)));
             $value   = strip_tags($value, $tagList);
@@ -129,7 +130,6 @@ class MigxpageconfiguratorLexiconsImportProcessor extends modProcessor
             $value = strip_tags($value);
         }
 
-        // Strip MODX [[...]] and Fenom {…} tags if not allowed
         if (!$allowModxTags) {
             $value = preg_replace('/\[\[.+?\]\]/s', '', $value);
             $value = preg_replace('/\{.+?\}/s', '', $value);
@@ -139,18 +139,26 @@ class MigxpageconfiguratorLexiconsImportProcessor extends modProcessor
     }
 
     private function processSheet(
-        \PhpOffice\PhpSpreadsheet\Worksheet\Worksheet $sheet,
+        \OpenSpout\Reader\XLSX\Sheet $sheet,
         string $basePath,
         string $targetFilename,
         string $allowedTags = '',
         bool   $allowModxTags = false
     ): void {
-        $rows = $sheet->toArray(null, true, true, false);
-        if (empty($rows)) {
-            return;
+        $headers   = [];
+        $rows      = [];
+        $rowIndex  = 0;
+
+        foreach ($sheet->getRowIterator() as $row) {
+            $cells = $row->toArray();
+            if ($rowIndex === 0) {
+                $headers = $cells;
+            } else {
+                $rows[] = $cells;
+            }
+            $rowIndex++;
         }
 
-        $headers = array_shift($rows);
         if (empty($headers) || ($headers[0] ?? '') !== 'lexicon_key') {
             return;
         }
@@ -160,7 +168,7 @@ class MigxpageconfiguratorLexiconsImportProcessor extends modProcessor
         // Build per-language arrays
         $langData = [];
         foreach ($rows as $row) {
-            $key = $row[0] ?? '';
+            $key = (string)($row[0] ?? '');
             if ($key === '') {
                 continue;
             }
@@ -171,7 +179,6 @@ class MigxpageconfiguratorLexiconsImportProcessor extends modProcessor
         }
 
         foreach ($langData as $lang => $data) {
-            // Security: only allow valid language codes
             if (!preg_match('/^[a-z]{2}/', $lang)) {
                 continue;
             }

@@ -6,9 +6,9 @@
 
 namespace MpcServices\Helpers;
 
-use PhpOffice\PhpSpreadsheet\IOFactory;
-use PhpOffice\PhpSpreadsheet\Spreadsheet;
-use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
+use OpenSpout\Common\Entity\Row;
+use OpenSpout\Reader\Common\Creator\ReaderFactory;
+use OpenSpout\Writer\Common\Creator\WriterEntityFactory;
 
 class ExcelFileHandler
 {
@@ -46,123 +46,95 @@ class ExcelFileHandler
         if (empty($data)) {
             return '';
         }
-        $headers = $this->getFileHeaders(array_keys($data[0]));
-        $fileData = array_merge($headers, $this->getFileData($data));
-        return $this->createFile($fileData, $filename, $dir);
+        $headers = array_keys($data[0]);
+        $headerLabels = array_map(fn($key) => $this->fields[$key] ?? $key, $headers);
+
+        return $this->createFile($headers, $headerLabels, $data, $filename, $dir);
     }
 
-    private function getFileHeaders(array $keys, ?array $exclude = []): array
+    private function createFile(array $keys, array $headerLabels, array $data, string $filename, ?string $dir = ''): string
     {
-        $headers = [];
-        foreach ($keys as $i => $key) {
-            if (in_array($key, $exclude)) {
-                continue;
-            }
-            $index = $this->getColumnIndex($i + 1);
-            $headers[$index . '1'] = $this->fields[$key] ?? $key;
-        }
-        return $headers;
-    }
-
-    private function getColumnIndex(int $number, string $index = ''): string
-    {
-        if ($number <= 0) {
-            return $index;
-        }
-
-        $number--;
-
-        $remainder = $number % 26;
-        $quotient = (int)($number / 26);
-
-        if ($quotient > 0) {
-            $index = $this->getColumnIndex($quotient, $index);
-        }
-
-        return $index . chr($remainder + 65);
-    }
-
-    private function getFileData($data, ?array $exclude = []): array
-    {
-        $output = [];
-        foreach ($data as $row => $values) {
-            $col = 1;
-            foreach ($values as $key => $value) {
-                if (in_array($key, $exclude)) {
-                    continue;
-                }
-                $index = $this->getColumnIndex($col);
-                $output[$index . ($row + 2)] = $value;
-                $col++;
-            }
-        }
-        return $output;
-    }
-
-    private function createFile(array $data, string $filename, ?string $dir = ''): string
-    {
-        $spreadsheet = new Spreadsheet();
-        $sheet = $spreadsheet->getActiveSheet();
         $pathToReports = $this->assetsPath . $dir;
         $filePath = $this->assetsPath . $dir . $filename;
-        foreach ($data as $cell => $value) {
-            $sheet->setCellValue($cell, is_array($value) ? implode('; ', $value) : $value);
-            $this->modx->invokeEvent('mpcOnAddCellToExcel', [
-                'cell' => $cell,
-                'sheet' => $sheet,
-                'spreadsheet' => $spreadsheet,
-                'filePath' => $filePath,
-                'ExcelFileHandler' => $this
-            ]);
-        }
-        $writer = new Xlsx($spreadsheet);
+
         if (!is_dir($pathToReports)) {
             mkdir($pathToReports, 0755, true);
         }
 
         $this->modx->invokeEvent('mpcOnBeforeSaveExcel', [
             'filePath' => $filePath,
-            'sheet' => $sheet,
-            'spreadsheet' => $spreadsheet,
             'ExcelFileHandler' => $this
         ]);
         $filePath = isset($this->modx->event->returnedValues) && !empty($this->modx->event->returnedValues['filePath'])
             ? $this->modx->event->returnedValues['filePath'] : $filePath;
-        $writer->save($filePath);
+
+        $writer = WriterEntityFactory::createXLSXWriter();
+        $writer->openToFile($filePath);
+
+        // Header row
+        $writer->addRow($this->createRow($headerLabels));
+
+        // Data rows
+        foreach ($data as $rowData) {
+            $values = [];
+            foreach ($keys as $key) {
+                $value = $rowData[$key] ?? '';
+                $values[] = is_array($value) ? implode('; ', $value) : $value;
+            }
+
+            $this->modx->invokeEvent('mpcOnAddCellToExcel', [
+                'values' => $values,
+                'keys' => $keys,
+                'filePath' => $filePath,
+                'ExcelFileHandler' => $this
+            ]);
+
+            $writer->addRow($this->createRow($values));
+        }
+
+        $writer->close();
+
         return '/' . str_replace($this->basePath, '', $filePath);
+    }
+
+    private function createRow(array $values): Row
+    {
+        return WriterEntityFactory::createRowFromArray($values);
     }
 
     public function getDataFromFile(string $path): array
     {
-        $spreadsheet = IOFactory::load($path);
-        $file_keys = array_flip($this->fields);
+        $reader = ReaderFactory::createFromType('xlsx');
+        $reader->open($path);
+
+        $fileKeys = array_flip($this->fields);
         $listeners = [];
         $fieldLinks = [];
 
-        $sheet = $spreadsheet->getActiveSheet();
-        $cells = $sheet->getCellCollection();
-        $lastCol = $sheet->getHighestColumn();
-        for ($row = 1; $row <= $cells->getHighestRow(); $row++) {
-            $c = 0;
-            if ($row === 1) {
-                for ($col = 'A'; $col <= $lastCol; $col++) {
-                    $cell = $cells->get($col . $row);
-                    if ($cell) {
-                        $value = $cell->getValue();
-                        $fieldLinks[] = $file_keys[$value] ?? $value;
+        foreach ($reader->getSheetIterator() as $sheet) {
+            $rowIndex = 0;
+            foreach ($sheet->getRowIterator() as $row) {
+                $cells = $row->toArray();
+                if ($rowIndex === 0) {
+                    foreach ($cells as $value) {
+                        $fieldLinks[] = $fileKeys[$value] ?? $value;
                     }
-                }
-            } else {
-                for ($col = 'A'; $col <= $lastCol; $col++) {
-                    if(!isset($fieldLinks[$c])){
-                        continue;
+                } else {
+                    $rowData = [];
+                    foreach ($cells as $c => $value) {
+                        if (!isset($fieldLinks[$c])) {
+                            continue;
+                        }
+                        $rowData[$fieldLinks[$c]] = (string)($value ?? '');
                     }
-                    $cell = $cells->get($col . $row);
-                    $listeners[$row][$fieldLinks[$c]] = $cell ? $cell->getFormattedValue() : '';
-                    $c++;
+                    $listeners[$rowIndex + 1] = $rowData;
                 }
+                $rowIndex++;
             }
+            break; // только первый лист
         }
+
+        $reader->close();
         return $listeners;
     }
 }

@@ -36,21 +36,6 @@ class MigxpageconfiguratorLexiconsExportProcessor extends modProcessor
             return strcmp($a, $b);
         });
 
-        $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
-
-        // Sheet 1: resource lexicons
-        $resourceRows = $this->loadRows($lexiconBase, $filename, $languages);
-        $this->fillSheet($spreadsheet->getActiveSheet()->setTitle('Resource'), $resourceRows, $languages);
-
-        // Sheet 2: static section lexicons (if they exist)
-        $staticRows = $this->loadRows($lexiconBase, $staticFile, $languages);
-        if (!empty($staticRows)) {
-            $sheet2 = $spreadsheet->createSheet()->setTitle('Static');
-            $this->fillSheet($sheet2, $staticRows, $languages);
-        }
-
-        $spreadsheet->setActiveSheetIndex(0);
-
         // Write to assets export dir
         $assetsPath = $this->modx->getOption('assets_path') . 'components/migxpageconfigurator/';
         $exportDir  = $assetsPath . 'lexicons-export/';
@@ -61,8 +46,22 @@ class MigxpageconfiguratorLexiconsExportProcessor extends modProcessor
         $exportFilename = $filename . '_lexicons.xlsx';
         $exportPath     = $exportDir . $exportFilename;
 
-        $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
-        $writer->save($exportPath);
+        $writer = \OpenSpout\Writer\Common\Creator\WriterEntityFactory::createXLSXWriter();
+        $writer->openToFile($exportPath);
+
+        // Sheet 1: resource lexicons
+        $resourceRows = $this->loadRows($lexiconBase, $filename, $languages);
+        $writer->getCurrentSheet()->setName('Resource');
+        $this->writeSheet($writer, $resourceRows, $languages);
+
+        // Sheet 2: static section lexicons (if they exist)
+        $staticRows = $this->loadRows($lexiconBase, $staticFile, $languages);
+        if (!empty($staticRows)) {
+            $writer->addNewSheetAndMakeItCurrent()->setName('Static');
+            $this->writeSheet($writer, $staticRows, $languages);
+        }
+
+        $writer->close();
 
         $assetsUrl = $this->modx->getOption('assets_url')
             . 'components/migxpageconfigurator/lexicons-export/' . $exportFilename;
@@ -101,8 +100,8 @@ class MigxpageconfiguratorLexiconsExportProcessor extends modProcessor
         return $rows;
     }
 
-    private function fillSheet(
-        \PhpOffice\PhpSpreadsheet\Worksheet\Worksheet $sheet,
+    private function writeSheet(
+        \OpenSpout\Writer\XLSX\Writer $writer,
         array $rows,
         array $languages
     ): void {
@@ -111,22 +110,22 @@ class MigxpageconfiguratorLexiconsExportProcessor extends modProcessor
         }
 
         // Header
-        $col = 1;
-        $sheet->setCellValueByColumnAndRow($col++, 1, 'lexicon_key');
-        foreach ($languages as $lang) {
-            $sheet->setCellValueByColumnAndRow($col++, 1, $lang);
-        }
+        $header = array_merge(['lexicon_key'], $languages);
+        $writer->addRow($this->createRow($header));
 
         // Data
-        $rowNum = 2;
         foreach ($rows as $row) {
-            $col = 1;
-            $sheet->setCellValueByColumnAndRow($col++, $rowNum, $row['lexicon_key']);
+            $values = [$row['lexicon_key']];
             foreach ($languages as $lang) {
-                $sheet->setCellValueByColumnAndRow($col++, $rowNum, $row[$lang] ?? '');
+                $values[] = $row[$lang] ?? '';
             }
-            $rowNum++;
+            $writer->addRow($this->createRow($values));
         }
+    }
+
+    private function createRow(array $values): \OpenSpout\Common\Entity\Row
+    {
+        return \OpenSpout\Writer\Common\Creator\WriterEntityFactory::createRowFromArray($values);
     }
 }
 return 'MigxpageconfiguratorLexiconsExportProcessor';

@@ -122,29 +122,35 @@ class MigxpageconfiguratorLexiconsExportallProcessor extends modProcessor
             $langData[$lang] = $_lang;
         }
 
-        $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
-        $sheet       = $spreadsheet->getActiveSheet();
+        $tmpFile = tempnam(sys_get_temp_dir(), 'mpc_xlsx_');
 
-        $col = 1;
-        $sheet->setCellValueByColumnAndRow($col++, 1, 'lexicon_key');
-        foreach ($languages as $lang) {
-            $sheet->setCellValueByColumnAndRow($col++, 1, $lang);
-        }
+        $writer = \OpenSpout\Writer\Common\Creator\WriterEntityFactory::createXLSXWriter();
+        $writer->openToFile($tmpFile);
 
-        $rowNum = 2;
+        // Header
+        $header = array_merge(['lexicon_key'], $languages);
+        $writer->addRow($this->createRow($header));
+
+        // Data
         foreach ($allKeys as $key) {
-            $col = 1;
-            $sheet->setCellValueByColumnAndRow($col++, $rowNum, $key);
+            $values = [$key];
             foreach ($languages as $lang) {
-                $sheet->setCellValueByColumnAndRow($col++, $rowNum, $langData[$lang][$key] ?? '');
+                $values[] = $langData[$lang][$key] ?? '';
             }
-            $rowNum++;
+            $writer->addRow($this->createRow($values));
         }
 
-        $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
-        ob_start();
-        $writer->save('php://output');
-        return ob_get_clean() ?: null;
+        $writer->close();
+
+        $content = file_get_contents($tmpFile);
+        unlink($tmpFile);
+
+        return $content ?: null;
+    }
+
+    private function createRow(array $values): \OpenSpout\Common\Entity\Row
+    {
+        return \OpenSpout\Writer\Common\Creator\WriterEntityFactory::createRowFromArray($values);
     }
 }
 return 'MigxpageconfiguratorLexiconsExportallProcessor';
