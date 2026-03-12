@@ -197,7 +197,6 @@ MPC.grid.Resources = Ext.extend(Ext.grid.GridPanel, {
             tbar: [
                 {
                     text:    'Обновить',
-                    iconCls: 'icon-refresh',
                     handler: function () { this.store.reload(); },
                     scope:   this,
                 },
@@ -253,19 +252,16 @@ MPC.grid.LexiconKeys = Ext.extend(Ext.grid.EditorGridPanel, {
                 '->',
                 {
                     text:    'Экспорт выбранных (ZIP)',
-                    iconCls: 'icon-zip',
                     handler: this.exportSelected,
                     scope:   this,
                 },
                 {
                     text:    'Экспорт',
-                    iconCls: 'icon-xlsx',
                     handler: this.exportFile,
                     scope:   this,
                 },
                 {
                     text:    'Импорт',
-                    iconCls: 'icon-upload',
                     handler: this.importFile,
                     scope:   this,
                 },

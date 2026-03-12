@@ -386,10 +386,15 @@ class PlaceholderProcessor
         // нельзя — Fenom вычислит тег в пустую строку. Вместо этого оставляем их как простые
         // выражения Fenom, которые вычисляются внутри вызова {pThumb | snippet:…} при отдаче страницы.
         $isLoopVarInStaticCtx = ($params['isLoopVar'] ?? false) && ($params['firstSymbol'] === '##');
+        $isLexiconImage = $this->properties['useLexicons']
+            && in_array('image', $this->properties['translatableContentTypes']);
+
+        // Для {if}-обёртки запоминаем исходное выражение $src до оборачивания в {…}
+        $rawSrc = $src;
 
         if ($params['width']) {
             $width = $params['complexName'] . '.width';
-            if ($this->properties['useLexicons'] && in_array('image', $this->properties['translatableContentTypes']) && !$isLoopVarInStaticCtx) {
+            if ($isLexiconImage && !$isLoopVarInStaticCtx) {
                 $width = '{' . $params['complexName'] . '.width}';
             }
             $pls = ($params['setValues'] ?? false) ? $params['width'] : "'~$width" . ($params['height'] ? "~'" : '');
@@ -398,7 +403,7 @@ class PlaceholderProcessor
 
         if ($params['height']) {
             $height = $params['complexName'] . '.height';
-            if ($this->properties['useLexicons'] && in_array('image', $this->properties['translatableContentTypes']) && !$isLoopVarInStaticCtx) {
+            if ($isLexiconImage && !$isLoopVarInStaticCtx) {
                 $height = '{' . $params['complexName'] . '.height}';
             }
             $pls = ($params['setValues'] ?? false) ? $params['height'] : "'~$height";
@@ -409,14 +414,24 @@ class PlaceholderProcessor
             $thumbParams .= "'";
         }
 
-        if ($this->properties['useLexicons'] && in_array('image', $this->properties['translatableContentTypes'])) {
+        if ($isLexiconImage) {
             if (!$isLoopVarInStaticCtx) {
                 $src = '{' . $src . '}';
             }
             $params['firstSymbol'] = '##';
         }
 
-        return "{$params['firstSymbol']}'$snippetName' | snippet: [ 'input' => $src, 'options' => '{$thumbParams}]}";
+        $call = "{$params['firstSymbol']}'$snippetName' | snippet: [ 'input' => $src, 'options' => '{$thumbParams}]}";
+
+        // Для статичных секций с лексиконами: {$var} вычисляется при предпарсинге,
+        // а ##snippet — отложен до финального рендера. Если $var пуст, получается
+        // 'input' => , — синтаксическая ошибка Fenom. Оборачиваем весь вызов в {if},
+        // которое вычисляется на том же этапе предпарсинга — если пусто, вызов удаляется целиком.
+        if ($isLexiconImage && !$isLoopVarInStaticCtx) {
+            $call = '{if ' . $rawSrc . '}' . $call . '{/if}';
+        }
+
+        return $call;
     }
 
     /**

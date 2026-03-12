@@ -26,6 +26,8 @@ class SnippetCallBuilder
         $params = '';
         $value = explode('|', $value);
         $snippetName = $value[0];
+        $isStatic = ($firstSymbol === '##');
+        $firstVarCondition = null;
 
         if (strpos($value[0], '@FILE') === 0) {
             $presetKey = str_replace('@FILE', '', strtolower(pathinfo($value[0], PATHINFO_FILENAME)));
@@ -62,7 +64,16 @@ class SnippetCallBuilder
                 }
 
                 if (strpos($v, '$') === 0 || strpos($v, '[') === 0 || strpos($v, '"') === 0) {
-                    $params .= "'$k' => $v," . PHP_EOL;
+                    // Для статичных секций (##) переменные с $ оборачиваем в {…},
+                    // чтобы предпарсинг (parseChunk) подставил лексиконные значения.
+                    if ($isStatic && strpos($v, '$') === 0) {
+                        if ($firstVarCondition === null) {
+                            $firstVarCondition = $v;
+                        }
+                        $params .= "'$k' => {" . $v . "}," . PHP_EOL;
+                    } else {
+                        $params .= "'$k' => $v," . PHP_EOL;
+                    }
                 } else {
                     $params .= "'$k' => '$v'," . PHP_EOL;
                 }
@@ -74,9 +85,19 @@ class SnippetCallBuilder
         }
 
         if ($params) {
-            return PHP_EOL . "$firstSymbol'$snippetName' | snippet: [
+            $call = PHP_EOL . "$firstSymbol'$snippetName' | snippet: [
                         $params
                         ]}" . PHP_EOL;
+
+            // Для статичных секций: {$var} вычисляется при предпарсинге, а ##snippet —
+            // отложен до финального рендера. Если $var пуст, будет 'input' => , —
+            // синтаксическая ошибка. Оборачиваем в {if} (предпарсинг), чтобы при пустом
+            // значении весь вызов удалялся.
+            if ($isStatic && $firstVarCondition !== null) {
+                $call = '{if ' . $firstVarCondition . '}' . $call . '{/if}';
+            }
+
+            return $call;
         }
 
         return PHP_EOL . "$firstSymbol'$snippetName' | snippet: []}" . PHP_EOL;

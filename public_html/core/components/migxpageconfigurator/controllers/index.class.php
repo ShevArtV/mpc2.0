@@ -8,10 +8,6 @@ class MigxpageconfiguratorIndexManagerController extends modExtraManagerControll
     {
         $assetsUrl = $this->modx->getOption('assets_url') . 'components/migxpageconfigurator/';
 
-        $this->addHtml('<style>
-            #mpc-lexicons-container .x-btn-text-icon .x-btn-text { padding-left: 26px !important; }
-        </style>');
-
         $this->addHtml('<script>var MPC = MPC || {}; MPC.config = {
             connector_url: "' . $assetsUrl . 'connector.php"
         };</script>');
@@ -39,6 +35,7 @@ class MigxpageconfiguratorIndexManagerController extends modExtraManagerControll
 
     public function checkPermissions()
     {
-        return $this->modx->hasPermission('mgr');
+        return $this->modx->hasPermission('components')
+            && $this->modx->hasPermission('mpc_view');
     }
 }

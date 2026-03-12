@@ -25,9 +25,7 @@ return [
     'mpcOnGetNewHtml' => [
         'groupname' => 'MigxPageConfigurator',
     ],
-    'OnManagerPageInit' => [
-        'groupname' => 'MigxPageConfigurator',
-    ],
+
     'mpcOnImportLexiconValue' => [
         'groupname' => 'MigxPageConfigurator',
     ],
