@@ -98,7 +98,7 @@ class Base
             $this->response->error(__METHOD__, "File not found $filePath");
             return '';
         }
-        return file_get_contents($filePath);
+        return str_replace("\r", '', file_get_contents($filePath));
     }
 
     /**

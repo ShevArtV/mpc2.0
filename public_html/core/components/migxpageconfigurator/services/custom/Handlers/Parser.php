@@ -48,7 +48,7 @@ class Parser
     public function getHTMLString(Element $element, ?bool $inner = false): string
     {
         $method = $inner ? 'innerHTML' : 'html';
-        $html = html_entity_decode($element->$method(), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $html = str_replace("\r", '', html_entity_decode($element->$method(), ENT_QUOTES | ENT_HTML5, 'UTF-8'));
         $html = str_replace('+', '|plus|', $html);
         $html = urldecode($html);
         $html = str_replace('|plus|', '+', $html);
