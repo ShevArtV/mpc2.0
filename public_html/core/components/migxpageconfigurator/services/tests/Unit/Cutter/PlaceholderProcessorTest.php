@@ -209,4 +209,134 @@ class PlaceholderProcessorTest extends TestCase
         $this->assertStringContainsString('{if $banner}', $result['html']);
         $this->assertStringContainsString('{/if}', $result['html']);
     }
+
+    // ---------------------------------------------------------------
+    // getThumb — quoting input для non-lexicon режима
+    // ---------------------------------------------------------------
+
+    public function testGetThumbNonLexiconQuotesInputAroundSrc(): void
+    {
+        $proc = $this->makeProcessor(['thumbSnippet' => 'mpcThumb']);
+
+        $call = $proc->getThumb([
+            'width'       => false,
+            'height'      => false,
+            'thumbParams' => 'q=90',
+            'firstSymbol' => '{',
+            'complexName' => '$source',
+            'srcAttr'     => 'srcset',
+            'isLoopVar'   => true,
+        ]);
+
+        // не-лексиконный режим + isLoopVar в НЕ-static контексте → нужны кавычки
+        $this->assertStringContainsString("'input' => '\$source.srcset'", $call);
+    }
+
+    public function testGetThumbNonLexiconRegularQuotesInput(): void
+    {
+        $proc = $this->makeProcessor(['thumbSnippet' => 'mpcThumb']);
+
+        $call = $proc->getThumb([
+            'width'       => false,
+            'height'      => false,
+            'thumbParams' => 'q=90',
+            'firstSymbol' => '{',
+            'complexName' => '$item1.list_triple_picture[0].picture[0]',
+            'srcAttr'     => 'src',
+            'isLoopVar'   => false,
+        ]);
+
+        // regular non-lexicon → кавычки тоже нужны (этот случай ломал Fenom раньше)
+        $this->assertStringContainsString("'input' => '\$item1.list_triple_picture[0].picture[0].src'", $call);
+    }
+
+    public function testGetThumbLoopVarInStaticContextKeepsRawSrc(): void
+    {
+        $proc = $this->makeProcessor(['thumbSnippet' => 'mpcThumb']);
+
+        $call = $proc->getThumb([
+            'width'       => false,
+            'height'      => false,
+            'thumbParams' => 'q=90',
+            'firstSymbol' => '##', // static-context маркер
+            'complexName' => '$source',
+            'srcAttr'     => 'srcset',
+            'isLoopVar'   => true,
+        ]);
+
+        // loop-var в static-секции: foreach отложен до отдачи страницы, кавычки сломали бы переменную
+        $this->assertStringContainsString("'input' => \$source.srcset", $call);
+        $this->assertStringNotContainsString("'input' => '\$source.srcset'", $call);
+    }
+
+    public function testGetThumbLexiconImageKeepsBraceWrap(): void
+    {
+        $proc = $this->makeProcessor([
+            'thumbSnippet'             => 'mpcThumb',
+            'useLexicons'              => true,
+            'translatableContentTypes' => ['text', 'image'],
+        ]);
+
+        $call = $proc->getThumb([
+            'width'       => false,
+            'height'      => false,
+            'thumbParams' => 'q=90',
+            'firstSymbol' => '{',
+            'complexName' => '$item1.field',
+            'srcAttr'     => 'src',
+            'isLoopVar'   => false,
+        ]);
+
+        // lexicon-image → старая логика: {…}-обёртка + ##-симвoл + {if}-обёртка
+        $this->assertStringContainsString('{$item1.field.src}', $call);
+        $this->assertStringContainsString("##'mpcThumb' | snippet:", $call);
+        $this->assertStringContainsString('{if $item1.field.src}', $call);
+    }
+
+    // ---------------------------------------------------------------
+    // setPlaceholders — интегральный тест на <picture> со статичными путями
+    // (регрессионный кейс для бага «Unexpected token '/' in expression»)
+    // ---------------------------------------------------------------
+
+    public function testSetPlaceholdersPictureWithSlashPathsQuotesInput(): void
+    {
+        $proc = $this->makeProcessor([
+            'thumbSnippet'      => 'mpcThumb',
+            'lazyloadAttr'      => 'data-site-lazy',
+            'commonThumbParams' => 'q=90',
+            'samples'           => [
+                'if'                   => $this->ifSample,
+                'foreach'              => $this->foreachSample,
+                'foreach_limit'        => $this->foreachSample,
+                'foreach_offset'       => $this->foreachSample,
+                'foreach_limit_offset' => $this->foreachSample,
+                'media'                => '##foreach complexName.sources as $source index=$index last=$last}html##/foreach}',
+            ],
+        ]);
+
+        $html = '<section data-mpc-section="test">'
+            . '<picture data-mpc-field="picture">'
+            . '<img src="/assets/components/sleepandglow/img/sections/top-slider/001.jpg" width="1920" height="920" alt="">'
+            . '<source srcset="/assets/components/sleepandglow/img/sections/top-slider/01-mobile.jpg" media="(max-width: 768px)" width="768" height="1238">'
+            . '<source srcset="/assets/components/sleepandglow/img/sections/top-slider/01-ipad.jpg" media="(max-width: 1280px)" width="1280" height="598">'
+            . '</picture>'
+            . '</section>';
+
+        $properties = [
+            'html'          => $html,
+            'element'       => (new Document($html))->find('[data-mpc-section]')[0],
+            'fieldAttrName' => 'data-mpc-field',
+            'itemAttrName'  => 'data-mpc-item',
+            'level'         => 0,
+            'isStatic'      => false,
+        ];
+
+        $result = $proc->setPlaceholders($properties);
+
+        // Регрессия: до фикса в output попадало `'input' => /assets/...` без кавычек,
+        // что валило Fenom-парсер. После фикса значение обёрнуто в одинарные кавычки.
+        $this->assertStringNotContainsString("'input' => /", $result['html'],
+            "Unquoted /-prefixed path in mpcThumb input — Fenom parser will fail");
+        $this->assertStringContainsString("'input' => '\$source.srcset'", $result['html']);
+    }
 }

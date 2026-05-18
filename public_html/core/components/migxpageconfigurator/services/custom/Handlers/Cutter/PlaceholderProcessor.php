@@ -419,6 +419,18 @@ class PlaceholderProcessor
                 $src = '{' . $src . '}';
             }
             $params['firstSymbol'] = '##';
+        } elseif (!$isLoopVarInStaticCtx) {
+            // Не-лексиконный режим: samples/media.tpl ({foreach ... as $source}) разворачивается
+            // на этапе MPC-предпарсинга — переменные вида $source.srcset подставляются конкретными
+            // значениями из tpl (`/assets/.../01-mobile.jpg`). Без кавычек путь, начинающийся с `/`,
+            // ломает Fenom-парсер (`'input' => /assets/...` → Unexpected token '/'). Оборачиваем
+            // в одинарные кавычки — после foreach получаем `'input' => '/assets/...'`, валидный
+            // Fenom-литерал.
+            //
+            // Исключение: $isLoopVarInStaticCtx (loop-var внутри статичной секции) — там foreach
+            // отложен до финального рендера и $source.srcset должен остаться Fenom-выражением,
+            // кавычки его сломают.
+            $src = "'" . $src . "'";
         }
 
         $call = "{$params['firstSymbol']}'$snippetName' | snippet: [ 'input' => $src, 'options' => '{$thumbParams}]}";
