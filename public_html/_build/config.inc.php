@@ -1,6 +1,6 @@
 <?php
 /*
-/usr/local/php/php-7.4/bin/php -d display_errors -d error_reporting=E_ALL _build/build.php
+/usr/local/php/php-7.4/bin/php -d display_errors -d error_reporting=E_ALL ~/art-sites.ru/htdocs/mpc-app/_build/build.php
 */
 if (!defined('MODX_CORE_PATH')) {
     $path = dirname(__FILE__);
@@ -15,7 +15,7 @@ if (!defined('PKG_NAME')) {
 return [
     'name' => 'MigxPageConfigurator',
     'name_lower' => 'migxpageconfigurator',
-    'version' => '2.3.3',
+    'version' => '2.3.4',
     'release' => 'rc',
     // Install package to site right after build
     'install' => false,

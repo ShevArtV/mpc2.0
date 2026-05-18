@@ -107,6 +107,76 @@ class LexiconManagerTest extends TestCase
         $this->assertEquals('Some text', $result);
     }
 
+    public function testSetLexiconsExcludesFieldByPrefixWildcard(): void
+    {
+        $m = $this->makeManager(['excludeLexiconFields' => ['img*']]);
+        $m->setContext('hero', false);
+
+        // под паттерн попадает
+        $this->assertEquals('/path/to/a.jpg', $m->setLexicons('/path/to/a.jpg', ['fieldName' => 'img']));
+        $this->assertEquals('/b.webp', $m->setLexicons('/b.webp', ['fieldName' => 'img_pc']));
+        $this->assertEquals('/c.svg', $m->setLexicons('/c.svg', ['fieldName' => 'img_mobile']));
+
+        // НЕ под паттерн — обычная лексиконизация
+        $this->assertEquals("{'hero_title' | lexicon}", $m->setLexicons('Hello', ['fieldName' => 'title']));
+    }
+
+    public function testSetLexiconsExcludesFieldBySuffixWildcard(): void
+    {
+        $m = $this->makeManager(['excludeLexiconFields' => ['*_picture']]);
+        $m->setContext('section', false);
+
+        $this->assertEquals('/x.jpg', $m->setLexicons('/x.jpg', ['fieldName' => 'main_picture']));
+        $this->assertEquals('/y.jpg', $m->setLexicons('/y.jpg', ['fieldName' => 'thumb_picture']));
+
+        $this->assertEquals("{'section_title' | lexicon}", $m->setLexicons('Hello', ['fieldName' => 'title']));
+    }
+
+    public function testSetLexiconsExcludesParentFieldByWildcard(): void
+    {
+        $m = $this->makeManager(['excludeLexiconFields' => ['media_*']]);
+        $m->setContext('hero', false);
+
+        $result = $m->setLexicons('/z.mp4', ['fieldName' => 'src', 'parentFieldName' => 'media_video']);
+        $this->assertEquals('/z.mp4', $result);
+    }
+
+    public function testSetLexiconsExactMatchStillWorksAlongsidePatterns(): void
+    {
+        $m = $this->makeManager(['excludeLexiconFields' => ['link', 'img*']]);
+        $m->setContext('hero', false);
+
+        // точное совпадение — исключено
+        $this->assertEquals('https://x', $m->setLexicons('https://x', ['fieldName' => 'link']));
+        // wildcard — исключено
+        $this->assertEquals('/a.jpg', $m->setLexicons('/a.jpg', ['fieldName' => 'img']));
+        // ничего общего — лексиконизируется
+        $this->assertEquals("{'hero_title' | lexicon}", $m->setLexicons('Hello', ['fieldName' => 'title']));
+    }
+
+    public function testSetLexiconsQuestionMarkWildcardMatchesSingleChar(): void
+    {
+        $m = $this->makeManager(['excludeLexiconFields' => ['img?']]);
+        $m->setContext('hero', false);
+
+        // ровно один символ после img
+        $this->assertEquals('/a.jpg', $m->setLexicons('/a.jpg', ['fieldName' => 'img1']));
+
+        // не совпадает — два символа или ноль символов
+        $this->assertEquals("{'hero_img' | lexicon}", $m->setLexicons('value', ['fieldName' => 'img']));
+        $this->assertEquals("{'hero_img12' | lexicon}", $m->setLexicons('value', ['fieldName' => 'img12']));
+    }
+
+    public function testSetLexiconsIgnoresEmptyAndNonStringPatterns(): void
+    {
+        $m = $this->makeManager(['excludeLexiconFields' => ['', null, 123, 'img*']]);
+        $m->setContext('hero', false);
+
+        // мусорные паттерны игнорируются, валидный продолжает работать
+        $this->assertEquals('/a.jpg', $m->setLexicons('/a.jpg', ['fieldName' => 'img']));
+        $this->assertEquals("{'hero_title' | lexicon}", $m->setLexicons('Hello', ['fieldName' => 'title']));
+    }
+
     public function testSetLexiconsUsesStaticFilenameForStaticSection(): void
     {
         $m = $this->makeManager();

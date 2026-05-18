@@ -112,11 +112,11 @@ class LexiconManager
         $fieldName       = $options['fieldName'] ?? '';
         $parentFieldName = $options['parentFieldName'] ?? '';
 
-        if (in_array($fieldName, $this->properties['excludeLexiconFields'])) {
+        if ($this->isFieldExcluded($fieldName)) {
             return $value ?? '';
         }
 
-        if ($parentFieldName && in_array($parentFieldName, $this->properties['excludeLexiconFields'])) {
+        if ($parentFieldName && $this->isFieldExcluded($parentFieldName)) {
             return $value ?? '';
         }
 
@@ -133,7 +133,7 @@ class LexiconManager
         $lexiconKey = isset($this->modx->event->returnedValues) && !empty($this->modx->event->returnedValues['lexiconKey'])
             ? $this->modx->event->returnedValues['lexiconKey'] : $lexiconKey;
 
-        if (!$lexiconKey || in_array($lexiconKey, $this->properties['excludeLexiconFields'])) {
+        if (!$lexiconKey || $this->isFieldExcluded($lexiconKey)) {
             return $value;
         }
 
@@ -199,5 +199,33 @@ class LexiconManager
             : "{$prefix}_$fieldName";
 
         return $idx ? "{$lexiconKey}_$idx" : $lexiconKey;
+    }
+
+    /**
+     * Проверяет, попадает ли имя поля под список исключений.
+     * Каждая запись в excludeLexiconFields трактуется как:
+     *  - точное имя (`picture`), если не содержит `*` или `?`;
+     *  - glob-паттерн (`img*`, `*_picture`, `hero_*_img`), иначе.
+     */
+    private function isFieldExcluded(string $name): bool
+    {
+        if ($name === '') {
+            return false;
+        }
+
+        foreach ($this->properties['excludeLexiconFields'] as $pattern) {
+            if (!is_string($pattern) || $pattern === '') {
+                continue;
+            }
+
+            $isPattern = strpbrk($pattern, '*?') !== false;
+            $matches   = $isPattern ? fnmatch($pattern, $name) : $pattern === $name;
+
+            if ($matches) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }
