@@ -402,12 +402,13 @@ class PlaceholderProcessorTest extends TestCase
         $this->assertStringContainsString("##'{\$banner[0].src}' | lexicon}", $result);
     }
 
-    public function testSetPlaceholdersExcludedParentFieldNameSkipsLexicon(): void
+    public function testSetPlaceholdersExcludedByFullPathSkipsLexicon(): void
     {
+        // Pattern `cards_*` матчит fullPath `cards_title` → исключаем.
         $proc = $this->makeProcessor([
             'useLexicons'              => true,
             'translatableContentTypes' => ['text'],
-            'excludeLexiconFields'     => ['cards'],
+            'excludeLexiconFields'     => ['cards_*'],
         ]);
         $html = '<section data-mpc-section="t">'
             . '<div data-mpc-field="cards">'
@@ -426,9 +427,42 @@ class PlaceholderProcessorTest extends TestCase
         ];
         $result = $proc->setPlaceholders($properties)['html'];
 
-        // Внутри cards exclusion на parent → 'title' выводится без lexicon
+        // title исключён по fullPath
         $this->assertStringContainsString('{$item1.title}', $result);
         $this->assertStringNotContainsString('| lexicon', $result);
+    }
+
+    public function testSetPlaceholdersContainerSuffixDoesNotBleedToChildren(): void
+    {
+        // Регрессионный кейс: pattern `*_picture` против контейнера
+        // `list_triple_picture` НЕ должен исключать subtitle/title под ним.
+        $proc = $this->makeProcessor([
+            'useLexicons'              => true,
+            'translatableContentTypes' => ['text'],
+            'excludeLexiconFields'     => ['*_picture', 'picture'],
+        ]);
+        $html = '<section data-mpc-section="t">'
+            . '<div data-mpc-field="list_triple_picture">'
+            .   '<div data-mpc-item>'
+            .     '<p data-mpc-field-1="subtitle">x</p>'
+            .     '<h2 data-mpc-field-1="title">y</h2>'
+            .   '</div>'
+            . '</div>'
+            . '</section>';
+        $properties = [
+            'html'          => $html,
+            'element'       => (new Document($html))->find('[data-mpc-section]')[0],
+            'fieldAttrName' => 'data-mpc-field',
+            'itemAttrName'  => 'data-mpc-item',
+            'level'         => 0,
+            'isStatic'      => false,
+        ];
+        $result = $proc->setPlaceholders($properties)['html'];
+
+        // subtitle/title под picture-контейнером — лексиконятся (fullPath
+        // не оканчивается на `_picture`)
+        $this->assertStringContainsString("##'{\$item1.subtitle}' | lexicon}", $result);
+        $this->assertStringContainsString("##'{\$item1.title}' | lexicon}", $result);
     }
 
     // ---------------------------------------------------------------

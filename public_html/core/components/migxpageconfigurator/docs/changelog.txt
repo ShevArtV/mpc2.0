@@ -1,3 +1,9 @@
+2.3.12-rc
+==============
+- Семантический фикс exclusion-паттернов: проверка против **полного пути** (`parentFieldName_fieldName`) вместо `parentFieldName` отдельно. Раньше pattern `*_picture` (задуманный для image-полей) матчился с именем контейнера `list_triple_picture` и исключал любые text-поля (subtitle/title) под ним — на сайте они выводились без `| lexicon` и без лексикон-ключа в БД. Теперь pattern проверяется против `list_triple_picture_subtitle` — не оканчивается на `_picture` → не матчит → лексиконим. Для `list_triple_picture_picture` (вложенное image-поле с именем `picture`) — оканчивается на `_picture` → матчит → исключаем. Поведение синхронизировано в грабере (`setLexicons`) и cutter (`shouldLexiconize`).
+- Если хочется исключать всё содержимое контейнера `hero_picture` — использовать pattern `hero_picture_*` (glob на fullPath), а не `hero_picture` (exact, теперь матчит только сам контейнер, не его содержимое).
+- Тесты: обновлены `testSetLexiconsExcludedByFullPath`, `testSetLexiconsExcludesByFullPathWildcard`, `testShouldLexiconizeRespectsGlobPatternsInExclude`. Добавлены регрессионные `testSetLexiconsContainerNameMatchDoesNotExcludeChildTextFields`, `testShouldLexiconizeContainerSuffixDoesNotBleedToChildren`, `testSetPlaceholdersContainerSuffixDoesNotBleedToChildren`, `testSetLexiconsNotExcludedWhenOnlyParentMatches`. Всего 126 тестов, все зелёные.
+
 2.3.11-rc
 ==============
 - Поднял загрузку `excludeLexiconFields` из `Grabber::initialize()` в `Base::initialize()` — фикс для 2.3.10-rc. Список грузился только в Grabber, в Cutter-overe `LexiconManager` видел undefined → `isFieldExcluded` всегда false → лексикон ставился везде, включая поля типа `picture`, `*_picture`, `picture_*` и т.п., которые должны быть исключены. Теперь оба сервиса (Grabber и Cutter) видят один и тот же список через общий Base.

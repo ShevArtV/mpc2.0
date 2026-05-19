@@ -53,13 +53,19 @@ class LexiconManager
 
     /**
      * Должно ли поле быть лексиконизировано с учётом exclusion-паттернов.
-     * Комбинирует `isLexiconField` (content-type translatable) + проверку поля
-     * и накопленного родителя против `excludeLexiconFields`.
+     * Комбинирует `isLexiconField` (content-type translatable) + проверку
+     * против `excludeLexiconFields` по двум именам:
+     *  - `fieldName` — само имя поля (для exclude-паттернов вроде `picture`,
+     *    `MIGX_id`, `img*`).
+     *  - **полный путь** `parentFieldName_fieldName` — для exclude-паттернов
+     *    типа `*_picture`, `hero_*`, конкретных накопленных путей.
      *
-     * Возвращает true только если ВСЕ условия выполнены:
-     *  - лексиконы включены и content-type входит в translatableContentTypes;
-     *  - fieldName не попадает под exclude-паттерн;
-     *  - parentFieldName (если задан) не попадает под exclude-паттерн.
+     * Раньше проверялся `parentFieldName` отдельно — это давало ложные
+     * срабатывания: pattern `*_picture` (для image-полей) матчился с
+     * контейнерным именем `list_triple_picture` и исключал любые text-поля
+     * (subtitle/title) внутри такого контейнера. Проверка по полному пути
+     * лечит это: `list_triple_picture_subtitle` не оканчивается на
+     * `_picture`, а `list_triple_picture_picture` — оканчивается.
      *
      * Лимитация: cutter работает на уровне схемы (без idx), поэтому
      * exclude-паттерны с конкретными row-индексами (`cards_1_subtitle_2`)
@@ -74,8 +80,11 @@ class LexiconManager
         if ($fieldName !== '' && $this->isFieldExcluded($fieldName)) {
             return false;
         }
-        if ($parentFieldName !== '' && $this->isFieldExcluded($parentFieldName)) {
-            return false;
+        if ($parentFieldName !== '') {
+            $fullPath = "{$parentFieldName}_{$fieldName}";
+            if ($fullPath !== $fieldName && $this->isFieldExcluded($fullPath)) {
+                return false;
+            }
         }
         return true;
     }
@@ -159,8 +168,15 @@ class LexiconManager
             return $value ?? '';
         }
 
-        if ($parentFieldName && $this->isFieldExcluded($parentFieldName)) {
-            return $value ?? '';
+        // Проверка по ПОЛНОМУ пути (parent_field), не parentFieldName
+        // в одиночку — иначе pattern `*_picture` исключал бы все text-поля
+        // (subtitle/title) внутри контейнера с именем `list_triple_picture`.
+        // Подробнее — в shouldLexiconize() docstring.
+        if ($parentFieldName && $fieldName) {
+            $fullPath = "{$parentFieldName}_{$fieldName}";
+            if ($this->isFieldExcluded($fullPath)) {
+                return $value ?? '';
+            }
         }
 
         $options['prefix'] = $options['prefix'] ?? $this->sectionLexiconPrefix;

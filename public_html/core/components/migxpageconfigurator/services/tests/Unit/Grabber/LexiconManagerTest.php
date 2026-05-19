@@ -99,14 +99,30 @@ class LexiconManagerTest extends TestCase
         $this->assertEquals('https://example.com', $result);
     }
 
-    public function testSetLexiconsReturnsOriginalForExcludedParentField(): void
+    public function testSetLexiconsExcludedByFullPath(): void
     {
-        $m = $this->makeManager(['excludeLexiconFields' => ['items']]);
+        // Pattern `items_*` матчит полный путь `items_text`.
+        $m = $this->makeManager(['excludeLexiconFields' => ['items_*']]);
         $m->setContext('hero', false);
 
         $result = $m->setLexicons('Some text', ['fieldName' => 'text', 'parentFieldName' => 'items']);
 
         $this->assertEquals('Some text', $result);
+    }
+
+    public function testSetLexiconsNotExcludedWhenOnlyParentMatches(): void
+    {
+        // Pattern `items` точно матчит parentFieldName, НО полный путь
+        // `items_text` не матчит (другие правила). Field НЕ должен быть
+        // исключён — это критический семантический фикс (раньше «items»
+        // как parent исключал любые text-поля под ним; теперь — нет).
+        $m = $this->makeManager(['excludeLexiconFields' => ['items']]);
+        $m->setContext('hero', false);
+
+        $result = $m->setLexicons('Some text', ['fieldName' => 'text', 'parentFieldName' => 'items']);
+
+        // text НЕ исключён → возвращается ключ.
+        $this->assertEquals('hero_items_text', $result);
     }
 
     public function testSetLexiconsExcludesFieldByPrefixWildcard(): void
@@ -134,13 +150,33 @@ class LexiconManagerTest extends TestCase
         $this->assertEquals('section_title', $m->setLexicons('Hello', ['fieldName' => 'title']));
     }
 
-    public function testSetLexiconsExcludesParentFieldByWildcard(): void
+    public function testSetLexiconsExcludesByFullPathWildcard(): void
     {
+        // Pattern `media_*` против полного пути `media_video_src`.
         $m = $this->makeManager(['excludeLexiconFields' => ['media_*']]);
         $m->setContext('hero', false);
 
         $result = $m->setLexicons('/z.mp4', ['fieldName' => 'src', 'parentFieldName' => 'media_video']);
         $this->assertEquals('/z.mp4', $result);
+    }
+
+    public function testSetLexiconsContainerNameMatchDoesNotExcludeChildTextFields(): void
+    {
+        // Регрессионный кейс: pattern `*_picture` НЕ должен исключать text-поля
+        // (subtitle/title) внутри контейнера `list_triple_picture`. Pattern
+        // матчит имя контейнера, но не fullPath text-поля.
+        $m = $this->makeManager(['excludeLexiconFields' => ['*_picture', 'picture']]);
+        $m->setContext('top_slider', false);
+
+        // subtitle/title в picture-контейнере — НЕ исключаются
+        $this->assertEquals('top_slider_list_triple_picture_subtitle',
+            $m->setLexicons('Subtitle text', ['fieldName' => 'subtitle', 'parentFieldName' => 'list_triple_picture']));
+        $this->assertEquals('top_slider_list_triple_picture_title',
+            $m->setLexicons('Title text', ['fieldName' => 'title', 'parentFieldName' => 'list_triple_picture']));
+
+        // Само picture-поле — исключается (fullPath = `list_triple_picture_picture`, кончается `_picture`)
+        $this->assertEquals('/hero.webp',
+            $m->setLexicons('/hero.webp', ['fieldName' => 'picture', 'parentFieldName' => 'list_triple_picture']));
     }
 
     public function testSetLexiconsExactMatchStillWorksAlongsidePatterns(): void
@@ -264,14 +300,45 @@ class LexiconManagerTest extends TestCase
         $this->assertTrue($m->shouldLexiconize('text', 'title', 'cards'));
     }
 
-    public function testShouldLexiconizeFalseForExcludedParentFieldName(): void
+    public function testShouldLexiconizeFalseWhenFullPathMatchesExcludePattern(): void
     {
         $m = $this->makeManager([
             'useLexicons'              => true,
             'translatableContentTypes' => ['text', 'image'],
-            'excludeLexiconFields'     => ['compare_list_compare_product'],
+            'excludeLexiconFields'     => ['compare_list_compare_product_*'],
         ]);
+        // fullPath = `compare_list_compare_product_title` → матчит glob → исключено
         $this->assertFalse($m->shouldLexiconize('text', 'title', 'compare_list_compare_product'));
+    }
+
+    public function testShouldLexiconizeTrueWhenOnlyParentNameMatchesNotFullPath(): void
+    {
+        // Pattern точно матчит parentFieldName, но не fullPath. Не исключаем.
+        $m = $this->makeManager([
+            'useLexicons'              => true,
+            'translatableContentTypes' => ['text'],
+            'excludeLexiconFields'     => ['list_triple_picture'],
+        ]);
+        // fullPath = `list_triple_picture_title` НЕ матчит pattern `list_triple_picture` (exact).
+        $this->assertTrue($m->shouldLexiconize('text', 'title', 'list_triple_picture'));
+    }
+
+    public function testShouldLexiconizeContainerSuffixDoesNotBleedToChildren(): void
+    {
+        // Регрессионный кейс: pattern `*_picture` не должен исключать text-поля
+        // под контейнером с именем `*_picture`.
+        $m = $this->makeManager([
+            'useLexicons'              => true,
+            'translatableContentTypes' => ['text', 'image'],
+            'excludeLexiconFields'     => ['*_picture', 'picture'],
+        ]);
+        // subtitle/title под контейнером — лексиконим
+        $this->assertTrue($m->shouldLexiconize('text', 'subtitle', 'list_triple_picture'));
+        $this->assertTrue($m->shouldLexiconize('text', 'title', 'list_triple_picture'));
+        // picture-поле под контейнером — fullPath `list_triple_picture_picture` матчит → исключено
+        $this->assertFalse($m->shouldLexiconize('image', 'picture', 'list_triple_picture'));
+        // picture-поле в любом другом контексте — fieldName=picture exact match → исключено
+        $this->assertFalse($m->shouldLexiconize('image', 'picture', 'gallery'));
     }
 
     public function testShouldLexiconizeRespectsGlobPatternsInExclude(): void
@@ -279,16 +346,24 @@ class LexiconManagerTest extends TestCase
         $m = $this->makeManager([
             'useLexicons'              => true,
             'translatableContentTypes' => ['text', 'image'],
-            'excludeLexiconFields'     => ['*_picture', 'img*'],
+            'excludeLexiconFields'     => ['*_picture', 'img*', 'hero_picture_*'],
         ]);
         // fieldName suffix-glob
         $this->assertFalse($m->shouldLexiconize('image', 'main_picture', ''));
         // fieldName prefix-glob
         $this->assertFalse($m->shouldLexiconize('image', 'img_pc', ''));
-        // parent suffix-glob
+        // fullPath-glob — `hero_picture_*` матчит `hero_picture_src`
         $this->assertFalse($m->shouldLexiconize('image', 'src', 'hero_picture'));
-        // не под паттерн
+        // НЕ под паттерн — лексиконим
         $this->assertTrue($m->shouldLexiconize('image', 'logo_src', 'banner'));
+        // Контейнер `hero_picture` без glob-pattern на содержимое — text-поля
+        // под ним лексиконятся (вот это и есть фикс).
+        $m2 = $this->makeManager([
+            'useLexicons'              => true,
+            'translatableContentTypes' => ['text'],
+            'excludeLexiconFields'     => ['*_picture'],
+        ]);
+        $this->assertTrue($m2->shouldLexiconize('text', 'subtitle', 'hero_picture'));
     }
 
     public function testShouldLexiconizeHandlesUndefinedExcludeList(): void
