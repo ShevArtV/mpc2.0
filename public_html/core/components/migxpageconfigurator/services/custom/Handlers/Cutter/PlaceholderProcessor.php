@@ -5,6 +5,7 @@ namespace MpcServices\Handlers\Cutter;
 use DiDom\Document;
 use DiDom\Element;
 use DiDom\Exceptions\InvalidSelectorException;
+use MpcServices\Handlers\Grabber\LexiconManager;
 use MpcServices\Handlers\Parser;
 
 /**
@@ -20,12 +21,14 @@ class PlaceholderProcessor
     private \modX $modx;
     private array $properties;
     private Parser $parser;
+    private LexiconManager $lexiconManager;
 
-    public function __construct(\modX $modx, array $properties, Parser $parser)
+    public function __construct(\modX $modx, array $properties, Parser $parser, LexiconManager $lexiconManager)
     {
         $this->modx = $modx;
         $this->properties = $properties;
         $this->parser = $parser;
+        $this->lexiconManager = $lexiconManager;
     }
 
     /**
@@ -85,7 +88,15 @@ class PlaceholderProcessor
                     'parentElement' => $this->getParentNode($items[0], $fieldAttrName),
                     'level' => $properties['level'] + 1,
                 ];
-                $properties['parentFieldName'] = $fieldName;
+                // Накапливаем parentFieldName по образцу grabber'а (без idx —
+                // cutter работает на уровне схемы, row-indexes не известны).
+                // Это нужно, чтобы exclusion-паттерны, заданные на накопленном
+                // пути (`compare_list_compare_product`, `*_picture` и т.п.),
+                // корректно сматчились на cutter-стороне.
+                $prevParent = $properties['parentFieldName'] ?? '';
+                $properties['parentFieldName'] = $prevParent !== ''
+                    ? "{$prevParent}_{$fieldName}"
+                    : $fieldName;
                 $properties['fieldName'] = preg_replace('/^\$/', '', $complexName);
 
                 $props = $this->setPlaceholders(array_merge($properties, $props));
@@ -157,6 +168,8 @@ class PlaceholderProcessor
         preg_match('/width:(.*?);/', $style, $width);
         preg_match('/height:(.*?);/', $style, $height);
 
+        $parentFieldName = $properties['parentFieldName'] ?? '';
+
         if (!$row->hasAttribute('data-mpc-nothumb') && !empty($this->properties['thumbSnippet'])) {
             $src = $this->getThumb([
                 'width' => (int)($width[1] ?? 0),
@@ -166,10 +179,10 @@ class PlaceholderProcessor
                 'complexName' => $complexName,
                 'srcAttr' => '',
                 'setValues' => true,
-                'useLexicon' => $this->isLexiconField('image'),
+                'useLexicon' => $this->shouldLexiconize('image', $fieldName, $parentFieldName),
             ]);
         } else {
-            $src = $this->lex($firstSymbol, $complexName, 'image');
+            $src = $this->lex($firstSymbol, $complexName, 'image', $fieldName, $parentFieldName);
         }
 
         if ($this->properties['lazyloadAttr'] && !$row->hasAttribute('data-mpc-nolazy')) {
@@ -187,6 +200,7 @@ class PlaceholderProcessor
     {
         [$firstSymbol, $complexName] = $this->getSymbolComplex($row, $fieldName, $properties['level'], $properties['isStatic']);
         $complexName .= '[0]';
+        $parentFieldName = $properties['parentFieldName'] ?? '';
 
         if (!$row->hasAttribute('data-mpc-nothumb') && !empty($this->properties['thumbSnippet'])) {
             $src = $this->getThumb([
@@ -196,10 +210,10 @@ class PlaceholderProcessor
                 'firstSymbol' => $firstSymbol,
                 'complexName' => $complexName,
                 'srcAttr' => 'src',
-                'useLexicon' => $this->isLexiconField('image'),
+                'useLexicon' => $this->shouldLexiconize('image', $fieldName, $parentFieldName),
             ]);
         } else {
-            $src = $this->lex($firstSymbol, "$complexName.src", 'image');
+            $src = $this->lex($firstSymbol, "$complexName.src", 'image', $fieldName, $parentFieldName);
         }
 
         if ($this->properties['lazyloadAttr'] && !$row->hasAttribute('data-mpc-nolazy')) {
@@ -209,13 +223,20 @@ class PlaceholderProcessor
             $row->setAttribute('src', $src);
         }
 
-        // width/height — не локализуются; alt — `text`.
-        $attrContentTypes = ['width' => null, 'height' => null, 'alt' => 'text'];
-        foreach ($attrContentTypes as $attr => $contentType) {
-            if ($row->hasAttribute($attr)) {
-                $row->setAttribute($attr, $contentType
-                    ? $this->lex($firstSymbol, "$complexName.$attr", $contentType)
-                    : "{$firstSymbol}{$complexName}.{$attr}}");
+        // width/height — не локализуются; alt — `text` (грабер пишет ключ с суффиксом _alt).
+        $attrSpec = [
+            'width'  => null,
+            'height' => null,
+            'alt'    => ['contentType' => 'text', 'fieldName' => $fieldName . '_alt'],
+        ];
+        foreach ($attrSpec as $attr => $spec) {
+            if (!$row->hasAttribute($attr)) {
+                continue;
+            }
+            if ($spec && $this->shouldLexiconize($spec['contentType'], $spec['fieldName'], $parentFieldName)) {
+                $row->setAttribute($attr, $this->lex($firstSymbol, "$complexName.$attr", $spec['contentType'], $spec['fieldName'], $parentFieldName));
+            } else {
+                $row->setAttribute($attr, "{$firstSymbol}{$complexName}.{$attr}}");
             }
         }
 
@@ -232,16 +253,27 @@ class PlaceholderProcessor
         $pls = '';
         [$firstSymbol, $complexName] = $this->getSymbolComplex($row, $fieldName, $properties['level'], $properties['isStatic']);
         $complexName .= '[0]';
+        $parentFieldName = $properties['parentFieldName'] ?? '';
 
         $tag = $row->tagName();
         // content-type для атрибутов главного элемента: video/audio/picture
         $mainContentType = $tag === 'picture' ? 'image' : $tag;
-        $mainLexiconMap = $tag === 'picture'
-            ? []  // picture сам по себе не имеет локализуемых атрибутов
-            : ['src' => $mainContentType, 'poster' => 'poster', 'alt' => 'text'];
 
+        // Накопленный «путь» для poster/source — повторяет grabber'овский
+        // `LexiconManager::getLexiconKey` style (без idx, который cutter не знает).
+        $accumulatedParent = $parentFieldName !== ''
+            ? "{$parentFieldName}_{$fieldName}"
+            : $fieldName;
+
+        // src главного элемента (video/audio).
         if ($row->hasAttribute('src')) {
-            $srcExpr = $this->lex($firstSymbol, "$complexName.src", $mainContentType);
+            $srcExpr = $this->lex(
+                $firstSymbol,
+                "$complexName.src",
+                $mainContentType,
+                $fieldName,
+                $parentFieldName
+            );
             if ($this->properties['lazyloadAttr'] && !$row->hasAttribute('data-mpc-nolazy')) {
                 $row->setAttribute($this->properties['lazyloadAttr'], $srcExpr);
                 $row->removeAttribute('src');
@@ -250,7 +282,20 @@ class PlaceholderProcessor
             }
         }
 
-        $row = $this->setAttributes($row, $firstSymbol, $complexName, $mainLexiconMap);
+        // Остальные атрибуты главного элемента (poster, alt, и т.д.).
+        // src включаем сюда тоже — если он остался на элементе (не-lazyload путь),
+        // `setAttributes` иначе перетирает его обычным `{$expr}` поверх нашего
+        // `lex()`-выставленного значения. В lazyload-случае src уже удалён, и
+        // setAttributes его не трогает.
+        $mainLexiconAttrs = $tag === 'picture'
+            ? []  // picture сам по себе не имеет локализуемых атрибутов
+            : [
+                'src'    => $this->shouldLexiconize($mainContentType, $fieldName, $parentFieldName),
+                'poster' => $this->shouldLexiconize('poster', 'poster', $accumulatedParent),
+                'alt'    => $this->shouldLexiconize('text', $fieldName . '_alt', $parentFieldName),
+            ];
+
+        $row = $this->setAttributes($row, $firstSymbol, $complexName, $mainLexiconAttrs);
         $html = $this->parser->getHTMLString($row);
 
         $sources = $row->find('source');
@@ -260,7 +305,9 @@ class PlaceholderProcessor
             // <source> внутри video/audio → атрибут src, content-type как у тега-родителя.
             $sourceAttr = $tag === 'picture' ? 'srcset' : 'src';
             $sourceContentType = $tag === 'picture' ? 'image' : $tag;
-            $source = $this->setAttributes($sources[$k], $firstSymbol, '$source', [$sourceAttr => $sourceContentType]);
+            // Грабер для source: fieldName='source', parentFieldName=accumulatedParent.
+            $useSourceLexicon = $this->shouldLexiconize($sourceContentType, 'source', $accumulatedParent);
+            $source = $this->setAttributes($sources[$k], $firstSymbol, '$source', [$sourceAttr => $useSourceLexicon]);
             $search = ['##', 'complexName', 'html'];
             $replace = [$firstSymbol, $complexName];
 
@@ -273,10 +320,10 @@ class PlaceholderProcessor
                         'firstSymbol' => $firstSymbol,
                         'complexName' => '$source',
                         'srcAttr' => $sourceAttr,
-                        'useLexicon' => $this->isLexiconField($sourceContentType),
+                        'useLexicon' => $useSourceLexicon,
                     ]);
                 } else {
-                    $src = $this->lex($firstSymbol, "\$source.$sourceAttr", $sourceContentType);
+                    $src = $this->lex($firstSymbol, "\$source.$sourceAttr", $sourceContentType, 'source', $accumulatedParent);
                 }
                 $source->setAttribute($this->properties['lazyloadAttr'], $src);
                 $source->removeAttribute($sourceAttr);
@@ -290,11 +337,17 @@ class PlaceholderProcessor
         $images = $row->find('img');
         if (count($images) > 0) {
             // <img> внутри <picture> — content-type 'image' для src, 'text' для alt.
+            // Грабер вызывает getImageValue с исходным options (fieldName = picture's field).
+            $imgFieldName = $fieldName;
+            $imgLexAttrs = [
+                'src' => $this->shouldLexiconize('image', $imgFieldName, $parentFieldName),
+                'alt' => $this->shouldLexiconize('text', $imgFieldName . '_alt', $parentFieldName),
+            ];
             $img = $this->setAttributes(
                 $images[count($images) - 1],
                 $firstSymbol,
                 $complexName . '.img[0]',
-                ['src' => 'image', 'alt' => 'text']
+                $imgLexAttrs
             );
             if (!$img->hasAttribute('data-mpc-nothumb') && !empty($this->properties['thumbSnippet'])) {
                 $src = $this->getThumb([
@@ -304,10 +357,10 @@ class PlaceholderProcessor
                     'firstSymbol' => $firstSymbol,
                     'complexName' => $complexName . '.img[0]',
                     'srcAttr' => 'src',
-                    'useLexicon' => $this->isLexiconField('image'),
+                    'useLexicon' => $imgLexAttrs['src'],
                 ]);
             } else {
-                $src = $this->lex($firstSymbol, "$complexName.img[0].src", 'image');
+                $src = $this->lex($firstSymbol, "$complexName.img[0].src", 'image', $imgFieldName, $parentFieldName);
             }
 
             if ($this->properties['lazyloadAttr'] && !$row->hasAttribute('data-mpc-nolazy')) {
@@ -336,6 +389,7 @@ class PlaceholderProcessor
     public function setDefaultPlaceholder(Element $row, string $fieldName, array $properties): string
     {
         [$firstSymbol, $complexName] = $this->getSymbolComplex($row, $fieldName, $properties['level'], $properties['isStatic']);
+        $parentFieldName = $properties['parentFieldName'] ?? '';
 
         if ($row->hasAttribute('href')) {
             // href — это URL/id ресурса. Не локализуется.
@@ -345,7 +399,7 @@ class PlaceholderProcessor
             $row->setAttribute('href', $pls);
         } else {
             // Внутренний текст элемента — content-type `text`.
-            $row->setInnerHtml($this->lex($firstSymbol, $complexName, 'text'));
+            $row->setInnerHtml($this->lex($firstSymbol, $complexName, 'text', $fieldName, $parentFieldName));
         }
 
         $html = $this->parser->getHTMLString($row);
@@ -461,20 +515,21 @@ class PlaceholderProcessor
     /**
      * Устанавливает Fenom-плейсхолдеры для разрешённых атрибутов медиа-элемента.
      *
-     * `$lexiconMap`: маппинг `attrName => contentType` для атрибутов, которые
-     * могут локализоваться. Локализация применяется только если данный
-     * content-type включён в `translatableContentTypes`. Атрибуты, отсутствующие
-     * в карте, всегда выводятся без `| lexicon`.
+     * `$lexiconAttrs`: маппинг `attrName => bool` — `true` означает «применить
+     * `| lexicon` к этому атрибуту». Caller вычисляет решение через
+     * `shouldLexiconize($contentType, $fieldName, $parentFieldName)` с
+     * правильным контекстом (имя поля, накопленный родитель).
+     * Атрибуты, отсутствующие в карте или со значением `false`, выводятся
+     * обычным `{$expr}`.
      */
-    public function setAttributes(Element $row, string $firstSymbol, string $complexName, array $lexiconMap = []): Element
+    public function setAttributes(Element $row, string $firstSymbol, string $complexName, array $lexiconAttrs = []): Element
     {
         $allowedAttrs = ['src', 'srcset', 'loop', 'media', 'type', 'sizes', 'autoplay', 'controls', 'preload', 'muted', 'height', 'width', 'poster', 'alt'];
 
         foreach ($allowedAttrs as $attrName) {
             if ($row->hasAttribute($attrName)) {
-                $contentType = $lexiconMap[$attrName] ?? null;
-                $row->setAttribute($attrName, $contentType
-                    ? $this->lex($firstSymbol, "$complexName.$attrName", $contentType)
+                $row->setAttribute($attrName, !empty($lexiconAttrs[$attrName])
+                    ? "##'{" . "$complexName.$attrName" . "}' | lexicon}"
                     : "{$firstSymbol}{$complexName}.{$attrName}}");
             }
         }
@@ -487,22 +542,18 @@ class PlaceholderProcessor
     // ---------------------------------------------------------------
 
     /**
-     * Включён ли лексикон для указанного content-type. Дублирует логику
-     * `LexiconManager::isLexiconField` — оба класса смотрят на одни и те же
-     * properties (`useLexicons` + `translatableContentTypes`).
+     * Должно ли поле быть лексиконизировано с учётом content-type и
+     * exclusion-паттернов. Делегирует в `LexiconManager::shouldLexiconize`.
      */
-    private function isLexiconField(string $contentType): bool
+    private function shouldLexiconize(string $contentType, string $fieldName, string $parentFieldName = ''): bool
     {
-        if (empty($this->properties['useLexicons'])) {
-            return false;
-        }
-        $types = $this->properties['translatableContentTypes'] ?? [];
-        return in_array($contentType, $types, true);
+        return $this->lexiconManager->shouldLexiconize($contentType, $fieldName, $parentFieldName);
     }
 
     /**
      * Собирает Fenom-плейсхолдер для выражения, добавляя `| lexicon` если
-     * поле указанного content-type локализуется.
+     * поле указанного content-type локализуется и не попадает под
+     * exclusion-паттерны.
      *
      * Для нелексиконных — `{$expr}` (или `##$expr}` если firstSymbol = ##).
      *
@@ -515,9 +566,9 @@ class PlaceholderProcessor
      * `{$expr}` подменяется значением): получаем `##'key' | lexicon}`,
      * после `##→{` — `{'key' | lexicon}`, лексикон резолвится на final-пассе.
      */
-    private function lex(string $firstSymbol, string $expr, string $contentType): string
+    private function lex(string $firstSymbol, string $expr, string $contentType, string $fieldName, string $parentFieldName = ''): string
     {
-        if (!$this->isLexiconField($contentType)) {
+        if (!$this->shouldLexiconize($contentType, $fieldName, $parentFieldName)) {
             return "{$firstSymbol}{$expr}}";
         }
         return "##'{" . $expr . "}' | lexicon}";

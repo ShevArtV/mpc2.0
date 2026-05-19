@@ -51,6 +51,35 @@ class LexiconManager
         return in_array($contentType, $types, true);
     }
 
+    /**
+     * Должно ли поле быть лексиконизировано с учётом exclusion-паттернов.
+     * Комбинирует `isLexiconField` (content-type translatable) + проверку поля
+     * и накопленного родителя против `excludeLexiconFields`.
+     *
+     * Возвращает true только если ВСЕ условия выполнены:
+     *  - лексиконы включены и content-type входит в translatableContentTypes;
+     *  - fieldName не попадает под exclude-паттерн;
+     *  - parentFieldName (если задан) не попадает под exclude-паттерн.
+     *
+     * Лимитация: cutter работает на уровне схемы (без idx), поэтому
+     * exclude-паттерны с конкретными row-индексами (`cards_1_subtitle_2`)
+     * не сматчатся на cutter-стороне. Для row-агностических исключений
+     * используйте glob (`cards_*_subtitle_*`).
+     */
+    public function shouldLexiconize(string $contentType, string $fieldName, string $parentFieldName = ''): bool
+    {
+        if (!$this->isLexiconField($contentType)) {
+            return false;
+        }
+        if ($fieldName !== '' && $this->isFieldExcluded($fieldName)) {
+            return false;
+        }
+        if ($parentFieldName !== '' && $this->isFieldExcluded($parentFieldName)) {
+            return false;
+        }
+        return true;
+    }
+
     public function getResourceIdentifierById(int $rid): string
     {
         if ($this->properties['lexiconFilenameField'] !== 'id') {
@@ -231,7 +260,12 @@ class LexiconManager
             return false;
         }
 
-        foreach ($this->properties['excludeLexiconFields'] as $pattern) {
+        $patterns = $this->properties['excludeLexiconFields'] ?? [];
+        if (!is_array($patterns)) {
+            return false;
+        }
+
+        foreach ($patterns as $pattern) {
             if (!is_string($pattern) || $pattern === '') {
                 continue;
             }

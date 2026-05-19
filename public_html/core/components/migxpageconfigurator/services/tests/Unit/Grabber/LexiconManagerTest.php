@@ -238,6 +238,69 @@ class LexiconManagerTest extends TestCase
         $this->assertTrue($m->isLexiconField('poster'));
     }
 
+    // ---------------------------------------------------------------
+    // shouldLexiconize() — комбинирует content-type + exclusion
+    // ---------------------------------------------------------------
+
+    public function testShouldLexiconizeFalseWhenContentTypeNotTranslatable(): void
+    {
+        $m = $this->makeManager([
+            'useLexicons'              => true,
+            'translatableContentTypes' => ['text'],
+        ]);
+        $this->assertFalse($m->shouldLexiconize('image', 'hero', ''));
+    }
+
+    public function testShouldLexiconizeFalseForExcludedFieldName(): void
+    {
+        $m = $this->makeManager([
+            'useLexicons'              => true,
+            'translatableContentTypes' => ['text', 'image'],
+            'excludeLexiconFields'     => ['MIGX_id', 'inline_styles'],
+        ]);
+        $this->assertFalse($m->shouldLexiconize('text', 'MIGX_id', ''));
+        $this->assertFalse($m->shouldLexiconize('text', 'inline_styles', 'cards'));
+        // не excluded — лексиконим
+        $this->assertTrue($m->shouldLexiconize('text', 'title', 'cards'));
+    }
+
+    public function testShouldLexiconizeFalseForExcludedParentFieldName(): void
+    {
+        $m = $this->makeManager([
+            'useLexicons'              => true,
+            'translatableContentTypes' => ['text', 'image'],
+            'excludeLexiconFields'     => ['compare_list_compare_product'],
+        ]);
+        $this->assertFalse($m->shouldLexiconize('text', 'title', 'compare_list_compare_product'));
+    }
+
+    public function testShouldLexiconizeRespectsGlobPatternsInExclude(): void
+    {
+        $m = $this->makeManager([
+            'useLexicons'              => true,
+            'translatableContentTypes' => ['text', 'image'],
+            'excludeLexiconFields'     => ['*_picture', 'img*'],
+        ]);
+        // fieldName suffix-glob
+        $this->assertFalse($m->shouldLexiconize('image', 'main_picture', ''));
+        // fieldName prefix-glob
+        $this->assertFalse($m->shouldLexiconize('image', 'img_pc', ''));
+        // parent suffix-glob
+        $this->assertFalse($m->shouldLexiconize('image', 'src', 'hero_picture'));
+        // не под паттерн
+        $this->assertTrue($m->shouldLexiconize('image', 'logo_src', 'banner'));
+    }
+
+    public function testShouldLexiconizeHandlesUndefinedExcludeList(): void
+    {
+        $m = $this->makeManager([
+            'useLexicons'              => true,
+            'translatableContentTypes' => ['text'],
+            // excludeLexiconFields не задан — не должно ронять
+        ]);
+        $this->assertTrue($m->shouldLexiconize('text', 'title', 'cards'));
+    }
+
     public function testIsLexiconFieldFalseWhenTranslatableTypesMissing(): void
     {
         $m = $this->makeManager(['useLexicons' => true]);

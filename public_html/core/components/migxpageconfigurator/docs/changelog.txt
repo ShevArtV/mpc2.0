@@ -1,3 +1,15 @@
+2.3.10-rc
+==============
+- Cutter теперь учитывает `excludeLexiconFields` при расстановке `| lexicon` (баг 2.3.9-rc). Раньше `PlaceholderProcessor::isLexiconField()` проверял только `useLexicons` + `translatableContentTypes` и эмитил `##'{$expr}' | lexicon}` даже для полей, которые грабер пропускает по exclusion-паттерну → переопределённый `lexicon`-модификатор возвращал пусто → пустота в выхлопе.
+  - В `LexiconManager` добавлен публичный метод `shouldLexiconize($contentType, $fieldName, $parentFieldName = '')` — комбинирует `isLexiconField` (content-type translatable) + `isFieldExcluded` для `fieldName` и `parentFieldName`. Это единый источник решения для грабера и каттера.
+  - `isFieldExcluded` защищён от отсутствующего/невалидного `excludeLexiconFields` (раньше падал warning'ом).
+  - `PlaceholderProcessor` получает `LexiconManager` через DI вместо дублирующего `isLexiconField`-хелпера. Удалена локальная копия логики.
+  - `lex()` принимает `fieldName` и `parentFieldName`, делегирует в `shouldLexiconize` через приватный `shouldLexiconize`-обёртку. Каждый field-метод (`setDefault/setImg/setBackground/setMediaPlaceholder`) передаёт контекст.
+  - `setAttributes()` теперь принимает `array $lexiconAttrs` (attrName → bool) вместо `attrName → contentType`. Caller сам вычисляет решение через `shouldLexiconize` с правильным контекстом (fieldName, accumulated parent). Это нужно потому что `setAttributes` обрабатывает разные атрибуты с разной семантикой fieldName (например, `alt` грабер пишет с суффиксом `_alt`).
+  - `setPlaceholders` при рекурсии в items накапливает `parentFieldName` (`prevParent + '_' + fieldName`) — раньше перезаписывал. Это нужно для корректного матча exclusion-паттернов на накопленный путь (типа `compare_list_compare_product`).
+  - **Known limitation**: cutter работает на уровне схемы и не знает row-индексы. Exclusion-паттерны с конкретными idx (`cards_1_subtitle_2`) на cutter-стороне **не сматчатся**. Для row-агностических исключений используйте glob (`cards_*_subtitle_*`). Grabber по-прежнему обрабатывает оба варианта корректно. Поведение задокументировано в docstring `LexiconManager::shouldLexiconize`.
+  - Тесты: добавлено 4 теста на `shouldLexiconize` в `LexiconManagerTest` (exclude по fieldName, parentFieldName, glob, defensive default). Добавлено 3 теста в `PlaceholderProcessorTest` (exclude по точному имени, по glob, по parent при вложенной структуре). Всего 121 тест, все зелёные.
+
 2.3.9-rc
 ==============
 - Переработана работа с лексиконами: вместо хранения Fenom-тега `{'key' | lexicon}` как значения поля теперь в БД лежит голый ключ, а Cutter при генерации tpl сам строит выражение с модификатором `| lexicon` для тех полей, чей content-type есть в `translatableContentTypes`. Это закрывает баг с кавычками внутри `mpcThumb` (значение перестало быть Fenom-кодом — нет конфликта с обрамляющими литералами) и убирает костыли `isLoopVar` / `isLoopVarInStaticCtx` / `{if}`-страховки из `getThumb()`.

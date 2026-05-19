@@ -4,6 +4,7 @@ namespace MpcTests\Unit\Cutter;
 
 use DiDom\Document;
 use MpcServices\Handlers\Cutter\PlaceholderProcessor;
+use MpcServices\Handlers\Grabber\LexiconManager;
 use MpcServices\Handlers\Parser;
 use MpcTests\Stubs\ModxStub;
 use PHPUnit\Framework\TestCase;
@@ -29,6 +30,7 @@ class PlaceholderProcessorTest extends TestCase
             'commonThumbParams'       => '',
             'useLexicons'             => false,
             'translatableContentTypes' => ['text', 'image'],
+            'excludeLexiconFields'    => [],
             'isSectionStatic'         => false,
             'samples'                 => [
                 'if'                   => $this->ifSample,
@@ -40,7 +42,9 @@ class PlaceholderProcessorTest extends TestCase
             ],
         ], $extraProperties);
 
-        return new PlaceholderProcessor($modx, $properties, new Parser());
+        $lexiconManager = new LexiconManager($modx, $properties);
+
+        return new PlaceholderProcessor($modx, $properties, new Parser(), $lexiconManager);
     }
 
     private function makeElement(string $tag, array $attrs = [], string $inner = ''): \DiDom\Element
@@ -339,6 +343,92 @@ class PlaceholderProcessorTest extends TestCase
             '<section data-mpc-section="test"><div data-mpc-field="bg_img" style="background:url(\'x.jpg\');"></div></section>'
         );
         $this->assertStringContainsString("##'{\$bg_img}' | lexicon}", $html);
+    }
+
+    // ---------------------------------------------------------------
+    // Cutter учитывает excludeLexiconFields — не ставит `| lexicon`
+    // на поля, которые грабер пропустил бы (иначе пустота на сайте).
+    // ---------------------------------------------------------------
+
+    public function testSetPlaceholdersExcludedFieldNameSkipsLexicon(): void
+    {
+        $proc = $this->makeProcessor([
+            'useLexicons'              => true,
+            'translatableContentTypes' => ['text'],
+            'excludeLexiconFields'     => ['inline_styles'],
+        ]);
+        $properties = [
+            'html'          => '<section data-mpc-section="t"><div data-mpc-field="inline_styles">--color: red;</div></section>',
+            'element'       => (new Document('<section data-mpc-section="t"><div data-mpc-field="inline_styles">--color: red;</div></section>'))->find('[data-mpc-section]')[0],
+            'fieldAttrName' => 'data-mpc-field',
+            'itemAttrName'  => 'data-mpc-item',
+            'level'         => 0,
+            'isStatic'      => false,
+        ];
+        $html = $proc->setPlaceholders($properties)['html'];
+
+        // excluded → нет `| lexicon`, обычный плейсхолдер.
+        $this->assertStringContainsString('{$inline_styles}', $html);
+        $this->assertStringNotContainsString('| lexicon', $html);
+    }
+
+    public function testSetPlaceholdersExcludedFieldNameByGlobSkipsLexicon(): void
+    {
+        $proc = $this->makeProcessor([
+            'useLexicons'              => true,
+            'translatableContentTypes' => ['image'],
+            'excludeLexiconFields'     => ['*_picture', 'img'],
+        ]);
+        $html = '<section data-mpc-section="t">'
+            . '<img data-mpc-field="img" src="x.jpg">'
+            . '<img data-mpc-field="hero_picture" src="y.jpg">'
+            . '<img data-mpc-field="banner" src="z.jpg">'
+            . '</section>';
+        $properties = [
+            'html'          => $html,
+            'element'       => (new Document($html))->find('[data-mpc-section]')[0],
+            'fieldAttrName' => 'data-mpc-field',
+            'itemAttrName'  => 'data-mpc-item',
+            'level'         => 0,
+            'isStatic'      => false,
+        ];
+        $result = $proc->setPlaceholders($properties)['html'];
+
+        // 'img' — точное исключение → без lexicon
+        $this->assertStringContainsString('{$img[0].src}', $result);
+        // '*_picture' — glob → без lexicon
+        $this->assertStringContainsString('{$hero_picture[0].src}', $result);
+        // banner — не под паттерн → с lexicon
+        $this->assertStringContainsString("##'{\$banner[0].src}' | lexicon}", $result);
+    }
+
+    public function testSetPlaceholdersExcludedParentFieldNameSkipsLexicon(): void
+    {
+        $proc = $this->makeProcessor([
+            'useLexicons'              => true,
+            'translatableContentTypes' => ['text'],
+            'excludeLexiconFields'     => ['cards'],
+        ]);
+        $html = '<section data-mpc-section="t">'
+            . '<div data-mpc-field="cards">'
+            .   '<div data-mpc-item>'
+            .     '<h2 data-mpc-field-1="title">x</h2>'
+            .   '</div>'
+            . '</div>'
+            . '</section>';
+        $properties = [
+            'html'          => $html,
+            'element'       => (new Document($html))->find('[data-mpc-section]')[0],
+            'fieldAttrName' => 'data-mpc-field',
+            'itemAttrName'  => 'data-mpc-item',
+            'level'         => 0,
+            'isStatic'      => false,
+        ];
+        $result = $proc->setPlaceholders($properties)['html'];
+
+        // Внутри cards exclusion на parent → 'title' выводится без lexicon
+        $this->assertStringContainsString('{$item1.title}', $result);
+        $this->assertStringNotContainsString('| lexicon', $result);
     }
 
     // ---------------------------------------------------------------

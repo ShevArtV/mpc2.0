@@ -12,6 +12,7 @@ use MpcServices\Handlers\Cutter\PlaceholderProcessor;
 use MpcServices\Handlers\Cutter\SnippetCallBuilder;
 use MpcServices\Handlers\Cutter\SpecialTagProcessor;
 use MpcServices\Handlers\Cutter\SectionFileWriter;
+use MpcServices\Handlers\Grabber\LexiconManager;
 
 /**
  * @author Arthur Shevchenko (https://t.me/ShevArtV)
@@ -74,10 +75,17 @@ class Cutter extends Base
         $this->getPresets();
         $this->getSamples();
 
+        // LexiconManager нужен PlaceholderProcessor'у для решения, добавлять
+        // ли `| lexicon` к плейсхолдеру: учитывает translatableContentTypes
+        // и excludeLexiconFields (последнее — критично, иначе cutter ставит
+        // `| lexicon` для полей, которые grabber пропускает → пусто на сайте).
+        $lexiconManager = new LexiconManager($this->modx, $this->properties);
+
         $this->placeholderProcessor = new PlaceholderProcessor(
             $this->modx,
             $this->properties,
-            $this->parser
+            $this->parser,
+            $lexiconManager
         );
 
         $this->snippetCallBuilder = new SnippetCallBuilder($this->properties);
