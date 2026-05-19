@@ -93,13 +93,24 @@ class PlaceholderProcessor
                 // Это нужно, чтобы exclusion-паттерны, заданные на накопленном
                 // пути (`compare_list_compare_product`, `*_picture` и т.п.),
                 // корректно сматчились на cutter-стороне.
-                $prevParent = $properties['parentFieldName'] ?? '';
-                $properties['parentFieldName'] = $prevParent !== ''
-                    ? "{$prevParent}_{$fieldName}"
+                $savedParent = $properties['parentFieldName'] ?? '';
+                $savedFieldName = $properties['fieldName'] ?? '';
+                $properties['parentFieldName'] = $savedParent !== ''
+                    ? "{$savedParent}_{$fieldName}"
                     : $fieldName;
                 $properties['fieldName'] = preg_replace('/^\$/', '', $complexName);
 
                 $props = $this->setPlaceholders(array_merge($properties, $props));
+
+                // Восстанавливаем родительский контекст: иначе следующая
+                // итерация foreach увидит накопленный parent от предыдущего
+                // фольда. Например, после `list_triple_picture` (parent →
+                // `list_triple_picture`) шёл `list_simple` — parent становился
+                // `list_triple_picture_list_simple`, и fullPath для content
+                // был `list_triple_picture_list_simple_content`, что матчил
+                // pattern `list_triple*content*` и ложно исключал content.
+                $properties['parentFieldName'] = $savedParent;
+                $properties['fieldName'] = $savedFieldName;
                 $limit = $field->getAttribute('data-mpc-lim');
                 $offset = $field->getAttribute('data-mpc-off');
 

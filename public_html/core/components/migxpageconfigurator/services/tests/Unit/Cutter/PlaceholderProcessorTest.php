@@ -432,6 +432,46 @@ class PlaceholderProcessorTest extends TestCase
         $this->assertStringNotContainsString('| lexicon', $result);
     }
 
+    public function testSetPlaceholdersDoesNotLeakParentFieldNameBetweenSiblings(): void
+    {
+        // Регрессионный кейс: после обработки одного top-level item-фольда
+        // (например, `list_triple_picture` — parent ставится `list_triple_picture`),
+        // следующий top-level item-фольд (`list_simple`) НЕ должен наследовать
+        // этот parent. Иначе fullPath для content внутри list_simple становится
+        // `list_triple_picture_list_simple_content` и матчит pattern
+        // `list_triple*content*` → ложно исключается.
+        $proc = $this->makeProcessor([
+            'useLexicons'              => true,
+            'translatableContentTypes' => ['text'],
+            'excludeLexiconFields'     => ['list_triple*content*'],
+        ]);
+        $html = '<section data-mpc-section="t">'
+            . '<div data-mpc-field="list_triple_picture">'
+            .   '<div data-mpc-item>'
+            .     '<p data-mpc-field-1="caption">x</p>'
+            .   '</div>'
+            . '</div>'
+            . '<div data-mpc-field="list_simple">'
+            .   '<div data-mpc-item>'
+            .     '<p data-mpc-field-1="content">y</p>'
+            .   '</div>'
+            . '</div>'
+            . '</section>';
+        $properties = [
+            'html'          => $html,
+            'element'       => (new Document($html))->find('[data-mpc-section]')[0],
+            'fieldAttrName' => 'data-mpc-field',
+            'itemAttrName'  => 'data-mpc-item',
+            'level'         => 0,
+            'isStatic'      => false,
+        ];
+        $result = $proc->setPlaceholders($properties)['html'];
+
+        // content в list_simple — лексиконим (parent должен быть `list_simple`,
+        // fullPath `list_simple_content`, pattern `list_triple*content*` не матчит).
+        $this->assertStringContainsString("##'{\$item1.content}' | lexicon}", $result);
+    }
+
     public function testSetPlaceholdersPictureSourceUsesPictureFieldAsParentForExclusion(): void
     {
         // Регрессионный кейс: <source> внутри <picture data-mpc-field-1="picture">
