@@ -432,6 +432,53 @@ class PlaceholderProcessorTest extends TestCase
         $this->assertStringNotContainsString('| lexicon', $result);
     }
 
+    public function testSetPlaceholdersPictureSourceUsesPictureFieldAsParentForExclusion(): void
+    {
+        // Регрессионный кейс: <source> внутри <picture data-mpc-field-1="picture">
+        // должен исключаться по pattern `picture_*` (как делает grabber через
+        // getPictureValue: parentFieldName='picture', fullPath='picture_source').
+        // Раньше cutter использовал accumulated `list_triple_picture_picture`
+        // → pattern не матчил → лексикон ставился, а grabber его не писал.
+        $proc = $this->makeProcessor([
+            'useLexicons'              => true,
+            'translatableContentTypes' => ['image', 'text'],
+            'excludeLexiconFields'     => ['picture', 'picture_*', '*_picture'],
+            'lazyloadAttr'             => 'data-lazy',
+            'samples'                  => [
+                'if'                   => $this->ifSample,
+                'foreach'              => $this->foreachSample,
+                'foreach_limit'        => $this->foreachSample,
+                'foreach_offset'       => $this->foreachSample,
+                'foreach_limit_offset' => $this->foreachSample,
+                'media'                => '##foreach complexName.sources as $source index=$index last=$last}html##/foreach}',
+            ],
+        ]);
+        $html = '<section data-mpc-section="t">'
+            . '<div data-mpc-field="list_triple_picture">'
+            .   '<div data-mpc-item>'
+            .     '<picture data-mpc-field-1="picture">'
+            .       '<source srcset="/a.jpg" media="(max-width: 768px)" width="768" height="100">'
+            .       '<img src="/b.jpg" width="1920" height="200">'
+            .     '</picture>'
+            .   '</div>'
+            . '</div>'
+            . '</section>';
+        $properties = [
+            'html'          => $html,
+            'element'       => (new Document($html))->find('[data-mpc-section]')[0],
+            'fieldAttrName' => 'data-mpc-field',
+            'itemAttrName'  => 'data-mpc-item',
+            'level'         => 0,
+            'isStatic'      => false,
+        ];
+        $result = $proc->setPlaceholders($properties)['html'];
+
+        // source.srcset НЕ должен идти через `| lexicon` — pattern `picture_*`
+        // матчит fullPath `picture_source` (как в грабере).
+        $this->assertStringNotContainsString("'{\$source.srcset}' | lexicon", $result);
+        $this->assertStringContainsString('$source.srcset', $result);
+    }
+
     public function testSetPlaceholdersContainerSuffixDoesNotBleedToChildren(): void
     {
         // Регрессионный кейс: pattern `*_picture` против контейнера

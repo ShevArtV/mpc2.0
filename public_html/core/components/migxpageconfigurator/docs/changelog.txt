@@ -1,3 +1,7 @@
+2.3.13-rc
+==============
+- Cutter асимметрия для `<source>` внутри `<picture>`: грабер (`getPictureValue`) перезаписывает `$options['parentFieldName']` на picture's fieldName БЕЗ grandparent → fullPath для source = `picture_source` (а не `<grandparent>_picture_source`). Cutter раньше использовал accumulated `<grandparent>_picture` как parent → fullPath `<grandparent>_picture_source` → pattern `picture_*` не матчил → лексикон ставился. Грабер же исключал → ключ не писался → пусто на сайте. Теперь cutter для picture-source использует picture's fieldName без grandparent — симметрично грабером. Для video/audio source поведение не изменено (там оба используют accumulated parent через `getParentFieldName`). 127 тестов, все зелёные.
+
 2.3.12-rc
 ==============
 - Семантический фикс exclusion-паттернов: проверка против **полного пути** (`parentFieldName_fieldName`) вместо `parentFieldName` отдельно. Раньше pattern `*_picture` (задуманный для image-полей) матчился с именем контейнера `list_triple_picture` и исключал любые text-поля (subtitle/title) под ним — на сайте они выводились без `| lexicon` и без лексикон-ключа в БД. Теперь pattern проверяется против `list_triple_picture_subtitle` — не оканчивается на `_picture` → не матчит → лексиконим. Для `list_triple_picture_picture` (вложенное image-поле с именем `picture`) — оканчивается на `_picture` → матчит → исключаем. Поведение синхронизировано в грабере (`setLexicons`) и cutter (`shouldLexiconize`).

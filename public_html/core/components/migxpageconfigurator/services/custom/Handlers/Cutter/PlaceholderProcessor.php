@@ -305,8 +305,16 @@ class PlaceholderProcessor
             // <source> внутри video/audio → атрибут src, content-type как у тега-родителя.
             $sourceAttr = $tag === 'picture' ? 'srcset' : 'src';
             $sourceContentType = $tag === 'picture' ? 'image' : $tag;
-            // Грабер для source: fieldName='source', parentFieldName=accumulatedParent.
-            $useSourceLexicon = $this->shouldLexiconize($sourceContentType, 'source', $accumulatedParent);
+            // parentFieldName для source:
+            // - picture: грабер `getPictureValue` перезаписывает
+            //   `$options['parentFieldName']` на picture's fieldName БЕЗ
+            //   grandparent → fullPath для source = `picture_source` (а не
+            //   `<grandparent>_picture_source`). Pattern `picture_*` его матчит.
+            // - video/audio: грабер `getMediaValue` использует
+            //   `getParentFieldName`, который аккумулирует с grandparent
+            //   (как наш $accumulatedParent).
+            $sourceParent = $tag === 'picture' ? $fieldName : $accumulatedParent;
+            $useSourceLexicon = $this->shouldLexiconize($sourceContentType, 'source', $sourceParent);
             $source = $this->setAttributes($sources[$k], $firstSymbol, '$source', [$sourceAttr => $useSourceLexicon]);
             $search = ['##', 'complexName', 'html'];
             $replace = [$firstSymbol, $complexName];
@@ -323,7 +331,7 @@ class PlaceholderProcessor
                         'useLexicon' => $useSourceLexicon,
                     ]);
                 } else {
-                    $src = $this->lex($firstSymbol, "\$source.$sourceAttr", $sourceContentType, 'source', $accumulatedParent);
+                    $src = $this->lex($firstSymbol, "\$source.$sourceAttr", $sourceContentType, 'source', $sourceParent);
                 }
                 $source->setAttribute($this->properties['lazyloadAttr'], $src);
                 $source->removeAttribute($sourceAttr);
