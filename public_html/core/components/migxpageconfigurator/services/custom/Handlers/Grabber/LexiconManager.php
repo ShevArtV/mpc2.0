@@ -37,6 +37,20 @@ class LexiconManager
         $this->sectionIsStatic      = $isStatic;
     }
 
+    /**
+     * Включён ли лексикон для указанного content-type.
+     * Используется и грабером (нужно ли заводить ключ), и каттером (нужно ли
+     * добавлять `| lexicon` к плейсхолдеру) — единый источник решения.
+     */
+    public function isLexiconField(string $contentType): bool
+    {
+        if (empty($this->properties['useLexicons'])) {
+            return false;
+        }
+        $types = $this->properties['translatableContentTypes'] ?? [];
+        return in_array($contentType, $types, true);
+    }
+
     public function getResourceIdentifierById(int $rid): string
     {
         if ($this->properties['lexiconFilenameField'] !== 'id') {
@@ -147,7 +161,11 @@ class LexiconManager
 
         $this->lexicons[$rid][$lexiconKey] = $this->sanitizeValue($value);
 
-        return "{'$lexiconKey' | lexicon}";
+        // Возвращаем сам ключ. Cutter на своей стороне добавит `| lexicon` к плейсхолдеру,
+        // если поле лексиконное. Так значение в БД остаётся «чистыми данными»,
+        // Fenom-синтаксис строит только PlaceholderProcessor — единый источник правды
+        // для шаблона.
+        return $lexiconKey;
     }
 
     public function createLexicons(array $allLexicons): void

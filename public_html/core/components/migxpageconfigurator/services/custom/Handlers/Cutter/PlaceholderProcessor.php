@@ -166,9 +166,10 @@ class PlaceholderProcessor
                 'complexName' => $complexName,
                 'srcAttr' => '',
                 'setValues' => true,
+                'useLexicon' => $this->isLexiconField('image'),
             ]);
         } else {
-            $src = "{$firstSymbol}{$complexName}}";
+            $src = $this->lex($firstSymbol, $complexName, 'image');
         }
 
         if ($this->properties['lazyloadAttr'] && !$row->hasAttribute('data-mpc-nolazy')) {
@@ -186,7 +187,6 @@ class PlaceholderProcessor
     {
         [$firstSymbol, $complexName] = $this->getSymbolComplex($row, $fieldName, $properties['level'], $properties['isStatic']);
         $complexName .= '[0]';
-        $prefix = "{$firstSymbol}{$complexName}";
 
         if (!$row->hasAttribute('data-mpc-nothumb') && !empty($this->properties['thumbSnippet'])) {
             $src = $this->getThumb([
@@ -196,9 +196,10 @@ class PlaceholderProcessor
                 'firstSymbol' => $firstSymbol,
                 'complexName' => $complexName,
                 'srcAttr' => 'src',
+                'useLexicon' => $this->isLexiconField('image'),
             ]);
         } else {
-            $src = "$prefix.src}";
+            $src = $this->lex($firstSymbol, "$complexName.src", 'image');
         }
 
         if ($this->properties['lazyloadAttr'] && !$row->hasAttribute('data-mpc-nolazy')) {
@@ -208,9 +209,13 @@ class PlaceholderProcessor
             $row->setAttribute('src', $src);
         }
 
-        foreach (['width', 'height', 'alt'] as $attr) {
+        // width/height — не локализуются; alt — `text`.
+        $attrContentTypes = ['width' => null, 'height' => null, 'alt' => 'text'];
+        foreach ($attrContentTypes as $attr => $contentType) {
             if ($row->hasAttribute($attr)) {
-                $row->setAttribute($attr, "$prefix.{$attr}}");
+                $row->setAttribute($attr, $contentType
+                    ? $this->lex($firstSymbol, "$complexName.$attr", $contentType)
+                    : "{$firstSymbol}{$complexName}.{$attr}}");
             }
         }
 
@@ -228,48 +233,53 @@ class PlaceholderProcessor
         [$firstSymbol, $complexName] = $this->getSymbolComplex($row, $fieldName, $properties['level'], $properties['isStatic']);
         $complexName .= '[0]';
 
+        $tag = $row->tagName();
+        // content-type для атрибутов главного элемента: video/audio/picture
+        $mainContentType = $tag === 'picture' ? 'image' : $tag;
+        $mainLexiconMap = $tag === 'picture'
+            ? []  // picture сам по себе не имеет локализуемых атрибутов
+            : ['src' => $mainContentType, 'poster' => 'poster', 'alt' => 'text'];
+
         if ($row->hasAttribute('src')) {
+            $srcExpr = $this->lex($firstSymbol, "$complexName.src", $mainContentType);
             if ($this->properties['lazyloadAttr'] && !$row->hasAttribute('data-mpc-nolazy')) {
-                $row->setAttribute($this->properties['lazyloadAttr'], "{$firstSymbol}{$complexName}.src}");
+                $row->setAttribute($this->properties['lazyloadAttr'], $srcExpr);
                 $row->removeAttribute('src');
             } else {
-                $row->setAttribute('src', "{$firstSymbol}{$complexName}.src}");
+                $row->setAttribute('src', $srcExpr);
             }
         }
 
-        $row = $this->setAttributes($row, $firstSymbol, $complexName);
+        $row = $this->setAttributes($row, $firstSymbol, $complexName, $mainLexiconMap);
         $html = $this->parser->getHTMLString($row);
 
         $sources = $row->find('source');
         if (count($sources) > 0) {
             $k = count($sources) - 1;
-            $source = $this->setAttributes($sources[$k], $firstSymbol, '$source');
+            // <source> внутри picture → атрибут srcset, content-type 'image';
+            // <source> внутри video/audio → атрибут src, content-type как у тега-родителя.
+            $sourceAttr = $tag === 'picture' ? 'srcset' : 'src';
+            $sourceContentType = $tag === 'picture' ? 'image' : $tag;
+            $source = $this->setAttributes($sources[$k], $firstSymbol, '$source', [$sourceAttr => $sourceContentType]);
             $search = ['##', 'complexName', 'html'];
             $replace = [$firstSymbol, $complexName];
 
             if ($this->properties['lazyloadAttr'] && !$row->hasAttribute('data-mpc-nolazy')) {
-                if ($row->tagName() === 'picture') {
-                    $attr = 'srcset';
-                    if (!$source->hasAttribute('data-mpc-nothumb') && !empty($this->properties['thumbSnippet'])) {
-                        $src = $this->getThumb([
-                            'width' => $source->hasAttribute('width'),
-                            'height' => $source->hasAttribute('height'),
-                            'thumbParams' => $source->getAttribute('data-mpc-thumb'),
-                            'firstSymbol' => $firstSymbol,
-                            'complexName' => '$source',
-                            'srcAttr' => 'srcset',
-                            'isLoopVar' => true,
-                        ]);
-                    } else {
-                        $src = "{$firstSymbol}\$source.$attr}";
-                    }
+                if ($tag === 'picture' && !$source->hasAttribute('data-mpc-nothumb') && !empty($this->properties['thumbSnippet'])) {
+                    $src = $this->getThumb([
+                        'width' => $source->hasAttribute('width'),
+                        'height' => $source->hasAttribute('height'),
+                        'thumbParams' => $source->getAttribute('data-mpc-thumb'),
+                        'firstSymbol' => $firstSymbol,
+                        'complexName' => '$source',
+                        'srcAttr' => $sourceAttr,
+                        'useLexicon' => $this->isLexiconField($sourceContentType),
+                    ]);
                 } else {
-                    $attr = 'src';
-                    $src = "{$firstSymbol}\$source.$attr}";
+                    $src = $this->lex($firstSymbol, "\$source.$sourceAttr", $sourceContentType);
                 }
-                $attr = $row->tagName() === 'picture' ? 'srcset' : 'src';
                 $source->setAttribute($this->properties['lazyloadAttr'], $src);
-                $source->removeAttribute($attr);
+                $source->removeAttribute($sourceAttr);
             }
 
             $sourceHtml = $this->parser->getHTMLString($source);
@@ -279,7 +289,13 @@ class PlaceholderProcessor
 
         $images = $row->find('img');
         if (count($images) > 0) {
-            $img = $this->setAttributes($images[count($images) - 1], $firstSymbol, $complexName . '.img[0]');
+            // <img> внутри <picture> — content-type 'image' для src, 'text' для alt.
+            $img = $this->setAttributes(
+                $images[count($images) - 1],
+                $firstSymbol,
+                $complexName . '.img[0]',
+                ['src' => 'image', 'alt' => 'text']
+            );
             if (!$img->hasAttribute('data-mpc-nothumb') && !empty($this->properties['thumbSnippet'])) {
                 $src = $this->getThumb([
                     'width' => $img->hasAttribute('width'),
@@ -288,9 +304,10 @@ class PlaceholderProcessor
                     'firstSymbol' => $firstSymbol,
                     'complexName' => $complexName . '.img[0]',
                     'srcAttr' => 'src',
+                    'useLexicon' => $this->isLexiconField('image'),
                 ]);
             } else {
-                $src = "{$firstSymbol}{$complexName}.img[0].src}";
+                $src = $this->lex($firstSymbol, "$complexName.img[0].src", 'image');
             }
 
             if ($this->properties['lazyloadAttr'] && !$row->hasAttribute('data-mpc-nolazy')) {
@@ -321,12 +338,14 @@ class PlaceholderProcessor
         [$firstSymbol, $complexName] = $this->getSymbolComplex($row, $fieldName, $properties['level'], $properties['isStatic']);
 
         if ($row->hasAttribute('href')) {
+            // href — это URL/id ресурса. Не локализуется.
             $pls = (int)$row->getAttribute('href')
                 ? "{$firstSymbol}{$complexName} | url}"
                 : "{$firstSymbol}{$complexName}}";
             $row->setAttribute('href', $pls);
         } else {
-            $row->setInnerHtml("$firstSymbol$complexName}");
+            // Внутренний текст элемента — content-type `text`.
+            $row->setInnerHtml($this->lex($firstSymbol, $complexName, 'text'));
         }
 
         $html = $this->parser->getHTMLString($row);
@@ -367,38 +386,34 @@ class PlaceholderProcessor
     /**
      * Генерирует код вызова thumb-сниппета.
      * PURE: не меняет состояние.
+     *
+     * Параметр `useLexicon` (bool): когда поле локализуется (см. lex()), весь
+     * сниппет-вызов откладывается до final-пасса (`firstSymbol = '##'`), а
+     * `input` оборачивается в `('{$expr}' | lexicon)` — тот же приём, что в
+     * lex(): pdoTools-интерполяция `'{$expr}'` баком ключ литералом на
+     * eager-пассе, лексикон-модификатор резолвит на final-пассе. Размеры
+     * тоже баковатся литералом через `{$expr}` (на final-пассе `$item` не в
+     * скоупе для нестатичных секций).
      */
     public function getThumb(array $params): string
     {
         $snippetName = $this->properties['thumbSnippet'];
         $thumbParams = $params['thumbParams'] ?: $this->properties['commonThumbParams'];
+        $useLexicon = !empty($params['useLexicon']);
         $src = $params['srcAttr'] ? "{$params['complexName']}.{$params['srcAttr']}" : $params['complexName'];
-        // isLoopVar=true означает, что complexName — это переменная foreach-цикла (например $source),
-        // которая существует только во время отдачи страницы внутри {foreach}. Для статичных секций
-        // такие переменные НЕ определены во время Render::parseChunk, поэтому оборачивать их в {…}
-        // нельзя — Fenom вычислит тег в пустую строку. Вместо этого оставляем их как простые
-        // выражения Fenom, которые вычисляются внутри вызова {pThumb | snippet:…} при отдаче страницы.
-        $isLoopVarInStaticCtx = ($params['isLoopVar'] ?? false) && ($params['firstSymbol'] === '##');
-        $isLexiconImage = $this->properties['useLexicons']
-            && in_array('image', $this->properties['translatableContentTypes']);
-
-        // Для {if}-обёртки запоминаем исходное выражение $src до оборачивания в {…}
-        $rawSrc = $src;
 
         if ($params['width']) {
-            $width = $params['complexName'] . '.width';
-            if ($isLexiconImage && !$isLoopVarInStaticCtx) {
-                $width = '{' . $params['complexName'] . '.width}';
-            }
+            $width = $useLexicon
+                ? '{' . $params['complexName'] . '.width}'
+                : $params['complexName'] . '.width';
             $pls = ($params['setValues'] ?? false) ? $params['width'] : "'~$width" . ($params['height'] ? "~'" : '');
             $thumbParams .= "&w=$pls";
         }
 
         if ($params['height']) {
-            $height = $params['complexName'] . '.height';
-            if ($isLexiconImage && !$isLoopVarInStaticCtx) {
-                $height = '{' . $params['complexName'] . '.height}';
-            }
+            $height = $useLexicon
+                ? '{' . $params['complexName'] . '.height}'
+                : $params['complexName'] . '.height';
             $pls = ($params['setValues'] ?? false) ? $params['height'] : "'~$height";
             $thumbParams .= "&h=$pls";
         }
@@ -407,27 +422,12 @@ class PlaceholderProcessor
             $thumbParams .= "'";
         }
 
-        if ($isLexiconImage) {
-            if (!$isLoopVarInStaticCtx) {
-                // '{$var}' — одинарные кавычки сохранятся, {$var} вычислится при предпарсинге
-                // и подменится на конкретный путь; на выходе получим 'input' => '/assets/...'
-                // (валидный Fenom-литерал). Без кавычек Fenom падает на «Unexpected token '/'».
-                $src = "'{" . $src . "}'";
-            }
+        if ($useLexicon) {
+            $src = "('{" . $src . "}' | lexicon)";
             $params['firstSymbol'] = '##';
         }
 
-        $call = "{$params['firstSymbol']}'$snippetName' | snippet: [ 'input' => $src, 'options' => '{$thumbParams}]}";
-
-        // Для статичных секций с лексиконами: {$var} вычисляется при предпарсинге,
-        // а ##snippet — отложен до финального рендера. Если $var пуст, получается
-        // 'input' => , — синтаксическая ошибка Fenom. Оборачиваем весь вызов в {if},
-        // которое вычисляется на том же этапе предпарсинга — если пусто, вызов удаляется целиком.
-        if ($isLexiconImage && !$isLoopVarInStaticCtx) {
-            $call = '{if ' . $rawSrc . '}' . $call . '{/if}';
-        }
-
-        return $call;
+        return "{$params['firstSymbol']}'$snippetName' | snippet: [ 'input' => $src, 'options' => '{$thumbParams}]}";
     }
 
     /**
@@ -460,14 +460,22 @@ class PlaceholderProcessor
 
     /**
      * Устанавливает Fenom-плейсхолдеры для разрешённых атрибутов медиа-элемента.
+     *
+     * `$lexiconMap`: маппинг `attrName => contentType` для атрибутов, которые
+     * могут локализоваться. Локализация применяется только если данный
+     * content-type включён в `translatableContentTypes`. Атрибуты, отсутствующие
+     * в карте, всегда выводятся без `| lexicon`.
      */
-    public function setAttributes(Element $row, string $firstSymbol, string $complexName): Element
+    public function setAttributes(Element $row, string $firstSymbol, string $complexName, array $lexiconMap = []): Element
     {
         $allowedAttrs = ['src', 'srcset', 'loop', 'media', 'type', 'sizes', 'autoplay', 'controls', 'preload', 'muted', 'height', 'width', 'poster', 'alt'];
 
         foreach ($allowedAttrs as $attrName) {
             if ($row->hasAttribute($attrName)) {
-                $row->setAttribute($attrName, "{$firstSymbol}{$complexName}.{$attrName}}");
+                $contentType = $lexiconMap[$attrName] ?? null;
+                $row->setAttribute($attrName, $contentType
+                    ? $this->lex($firstSymbol, "$complexName.$attrName", $contentType)
+                    : "{$firstSymbol}{$complexName}.{$attrName}}");
             }
         }
 
@@ -477,6 +485,43 @@ class PlaceholderProcessor
     // ---------------------------------------------------------------
     // Приватные вспомогательные
     // ---------------------------------------------------------------
+
+    /**
+     * Включён ли лексикон для указанного content-type. Дублирует логику
+     * `LexiconManager::isLexiconField` — оба класса смотрят на одни и те же
+     * properties (`useLexicons` + `translatableContentTypes`).
+     */
+    private function isLexiconField(string $contentType): bool
+    {
+        if (empty($this->properties['useLexicons'])) {
+            return false;
+        }
+        $types = $this->properties['translatableContentTypes'] ?? [];
+        return in_array($contentType, $types, true);
+    }
+
+    /**
+     * Собирает Fenom-плейсхолдер для выражения, добавляя `| lexicon` если
+     * поле указанного content-type локализуется.
+     *
+     * Для нелексиконных — `{$expr}` (или `##$expr}` если firstSymbol = ##).
+     *
+     * Для лексиконных — `##'{$expr}' | lexicon}`. Логика: лексикон-файл ресурса
+     * подгружается **позже** eager-пасса parseChunk, и `{$expr | lexicon}` на
+     * eager-пассе вернёт пусто (переопределённый модификатор отдаёт `''` для
+     * отсутствующих ключей). Решение — отложить вычисление лексикона до
+     * final-пасса через `##`. Внутренний `'{$expr}'` интерполируется на
+     * eager-пассе по pdoTools-конвенции (одинарные кавычки сохраняются,
+     * `{$expr}` подменяется значением): получаем `##'key' | lexicon}`,
+     * после `##→{` — `{'key' | lexicon}`, лексикон резолвится на final-пассе.
+     */
+    private function lex(string $firstSymbol, string $expr, string $contentType): string
+    {
+        if (!$this->isLexiconField($contentType)) {
+            return "{$firstSymbol}{$expr}}";
+        }
+        return "##'{" . $expr . "}' | lexicon}";
+    }
 
     private function findByAttr(string $html, string $selector): ?array
     {

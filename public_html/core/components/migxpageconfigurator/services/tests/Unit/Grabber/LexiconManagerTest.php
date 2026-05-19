@@ -58,14 +58,16 @@ class LexiconManagerTest extends TestCase
     // setLexicons()
     // ---------------------------------------------------------------
 
-    public function testSetLexiconsReturnsLexiconTag(): void
+    public function testSetLexiconsReturnsLexiconKey(): void
     {
         $m = $this->makeManager();
         $m->setContext('hero', false);
 
         $result = $m->setLexicons('Hello World', ['fieldName' => 'title']);
 
-        $this->assertEquals("{'hero_title' | lexicon}", $result);
+        // setLexicons возвращает голый ключ — Cutter сам добавит `| lexicon`
+        // к плейсхолдеру, если поле признано лексиконным.
+        $this->assertEquals('hero_title', $result);
     }
 
     public function testSetLexiconsStoresValueInLexiconsArray(): void
@@ -118,7 +120,7 @@ class LexiconManagerTest extends TestCase
         $this->assertEquals('/c.svg', $m->setLexicons('/c.svg', ['fieldName' => 'img_mobile']));
 
         // НЕ под паттерн — обычная лексиконизация
-        $this->assertEquals("{'hero_title' | lexicon}", $m->setLexicons('Hello', ['fieldName' => 'title']));
+        $this->assertEquals('hero_title', $m->setLexicons('Hello', ['fieldName' => 'title']));
     }
 
     public function testSetLexiconsExcludesFieldBySuffixWildcard(): void
@@ -129,7 +131,7 @@ class LexiconManagerTest extends TestCase
         $this->assertEquals('/x.jpg', $m->setLexicons('/x.jpg', ['fieldName' => 'main_picture']));
         $this->assertEquals('/y.jpg', $m->setLexicons('/y.jpg', ['fieldName' => 'thumb_picture']));
 
-        $this->assertEquals("{'section_title' | lexicon}", $m->setLexicons('Hello', ['fieldName' => 'title']));
+        $this->assertEquals('section_title', $m->setLexicons('Hello', ['fieldName' => 'title']));
     }
 
     public function testSetLexiconsExcludesParentFieldByWildcard(): void
@@ -151,7 +153,7 @@ class LexiconManagerTest extends TestCase
         // wildcard — исключено
         $this->assertEquals('/a.jpg', $m->setLexicons('/a.jpg', ['fieldName' => 'img']));
         // ничего общего — лексиконизируется
-        $this->assertEquals("{'hero_title' | lexicon}", $m->setLexicons('Hello', ['fieldName' => 'title']));
+        $this->assertEquals('hero_title', $m->setLexicons('Hello', ['fieldName' => 'title']));
     }
 
     public function testSetLexiconsQuestionMarkWildcardMatchesSingleChar(): void
@@ -163,8 +165,8 @@ class LexiconManagerTest extends TestCase
         $this->assertEquals('/a.jpg', $m->setLexicons('/a.jpg', ['fieldName' => 'img1']));
 
         // не совпадает — два символа или ноль символов
-        $this->assertEquals("{'hero_img' | lexicon}", $m->setLexicons('value', ['fieldName' => 'img']));
-        $this->assertEquals("{'hero_img12' | lexicon}", $m->setLexicons('value', ['fieldName' => 'img12']));
+        $this->assertEquals('hero_img', $m->setLexicons('value', ['fieldName' => 'img']));
+        $this->assertEquals('hero_img12', $m->setLexicons('value', ['fieldName' => 'img12']));
     }
 
     public function testSetLexiconsIgnoresEmptyAndNonStringPatterns(): void
@@ -174,7 +176,7 @@ class LexiconManagerTest extends TestCase
 
         // мусорные паттерны игнорируются, валидный продолжает работать
         $this->assertEquals('/a.jpg', $m->setLexicons('/a.jpg', ['fieldName' => 'img']));
-        $this->assertEquals("{'hero_title' | lexicon}", $m->setLexicons('Hello', ['fieldName' => 'title']));
+        $this->assertEquals('hero_title', $m->setLexicons('Hello', ['fieldName' => 'title']));
     }
 
     public function testSetLexiconsUsesStaticFilenameForStaticSection(): void
@@ -198,7 +200,49 @@ class LexiconManagerTest extends TestCase
             'idx'             => '1',
         ]);
 
-        $this->assertEquals("{'team_members_name_1' | lexicon}", $result);
+        $this->assertEquals('team_members_name_1', $result);
+    }
+
+    // ---------------------------------------------------------------
+    // isLexiconField()
+    // ---------------------------------------------------------------
+
+    public function testIsLexiconFieldFalseWhenLexiconsDisabled(): void
+    {
+        $m = $this->makeManager([
+            'useLexicons'              => false,
+            'translatableContentTypes' => ['text', 'image'],
+        ]);
+        $this->assertFalse($m->isLexiconField('text'));
+        $this->assertFalse($m->isLexiconField('image'));
+    }
+
+    public function testIsLexiconFieldFalseWhenContentTypeNotTranslatable(): void
+    {
+        $m = $this->makeManager([
+            'useLexicons'              => true,
+            'translatableContentTypes' => ['text'],
+        ]);
+        $this->assertFalse($m->isLexiconField('image'));
+        $this->assertFalse($m->isLexiconField('video'));
+    }
+
+    public function testIsLexiconFieldTrueWhenEnabledAndTranslatable(): void
+    {
+        $m = $this->makeManager([
+            'useLexicons'              => true,
+            'translatableContentTypes' => ['text', 'image', 'poster'],
+        ]);
+        $this->assertTrue($m->isLexiconField('text'));
+        $this->assertTrue($m->isLexiconField('image'));
+        $this->assertTrue($m->isLexiconField('poster'));
+    }
+
+    public function testIsLexiconFieldFalseWhenTranslatableTypesMissing(): void
+    {
+        $m = $this->makeManager(['useLexicons' => true]);
+        // translatableContentTypes не задан в конфиге
+        $this->assertFalse($m->isLexiconField('text'));
     }
 
     public function testSetLexiconsReturnsEmptyForEmptyValue(): void

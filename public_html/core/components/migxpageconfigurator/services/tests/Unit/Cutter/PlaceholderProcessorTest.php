@@ -211,6 +211,137 @@ class PlaceholderProcessorTest extends TestCase
     }
 
     // ---------------------------------------------------------------
+    // setPlaceholders с включёнными лексиконами — `| lexicon` добавляется
+    // только для тех типов контента, что есть в translatableContentTypes.
+    // ---------------------------------------------------------------
+
+    private function lexHtml(string $html, array $translatableTypes = ['text', 'image']): string
+    {
+        $proc = $this->makeProcessor([
+            'useLexicons'              => true,
+            'translatableContentTypes' => $translatableTypes,
+        ]);
+        $properties = [
+            'html'          => $html,
+            'element'       => (new Document($html))->find('[data-mpc-section]')[0],
+            'fieldAttrName' => 'data-mpc-field',
+            'itemAttrName'  => 'data-mpc-item',
+            'level'         => 0,
+            'isStatic'      => false,
+        ];
+        return $proc->setPlaceholders($properties)['html'];
+    }
+
+    public function testSetPlaceholdersTextFieldWithLexicon(): void
+    {
+        $html = $this->lexHtml(
+            '<section data-mpc-section="test"><h1 data-mpc-field="title">Hello</h1></section>'
+        );
+        // Лексикон отложен на final-пасс через ##: pdoTools-интерполяция
+        // `{$title}` на eager-пассе подменяет ключ литералом, `##→{` оставляет
+        // нормальный Fenom-тег `{'key' | lexicon}` для final-пасса.
+        $this->assertStringContainsString("##'{\$title}' | lexicon}", $html);
+    }
+
+    public function testSetPlaceholdersTextFieldWithoutTextInTranslatable(): void
+    {
+        $html = $this->lexHtml(
+            '<section data-mpc-section="test"><h1 data-mpc-field="title">Hello</h1></section>',
+            ['image']
+        );
+        $this->assertStringContainsString('{$title}', $html);
+        $this->assertStringNotContainsString('| lexicon', $html);
+    }
+
+    public function testSetPlaceholdersImgFieldWithImageAndTextLexicon(): void
+    {
+        $html = $this->lexHtml(
+            '<section data-mpc-section="test"><img data-mpc-field="image" src="x.jpg" width="100" height="50" alt="T"></section>'
+        );
+        $this->assertStringContainsString("##'{\$image[0].src}' | lexicon}", $html);
+        $this->assertStringContainsString("##'{\$image[0].alt}' | lexicon}", $html);
+        // width/height не локализуются — выводятся обычным тегом
+        $this->assertStringContainsString('{$image[0].width}', $html);
+        $this->assertStringContainsString('{$image[0].height}', $html);
+    }
+
+    public function testSetPlaceholdersImgFieldOnlyImageTranslatable(): void
+    {
+        $html = $this->lexHtml(
+            '<section data-mpc-section="test"><img data-mpc-field="image" src="x.jpg" alt="T"></section>',
+            ['image']
+        );
+        $this->assertStringContainsString("##'{\$image[0].src}' | lexicon}", $html);
+        $this->assertStringContainsString('{$image[0].alt}', $html);
+        $this->assertStringNotContainsString('alt}\' | lexicon', $html);
+    }
+
+    public function testSetPlaceholdersImgWithThumbAndLexicon(): void
+    {
+        $proc = $this->makeProcessor([
+            'useLexicons'              => true,
+            'translatableContentTypes' => ['image'],
+            'thumbSnippet'             => 'mpcThumb',
+            'commonThumbParams'        => 'q=90',
+        ]);
+        $html = '<section data-mpc-section="t"><img data-mpc-field="pic" src="x.jpg" width="100" height="50"></section>';
+        $properties = [
+            'html'          => $html,
+            'element'       => (new Document($html))->find('[data-mpc-section]')[0],
+            'fieldAttrName' => 'data-mpc-field',
+            'itemAttrName'  => 'data-mpc-item',
+            'level'         => 0,
+            'isStatic'      => false,
+        ];
+        $resultHtml = $proc->setPlaceholders($properties)['html'];
+
+        // Лексикон-режим в thumb: вызов отложен через ##, input через
+        // `('{$expr}' | lexicon)`, размеры баковатся в литералы через {$expr}.
+        $this->assertStringContainsString("##'mpcThumb' | snippet:", $resultHtml);
+        $this->assertStringContainsString("'input' => ('{\$pic[0].src}' | lexicon)", $resultHtml);
+        $this->assertStringContainsString('{$pic[0].width}', $resultHtml);
+    }
+
+    public function testSetPlaceholdersVideoSrcAndPosterWithLexicon(): void
+    {
+        $html = $this->lexHtml(
+            '<section data-mpc-section="test"><video data-mpc-field="clip" src="m.mp4" poster="p.jpg" controls></video></section>',
+            ['text', 'image', 'video', 'poster']
+        );
+        $this->assertStringContainsString("##'{\$clip[0].src}' | lexicon}", $html);
+        $this->assertStringContainsString("##'{\$clip[0].poster}' | lexicon}", $html);
+        // controls — boolean-атрибут, не локализуется
+        $this->assertStringNotContainsString("controls}' | lexicon", $html);
+    }
+
+    public function testSetPlaceholdersAudioSrcWithLexicon(): void
+    {
+        $html = $this->lexHtml(
+            '<section data-mpc-section="test"><audio data-mpc-field="track" src="a.mp3" controls></audio></section>',
+            ['audio']
+        );
+        $this->assertStringContainsString("##'{\$track[0].src}' | lexicon}", $html);
+    }
+
+    public function testSetPlaceholdersAudioSrcWithoutAudioInTranslatable(): void
+    {
+        $html = $this->lexHtml(
+            '<section data-mpc-section="test"><audio data-mpc-field="track" src="a.mp3" controls></audio></section>',
+            ['text', 'image']  // audio НЕ в списке
+        );
+        $this->assertStringContainsString('{$track[0].src}', $html);
+        $this->assertStringNotContainsString('| lexicon', $html);
+    }
+
+    public function testSetPlaceholdersBgImgWithLexicon(): void
+    {
+        $html = $this->lexHtml(
+            '<section data-mpc-section="test"><div data-mpc-field="bg_img" style="background:url(\'x.jpg\');"></div></section>'
+        );
+        $this->assertStringContainsString("##'{\$bg_img}' | lexicon}", $html);
+    }
+
+    // ---------------------------------------------------------------
     // getThumb — quoting input для non-lexicon режима
     // ---------------------------------------------------------------
 
@@ -271,13 +402,9 @@ class PlaceholderProcessorTest extends TestCase
         $this->assertStringNotContainsString("'input' => '\$source.srcset'", $call);
     }
 
-    public function testGetThumbLexiconImageQuotesBraceWrap(): void
+    public function testGetThumbWithUseLexiconDefersAndWrapsInput(): void
     {
-        $proc = $this->makeProcessor([
-            'thumbSnippet'             => 'mpcThumb',
-            'useLexicons'              => true,
-            'translatableContentTypes' => ['text', 'image'],
-        ]);
+        $proc = $this->makeProcessor(['thumbSnippet' => 'mpcThumb']);
 
         $call = $proc->getThumb([
             'width'       => false,
@@ -286,16 +413,54 @@ class PlaceholderProcessorTest extends TestCase
             'firstSymbol' => '{',
             'complexName' => '$item1.field',
             'srcAttr'     => 'src',
-            'isLoopVar'   => false,
+            'useLexicon'  => true,
         ]);
 
-        // lexicon-image: '{…}'-обёртка (с одинарными кавычками вокруг {…}). После
-        // предпарсинга {$var} вычислится и подменится на конкретный путь — на выходе
-        // получим `'input' => '/assets/...'` (валидный Fenom-литерал). Без кавычек
-        // Fenom падает на «Unexpected token '/'» при путях, начинающихся с `/`.
-        $this->assertStringContainsString("'{\$item1.field.src}'", $call);
-        $this->assertStringContainsString("##'mpcThumb' | snippet:", $call);
-        $this->assertStringContainsString('{if $item1.field.src}', $call);
+        // Сниппет-вызов отложен через ##, input — `('{$expr}' | lexicon)`.
+        // На eager-пассе `'{$item1.field.src}'` интерполируется в `'key'`,
+        // после `##→{` получается `{'mpcThumb' | snippet: ['input' => ('key' | lexicon), ...]}`,
+        // лексикон резолвит ключ в путь на final-пассе.
+        $this->assertStringStartsWith("##'mpcThumb' | snippet:", $call);
+        $this->assertStringContainsString("'input' => ('{\$item1.field.src}' | lexicon)", $call);
+    }
+
+    public function testGetThumbWithUseLexiconBakesWidthHeightAsLiteral(): void
+    {
+        $proc = $this->makeProcessor(['thumbSnippet' => 'mpcThumb']);
+
+        $call = $proc->getThumb([
+            'width'       => true,
+            'height'      => true,
+            'thumbParams' => 'q=90',
+            'firstSymbol' => '{',
+            'complexName' => '$item1.field',
+            'srcAttr'     => 'src',
+            'useLexicon'  => true,
+        ]);
+
+        // Размеры баковатся через `{$item.width}` — pdoTools-интерполяция на
+        // eager-пассе подменит их литералом числа. Иначе на final-пассе `$item`
+        // не в скоупе (для нестатичных секций).
+        $this->assertStringContainsString('{$item1.field.width}', $call);
+        $this->assertStringContainsString('{$item1.field.height}', $call);
+    }
+
+    public function testGetThumbWithoutUseLexiconLeavesInputBare(): void
+    {
+        $proc = $this->makeProcessor(['thumbSnippet' => 'mpcThumb']);
+
+        $call = $proc->getThumb([
+            'width'       => false,
+            'height'      => false,
+            'thumbParams' => 'q=90',
+            'firstSymbol' => '{',
+            'complexName' => '$item1.field',
+            'srcAttr'     => 'src',
+            'useLexicon'  => false,
+        ]);
+
+        $this->assertStringContainsString("'input' => \$item1.field.src", $call);
+        $this->assertStringNotContainsString('| lexicon', $call);
     }
 
     // ---------------------------------------------------------------
