@@ -62,6 +62,27 @@ class Base
     protected function initialize(): void
     {
         $translatableContentTypes = $this->modx->getOption('mpc_translated_content', '', 'text,image,poster,video,audio');
+
+        // excludeLexiconFields подгружаем здесь (Base), а не только в Grabber,
+        // чтобы Cutter тоже видел список и не ставил `| lexicon` на excluded
+        // поля (иначе грабер не пишет ключ → переопределённый модификатор
+        // отдаёт пусто → пустота на сайте). Поскольку `corePath` устанавливается
+        // ребёнком ДО parent::initialize() (см. Cutter/Grabber), здесь он уже
+        // доступен в $this->properties.
+        $excludeLexiconFields = [];
+        $excludeLexiconFilename = $this->modx->getOption(
+            'mpc_exclude_lexicons_filename',
+            '',
+            'components/migxpageconfigurator/services/exclude_lexicons.inc.php'
+        );
+        if ($excludeLexiconFilename) {
+            $corePath = $this->properties['corePath'] ?? $this->modx->getOption('core_path');
+            $excludeLexiconFieldsPath = $corePath . $excludeLexiconFilename;
+            if (is_file($excludeLexiconFieldsPath)) {
+                include $excludeLexiconFieldsPath;
+            }
+        }
+
         $properties = [
             'commonConfigTvName' => $this->modx->getOption('mpc_common_config_name', null, 'mpc_config'),
             'baseSectionName' => $this->modx->getOption('mpc_base_section_name', null, 'mpc_base'),
@@ -74,6 +95,7 @@ class Base
             'useLexicons' => $this->modx->getOption('mpc_use_lexicons', '', false),
             'defaultLanguageKey' => $this->modx->getOption('mpc_default_language', '', 'ru'),
             'translatableContentTypes' => explode(',', $translatableContentTypes),
+            'excludeLexiconFields' => $excludeLexiconFields,
         ];
         $this->properties = array_merge($this->properties, $properties);
 

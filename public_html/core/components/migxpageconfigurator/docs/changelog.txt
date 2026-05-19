@@ -1,3 +1,8 @@
+2.3.11-rc
+==============
+- Поднял загрузку `excludeLexiconFields` из `Grabber::initialize()` в `Base::initialize()` — фикс для 2.3.10-rc. Список грузился только в Grabber, в Cutter-overe `LexiconManager` видел undefined → `isFieldExcluded` всегда false → лексикон ставился везде, включая поля типа `picture`, `*_picture`, `picture_*` и т.п., которые должны быть исключены. Теперь оба сервиса (Grabber и Cutter) видят один и тот же список через общий Base.
+- Из `Grabber::initialize()` удалён дубль загрузки. Защита `is_file()` вместо `file_exists()` — чтобы не падать на `include` директории, если `mpc_exclude_lexicons_filename` пустой (например, в тестовых стабах).
+
 2.3.10-rc
 ==============
 - Cutter теперь учитывает `excludeLexiconFields` при расстановке `| lexicon` (баг 2.3.9-rc). Раньше `PlaceholderProcessor::isLexiconField()` проверял только `useLexicons` + `translatableContentTypes` и эмитил `##'{$expr}' | lexicon}` даже для полей, которые грабер пропускает по exclusion-паттерну → переопределённый `lexicon`-модификатор возвращал пусто → пустота в выхлопе.

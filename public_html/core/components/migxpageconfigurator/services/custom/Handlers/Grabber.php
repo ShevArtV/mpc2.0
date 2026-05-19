@@ -61,16 +61,8 @@ class Grabber extends Base
     protected function initialize(): void
     {
         parent::initialize();
-
-        $excludeLexiconFieldsPath = $this->properties['corePath'] . $this->modx->getOption(
-            'mpc_exclude_lexicons_filename',
-            '',
-            'components/migxpageconfigurator/services/exclude_lexicons.inc.php'
-        );
-        $excludeLexiconFields = [];
-        if (file_exists($excludeLexiconFieldsPath)) {
-            include $excludeLexiconFieldsPath;
-        }
+        // excludeLexiconFields подгружается в Base::initialize() — он же
+        // используется Cutter-ом через тот же путь.
 
         $downloadPaths = $this->modx->getOption('mpc_download_paths', '', ['images' => '', 'videos' => '', 'audios' => '', 'others' => '']);
         $downloadPaths = is_array($downloadPaths) ? $downloadPaths : (json_decode($downloadPaths, true) ?: []);
@@ -86,7 +78,6 @@ class Grabber extends Base
             'downloadPaths'           => $downloadPaths,
             'lexiconPath'             => $this->modx->getOption('mpc_lexicon_path', '', 'components/migxpageconfigurator/lexicon/'),
             'resourceLexiconKeysPath' => $this->modx->getOption('mpc_resource_lexicon_keys_path', '', 'components/migxpageconfigurator/services/resource_lexicon_keys.inc.php'),
-            'excludeLexiconFields'    => $excludeLexiconFields,
             'allowModxTags'           => $this->modx->getOption('mpc_allow_modx_tags', '', false),
             'downloadExtensions'      => explode(',', $this->modx->getOption('mpc_download_extensions', '', '')),
             'mimeToExt'               => $mimeToExt,
