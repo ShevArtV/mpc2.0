@@ -1,3 +1,15 @@
+2.3.8-rc
+==============
+- Откатил оборачивание `input` в одинарные кавычки для не-лексиконного режима в `PlaceholderProcessor::getThumb()`. Кавычки превращали `$source.srcset`/`$item.field.src` в Fenom-литерал — `mpcThumb` получал строку `"$source.srcset"` вместо актуального пути. Теперь `input` идёт голым Fenom-выражением: внутри `{foreach ... as $source}` (или при доступе из контекста секции) `$source.srcset` корректно вычисляется и в сниппет уходит реальный URL. Лексиконная ветка не затронута. Тесты `testGetThumbNonLexicon*LeavesInputAsExpression`, `testSetPlaceholdersPictureWithSlashPathsLeavesInputAsExpression` подтверждают новое поведение.
+
+2.3.7-rc
+==============
+- Доквотирование `input` для lexicon-image ветки getThumb. Когда useLexicons=true и translatableContentTypes содержит `image`, для `<img>`/`<source>` идёт ветка `$isLexiconImage`, в которой `$src` оборачивается в `{...}` без кавычек. После предпарсинга `{$source.srcset}` подменяется на путь — попадает в `'input' => /assets/...` → ошибка Fenom «Unexpected token '/'». Теперь оборачиваю в `'{$src}'` (одинарные кавычки вокруг `{...}`): после предпарсинга получается `'input' => '/assets/...'`, валидный Fenom-литерал. Обратная совместимость для путей без `/` сохранена. Тест `testGetThumbLexiconImageQuotesBraceWrap` подтверждает поведение.
+
+2.3.6-rc
+==============
+- Доработка quoting'а input в mpcThumb: теперь кавычки добавляются и для loop-var в static-секциях. По факту foreach в samples/media.tpl разворачивается даже при `firstSymbol = ##`, и пути с `/` попадают в `'input' => /...` без кавычек → ошибка Fenom. Условие `!$isLoopVarInStaticCtx` в getThumb убрано. Тест `testGetThumbLoopVarInStaticContextAlsoQuotesInput` подтверждает новое поведение.
+
 2.3.5-rc
 ==============
 - Исправил Fenom-ошибку в mpcThumb-вызовах для медиа-полей в нестатичных секциях. Путь, начинающийся с `/` (например `/assets/.../01-mobile.jpg`), после развёртывания foreach в samples/media.tpl попадал в строку `'input' => /assets/...` без кавычек — Fenom падал на «Unexpected token '/'». В PlaceholderProcessor::getThumb() для не-лексиконного режима (и не loop-var-в-static) теперь оборачиваю $src в одинарные кавычки. После развёртывания foreach получается валидный Fenom-литерал `'input' => '/assets/...'`. Старые сценарии (lexicon-image, loop-var-в-static-секции) сохранены — для них кавычки бы сломали Fenom-выражение.

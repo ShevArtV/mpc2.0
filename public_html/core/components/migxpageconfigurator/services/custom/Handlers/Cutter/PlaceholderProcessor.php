@@ -17,15 +17,15 @@ use MpcServices\Handlers\Parser;
  */
 class PlaceholderProcessor
 {
-    private \modX  $modx;
-    private array  $properties;
+    private \modX $modx;
+    private array $properties;
     private Parser $parser;
 
     public function __construct(\modX $modx, array $properties, Parser $parser)
     {
-        $this->modx       = $modx;
+        $this->modx = $modx;
         $this->properties = $properties;
-        $this->parser     = $parser;
+        $this->parser = $parser;
     }
 
     /**
@@ -38,7 +38,7 @@ class PlaceholderProcessor
     public function setPlaceholders(array $properties): array
     {
         $fieldAttrName = $properties['level'] ? $properties['fieldAttrName'] . '-' . $properties['level'] : $properties['fieldAttrName'];
-        $itemAttrName  = $properties['level'] ? $properties['itemAttrName']  . '-' . $properties['level'] : $properties['itemAttrName'];
+        $itemAttrName = $properties['level'] ? $properties['itemAttrName'] . '-' . $properties['level'] : $properties['itemAttrName'];
 
         $fields = $this->findByAttr($properties['html'], '[' . $fieldAttrName . ']');
         if (!$fields) {
@@ -46,21 +46,17 @@ class PlaceholderProcessor
         }
 
         $mediaLists = [];
-
         foreach ($fields as $field) {
-            $fieldName    = $field->getAttribute($fieldAttrName);
+            $fieldName = $field->getAttribute($fieldAttrName);
             $properties['fieldName'] = $fieldName;
-            $fieldHTML    = $this->parser->getHTMLString($field);
+            $fieldHTML = $this->parser->getHTMLString($field);
 
             if ($fieldName === 'bg_img') {
                 $fieldHTMLNew = $this->setBackgroundPlaceholder($field, $fieldName, $properties);
-
             } elseif ($field->tagName() === 'img' && !in_array($fieldName, ['list_images', 'list_pictures'])) {
                 $fieldHTMLNew = $this->setImgPlaceholder($field, $fieldName, $properties);
-
             } elseif (in_array($field->tagName(), ['video', 'audio', 'picture']) && !in_array($fieldName, ['list_pictures', 'list_audios', 'list_videos'])) {
                 $fieldHTMLNew = $this->setMediaPlaceholder($field, $fieldName, $properties);
-
             } elseif (in_array($fieldName, ['list_images', 'list_pictures', 'list_audios', 'list_videos'])) {
                 $parentNode = $this->getParentNode($properties['parentElement'] ?? $field, $fieldAttrName);
                 if ($parentNode != $properties['element']) {
@@ -68,8 +64,8 @@ class PlaceholderProcessor
                 }
                 $prefix = '';
                 if ($properties['parentElement'] ?? null) {
-                    $prefix     = 'item' . $properties['level'] . '.';
-                    $fieldName  = strpos($fieldName, $prefix) === 0 ? $fieldName : $prefix . $fieldName;
+                    $prefix = 'item' . $properties['level'] . '.';
+                    $fieldName = strpos($fieldName, $prefix) === 0 ? $fieldName : $prefix . $fieldName;
                 }
                 $k = isset($mediaLists[$fieldName]) ? count($mediaLists[$fieldName]) : 0;
                 $listProperties = array_merge($properties, ['level' => $k]);
@@ -80,22 +76,21 @@ class PlaceholderProcessor
                     $fieldHTMLNew = $this->setMediaPlaceholder($field, $fieldName . "[$k]." . $field->tagName(), $listProperties);
                 }
                 $mediaLists[$fieldName][] = $field;
-
             } elseif ($items = $this->findByAttr($this->parser->getHTMLString($field), '[' . $itemAttrName . ']')) {
                 [$firstSymbol, $complexName] = $this->getSymbolComplex($field, $fieldName, $properties['level'], $properties['isStatic']);
 
                 $props = [
-                    'html'          => $this->parser->getHTMLString($items[0]),
-                    'element'       => $items[0],
+                    'html' => $this->parser->getHTMLString($items[0]),
+                    'element' => $items[0],
                     'parentElement' => $this->getParentNode($items[0], $fieldAttrName),
-                    'level'         => $properties['level'] + 1,
+                    'level' => $properties['level'] + 1,
                 ];
                 $properties['parentFieldName'] = $fieldName;
-                $properties['fieldName']       = preg_replace('/^\$/', '', $complexName);
+                $properties['fieldName'] = preg_replace('/^\$/', '', $complexName);
 
-                $props      = $this->setPlaceholders(array_merge($properties, $props));
-                $limit      = $field->getAttribute('data-mpc-lim');
-                $offset     = $field->getAttribute('data-mpc-off');
+                $props = $this->setPlaceholders(array_merge($properties, $props));
+                $limit = $field->getAttribute('data-mpc-lim');
+                $offset = $field->getAttribute('data-mpc-off');
 
                 if ($limit && $offset) {
                     $sampleKey = 'foreach_limit_offset';
@@ -122,17 +117,16 @@ class PlaceholderProcessor
                 }
 
                 if ($field->hasAttribute('data-mpc-if')) {
-                    $condition    = $field->getAttribute('data-mpc-if') ?: $complexName;
+                    $condition = $field->getAttribute('data-mpc-if') ?: $complexName;
                     $fieldHTMLNew = $this->wrapInCondition($condition, $fieldHTMLNew, $firstSymbol);
                 }
-
             } else {
                 $fieldHTMLNew = $this->setDefaultPlaceholder($field, $fieldName, $properties);
             }
 
             $this->modx->invokeEvent('mpcOnGetNewHtml', [
                 'fieldHTMLNew' => $fieldHTMLNew,
-                'Grabber'      => $this,
+                'Grabber' => $this,
             ]);
 
             $fieldHTMLNew = isset($this->modx->event->returnedValues) && !empty($this->modx->event->returnedValues['fieldHTMLNew'])
@@ -165,13 +159,13 @@ class PlaceholderProcessor
 
         if (!$row->hasAttribute('data-mpc-nothumb') && !empty($this->properties['thumbSnippet'])) {
             $src = $this->getThumb([
-                'width'       => (int)($width[1] ?? 0),
-                'height'      => (int)($height[1] ?? 0),
+                'width' => (int)($width[1] ?? 0),
+                'height' => (int)($height[1] ?? 0),
                 'thumbParams' => $row->getAttribute('data-mpc-thumb'),
                 'firstSymbol' => $firstSymbol,
                 'complexName' => $complexName,
-                'srcAttr'     => '',
-                'setValues'   => true,
+                'srcAttr' => '',
+                'setValues' => true,
             ]);
         } else {
             $src = "{$firstSymbol}{$complexName}}";
@@ -196,12 +190,12 @@ class PlaceholderProcessor
 
         if (!$row->hasAttribute('data-mpc-nothumb') && !empty($this->properties['thumbSnippet'])) {
             $src = $this->getThumb([
-                'width'       => $row->hasAttribute('width'),
-                'height'      => $row->hasAttribute('height'),
+                'width' => $row->hasAttribute('width'),
+                'height' => $row->hasAttribute('height'),
                 'thumbParams' => $row->getAttribute('data-mpc-thumb'),
                 'firstSymbol' => $firstSymbol,
                 'complexName' => $complexName,
-                'srcAttr'     => 'src',
+                'srcAttr' => 'src',
             ]);
         } else {
             $src = "$prefix.src}";
@@ -243,14 +237,14 @@ class PlaceholderProcessor
             }
         }
 
-        $row  = $this->setAttributes($row, $firstSymbol, $complexName);
+        $row = $this->setAttributes($row, $firstSymbol, $complexName);
         $html = $this->parser->getHTMLString($row);
 
         $sources = $row->find('source');
         if (count($sources) > 0) {
-            $k      = count($sources) - 1;
+            $k = count($sources) - 1;
             $source = $this->setAttributes($sources[$k], $firstSymbol, '$source');
-            $search  = ['##', 'complexName', 'html'];
+            $search = ['##', 'complexName', 'html'];
             $replace = [$firstSymbol, $complexName];
 
             if ($this->properties['lazyloadAttr'] && !$row->hasAttribute('data-mpc-nolazy')) {
@@ -258,20 +252,20 @@ class PlaceholderProcessor
                     $attr = 'srcset';
                     if (!$source->hasAttribute('data-mpc-nothumb') && !empty($this->properties['thumbSnippet'])) {
                         $src = $this->getThumb([
-                            'width'       => $source->hasAttribute('width'),
-                            'height'      => $source->hasAttribute('height'),
+                            'width' => $source->hasAttribute('width'),
+                            'height' => $source->hasAttribute('height'),
                             'thumbParams' => $source->getAttribute('data-mpc-thumb'),
                             'firstSymbol' => $firstSymbol,
                             'complexName' => '$source',
-                            'srcAttr'     => 'srcset',
-                            'isLoopVar'   => true,
+                            'srcAttr' => 'srcset',
+                            'isLoopVar' => true,
                         ]);
                     } else {
                         $src = "{$firstSymbol}\$source.$attr}";
                     }
                 } else {
                     $attr = 'src';
-                    $src  = "{$firstSymbol}\$source.$attr}";
+                    $src = "{$firstSymbol}\$source.$attr}";
                 }
                 $attr = $row->tagName() === 'picture' ? 'srcset' : 'src';
                 $source->setAttribute($this->properties['lazyloadAttr'], $src);
@@ -279,8 +273,8 @@ class PlaceholderProcessor
             }
 
             $sourceHtml = $this->parser->getHTMLString($source);
-            $replace[]  = str_replace('</source>', '', $sourceHtml);
-            $pls       .= str_replace($search, $replace, $this->properties['samples']['media']);
+            $replace[] = str_replace('</source>', '', $sourceHtml);
+            $pls .= str_replace($search, $replace, $this->properties['samples']['media']);
         }
 
         $images = $row->find('img');
@@ -288,12 +282,12 @@ class PlaceholderProcessor
             $img = $this->setAttributes($images[count($images) - 1], $firstSymbol, $complexName . '.img[0]');
             if (!$img->hasAttribute('data-mpc-nothumb') && !empty($this->properties['thumbSnippet'])) {
                 $src = $this->getThumb([
-                    'width'       => $img->hasAttribute('width'),
-                    'height'      => $img->hasAttribute('height'),
+                    'width' => $img->hasAttribute('width'),
+                    'height' => $img->hasAttribute('height'),
                     'thumbParams' => $img->getAttribute('data-mpc-thumb'),
                     'firstSymbol' => $firstSymbol,
                     'complexName' => $complexName . '.img[0]',
-                    'srcAttr'     => 'src',
+                    'srcAttr' => 'src',
                 ]);
             } else {
                 $src = "{$firstSymbol}{$complexName}.img[0].src}";
@@ -354,7 +348,7 @@ class PlaceholderProcessor
     public function getSymbolComplex(Element $row, string $fieldName, ?int $level = 0, ?bool $isStatic = false): array
     {
         $firstSymbol = $isStatic ? '##' : (trim((string)$row->getAttribute('data-mpc-symbol')) ?: '{');
-        $rid   = (int)$row->getAttribute('data-mpc-rid') ?: '';
+        $rid = (int)$row->getAttribute('data-mpc-rid') ?: '';
         $table = $row->getAttribute('data-mpc-table') ?: 'config';
 
         if ($table === 'config') {
@@ -378,8 +372,7 @@ class PlaceholderProcessor
     {
         $snippetName = $this->properties['thumbSnippet'];
         $thumbParams = $params['thumbParams'] ?: $this->properties['commonThumbParams'];
-        $src         = $params['srcAttr'] ? "{$params['complexName']}.{$params['srcAttr']}" : $params['complexName'];
-
+        $src = $params['srcAttr'] ? "{$params['complexName']}.{$params['srcAttr']}" : $params['complexName'];
         // isLoopVar=true означает, что complexName — это переменная foreach-цикла (например $source),
         // которая существует только во время отдачи страницы внутри {foreach}. Для статичных секций
         // такие переменные НЕ определены во время Render::parseChunk, поэтому оборачивать их в {…}
@@ -416,21 +409,12 @@ class PlaceholderProcessor
 
         if ($isLexiconImage) {
             if (!$isLoopVarInStaticCtx) {
-                $src = '{' . $src . '}';
+                // '{$var}' — одинарные кавычки сохранятся, {$var} вычислится при предпарсинге
+                // и подменится на конкретный путь; на выходе получим 'input' => '/assets/...'
+                // (валидный Fenom-литерал). Без кавычек Fenom падает на «Unexpected token '/'».
+                $src = "'{" . $src . "}'";
             }
             $params['firstSymbol'] = '##';
-        } elseif (!$isLoopVarInStaticCtx) {
-            // Не-лексиконный режим: samples/media.tpl ({foreach ... as $source}) разворачивается
-            // на этапе MPC-предпарсинга — переменные вида $source.srcset подставляются конкретными
-            // значениями из tpl (`/assets/.../01-mobile.jpg`). Без кавычек путь, начинающийся с `/`,
-            // ломает Fenom-парсер (`'input' => /assets/...` → Unexpected token '/'). Оборачиваем
-            // в одинарные кавычки — после foreach получаем `'input' => '/assets/...'`, валидный
-            // Fenom-литерал.
-            //
-            // Исключение: $isLoopVarInStaticCtx (loop-var внутри статичной секции) — там foreach
-            // отложен до финального рендера и $source.srcset должен остаться Fenom-выражением,
-            // кавычки его сломают.
-            $src = "'" . $src . "'";
         }
 
         $call = "{$params['firstSymbol']}'$snippetName' | snippet: [ 'input' => $src, 'options' => '{$thumbParams}]}";
@@ -467,8 +451,8 @@ class PlaceholderProcessor
         if ($unwrap = $this->parser->findByAttribute($html, '[data-mpc-unwrap]')) {
             foreach ($unwrap as $attr) {
                 $attrValue = $this->parser->getHTMLString($attr, true);
-                $search    = $this->parser->getHTMLString($attr);
-                $html      = str_replace($search, $attrValue, $html);
+                $search = $this->parser->getHTMLString($attr);
+                $html = str_replace($search, $attrValue, $html);
             }
         }
         return $html;

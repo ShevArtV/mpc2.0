@@ -214,7 +214,7 @@ class PlaceholderProcessorTest extends TestCase
     // getThumb — quoting input для non-lexicon режима
     // ---------------------------------------------------------------
 
-    public function testGetThumbNonLexiconQuotesInputAroundSrc(): void
+    public function testGetThumbNonLexiconLoopVarLeavesInputAsExpression(): void
     {
         $proc = $this->makeProcessor(['thumbSnippet' => 'mpcThumb']);
 
@@ -228,11 +228,14 @@ class PlaceholderProcessorTest extends TestCase
             'isLoopVar'   => true,
         ]);
 
-        // не-лексиконный режим + isLoopVar в НЕ-static контексте → нужны кавычки
-        $this->assertStringContainsString("'input' => '\$source.srcset'", $call);
+        // $source.srcset — Fenom-выражение, должно вычисляться внутри foreach
+        // в скоупе $source. Кавычки превратили бы его в литерал, и mpcThumb
+        // получил бы строку "$source.srcset" вместо актуального пути.
+        $this->assertStringContainsString("'input' => \$source.srcset", $call);
+        $this->assertStringNotContainsString("'input' => '\$source.srcset'", $call);
     }
 
-    public function testGetThumbNonLexiconRegularQuotesInput(): void
+    public function testGetThumbNonLexiconRegularLeavesInputAsExpression(): void
     {
         $proc = $this->makeProcessor(['thumbSnippet' => 'mpcThumb']);
 
@@ -246,11 +249,11 @@ class PlaceholderProcessorTest extends TestCase
             'isLoopVar'   => false,
         ]);
 
-        // regular non-lexicon → кавычки тоже нужны (этот случай ломал Fenom раньше)
-        $this->assertStringContainsString("'input' => '\$item1.list_triple_picture[0].picture[0].src'", $call);
+        $this->assertStringContainsString("'input' => \$item1.list_triple_picture[0].picture[0].src", $call);
+        $this->assertStringNotContainsString("'input' => '\$item1.list_triple_picture[0].picture[0].src'", $call);
     }
 
-    public function testGetThumbLoopVarInStaticContextKeepsRawSrc(): void
+    public function testGetThumbLoopVarInStaticContextLeavesInputAsExpression(): void
     {
         $proc = $this->makeProcessor(['thumbSnippet' => 'mpcThumb']);
 
@@ -258,18 +261,17 @@ class PlaceholderProcessorTest extends TestCase
             'width'       => false,
             'height'      => false,
             'thumbParams' => 'q=90',
-            'firstSymbol' => '##', // static-context маркер
+            'firstSymbol' => '##',
             'complexName' => '$source',
             'srcAttr'     => 'srcset',
             'isLoopVar'   => true,
         ]);
 
-        // loop-var в static-секции: foreach отложен до отдачи страницы, кавычки сломали бы переменную
         $this->assertStringContainsString("'input' => \$source.srcset", $call);
         $this->assertStringNotContainsString("'input' => '\$source.srcset'", $call);
     }
 
-    public function testGetThumbLexiconImageKeepsBraceWrap(): void
+    public function testGetThumbLexiconImageQuotesBraceWrap(): void
     {
         $proc = $this->makeProcessor([
             'thumbSnippet'             => 'mpcThumb',
@@ -287,18 +289,24 @@ class PlaceholderProcessorTest extends TestCase
             'isLoopVar'   => false,
         ]);
 
-        // lexicon-image → старая логика: {…}-обёртка + ##-симвoл + {if}-обёртка
-        $this->assertStringContainsString('{$item1.field.src}', $call);
+        // lexicon-image: '{…}'-обёртка (с одинарными кавычками вокруг {…}). После
+        // предпарсинга {$var} вычислится и подменится на конкретный путь — на выходе
+        // получим `'input' => '/assets/...'` (валидный Fenom-литерал). Без кавычек
+        // Fenom падает на «Unexpected token '/'» при путях, начинающихся с `/`.
+        $this->assertStringContainsString("'{\$item1.field.src}'", $call);
         $this->assertStringContainsString("##'mpcThumb' | snippet:", $call);
         $this->assertStringContainsString('{if $item1.field.src}', $call);
     }
 
     // ---------------------------------------------------------------
-    // setPlaceholders — интегральный тест на <picture> со статичными путями
-    // (регрессионный кейс для бага «Unexpected token '/' in expression»)
+    // setPlaceholders — интегральный тест на <picture>
+    // input должен быть Fenom-выражением ($source.srcset), а не литералом,
+    // чтобы внутри foreach $source.srcset вычислился в актуальный путь
+    // и попал в mpcThumb. Литералы (`'input' => '$source.srcset'` или
+    // `'input' => /assets/...`) ломают семантику.
     // ---------------------------------------------------------------
 
-    public function testSetPlaceholdersPictureWithSlashPathsQuotesInput(): void
+    public function testSetPlaceholdersPictureWithSlashPathsLeavesInputAsExpression(): void
     {
         $proc = $this->makeProcessor([
             'thumbSnippet'      => 'mpcThumb',
@@ -333,10 +341,10 @@ class PlaceholderProcessorTest extends TestCase
 
         $result = $proc->setPlaceholders($properties);
 
-        // Регрессия: до фикса в output попадало `'input' => /assets/...` без кавычек,
-        // что валило Fenom-парсер. После фикса значение обёрнуто в одинарные кавычки.
         $this->assertStringNotContainsString("'input' => /", $result['html'],
-            "Unquoted /-prefixed path in mpcThumb input — Fenom parser will fail");
-        $this->assertStringContainsString("'input' => '\$source.srcset'", $result['html']);
+            "Сырой путь в input — Fenom не должен видеть литерал");
+        $this->assertStringNotContainsString("'input' => '\$source.srcset'", $result['html'],
+            "Литерал-строка вместо Fenom-выражения — mpcThumb получит '\$source.srcset', а не путь");
+        $this->assertStringContainsString("'input' => \$source.srcset", $result['html']);
     }
 }
