@@ -552,6 +552,65 @@ class PlaceholderProcessorTest extends TestCase
         $this->assertStringContainsString("##'{\$item1.title}' | lexicon}", $result);
     }
 
+    public function testSetPlaceholdersStaticForeachDefersLexiconVar(): void
+    {
+        // Регрессионный кейс: в статичной секции (`data-mpc-static=1`)
+        // обёртывающий `##foreach}` отложен (firstSymbol=##), поэтому на eager-
+        // пассе loop-переменная $item1 ещё НЕ в скоупе. Eager-интерполяция
+        // `##'{$item1.content}' | lexicon}` дала бы `{'' | lexicon}` в parsed/.
+        // Для static+foreach переменная откладывается целиком:
+        // `##$item1.content | lexicon}` → после `##→{` → `{$item1.content |
+        // lexicon}`, резолвится когда отложенный foreach реально итерирует.
+        $proc = $this->makeProcessor([
+            'useLexicons'              => true,
+            'translatableContentTypes' => ['text'],
+        ]);
+        $html = '<section data-mpc-section="t" data-mpc-static="1">'
+            . '<div data-mpc-field="list_simple">'
+            .   '<div data-mpc-item>'
+            .     '<p data-mpc-field-1="content">y</p>'
+            .   '</div>'
+            . '</div>'
+            . '</section>';
+        $properties = [
+            'html'          => $html,
+            'element'       => (new Document($html))->find('[data-mpc-section]')[0],
+            'fieldAttrName' => 'data-mpc-field',
+            'itemAttrName'  => 'data-mpc-item',
+            'level'         => 0,
+            'isStatic'      => true,
+        ];
+        $result = $proc->setPlaceholders($properties)['html'];
+
+        $this->assertStringContainsString('##$item1.content | lexicon}', $result);
+        $this->assertStringNotContainsString("##'{\$item1.content}' | lexicon}", $result);
+    }
+
+    public function testSetPlaceholdersStaticTopLevelKeepsEagerInterpolation(): void
+    {
+        // Для top-level поля статичной секции (вне foreach) eager-интерполяция
+        // сохраняется: $title в скоупе на eager-пассе, значение (ключ) запекается
+        // литералом. Откладывать переменную тут НЕ нужно (level == 0).
+        $proc = $this->makeProcessor([
+            'useLexicons'              => true,
+            'translatableContentTypes' => ['text'],
+        ]);
+        $html = '<section data-mpc-section="t" data-mpc-static="1">'
+            . '<h1 data-mpc-field="title">y</h1>'
+            . '</section>';
+        $properties = [
+            'html'          => $html,
+            'element'       => (new Document($html))->find('[data-mpc-section]')[0],
+            'fieldAttrName' => 'data-mpc-field',
+            'itemAttrName'  => 'data-mpc-item',
+            'level'         => 0,
+            'isStatic'      => true,
+        ];
+        $result = $proc->setPlaceholders($properties)['html'];
+
+        $this->assertStringContainsString("##'{\$title}' | lexicon}", $result);
+    }
+
     // ---------------------------------------------------------------
     // getThumb — quoting input для non-lexicon режима
     // ---------------------------------------------------------------
@@ -654,6 +713,33 @@ class PlaceholderProcessorTest extends TestCase
         // не в скоупе (для нестатичных секций).
         $this->assertStringContainsString('{$item1.field.width}', $call);
         $this->assertStringContainsString('{$item1.field.height}', $call);
+    }
+
+    public function testGetThumbDeferVarInStaticForeachLeavesInputAndSizesBare(): void
+    {
+        // static + foreach (deferVar): обёртывающий `##foreach}` отложен, поэтому
+        // eager-интерполяция вычислила бы $item1 мимо скоупа. Откладываем
+        // переменную целиком: input — `($expr | lexicon)` без eager-кавычек,
+        // размеры — bare `$expr` без `{...}` (резолвятся на final-пассе, когда
+        // отложенный foreach итерирует и $item1 в скоупе).
+        $proc = $this->makeProcessor(['thumbSnippet' => 'mpcThumb']);
+
+        $call = $proc->getThumb([
+            'width'       => true,
+            'height'      => true,
+            'thumbParams' => 'q=90',
+            'firstSymbol' => '##',
+            'complexName' => '$item1.field',
+            'srcAttr'     => 'src',
+            'useLexicon'  => true,
+            'deferVar'    => true,
+        ]);
+
+        $this->assertStringContainsString("'input' => (\$item1.field.src | lexicon)", $call);
+        $this->assertStringNotContainsString("('{\$item1.field.src}' | lexicon)", $call);
+        $this->assertStringNotContainsString('{$item1.field.width}', $call);
+        $this->assertStringNotContainsString('{$item1.field.height}', $call);
+        $this->assertStringContainsString('$item1.field.width', $call);
     }
 
     public function testGetThumbWithoutUseLexiconLeavesInputBare(): void

@@ -180,6 +180,7 @@ class PlaceholderProcessor
         preg_match('/height:(.*?);/', $style, $height);
 
         $parentFieldName = $properties['parentFieldName'] ?? '';
+        $deferVar = $this->deferLexiconVar($properties);
 
         if (!$row->hasAttribute('data-mpc-nothumb') && !empty($this->properties['thumbSnippet'])) {
             $src = $this->getThumb([
@@ -191,9 +192,10 @@ class PlaceholderProcessor
                 'srcAttr' => '',
                 'setValues' => true,
                 'useLexicon' => $this->shouldLexiconize('image', $fieldName, $parentFieldName),
+                'deferVar' => $deferVar,
             ]);
         } else {
-            $src = $this->lex($firstSymbol, $complexName, 'image', $fieldName, $parentFieldName);
+            $src = $this->lex($firstSymbol, $complexName, 'image', $fieldName, $parentFieldName, $deferVar);
         }
 
         if ($this->properties['lazyloadAttr'] && !$row->hasAttribute('data-mpc-nolazy')) {
@@ -212,6 +214,7 @@ class PlaceholderProcessor
         [$firstSymbol, $complexName] = $this->getSymbolComplex($row, $fieldName, $properties['level'], $properties['isStatic']);
         $complexName .= '[0]';
         $parentFieldName = $properties['parentFieldName'] ?? '';
+        $deferVar = $this->deferLexiconVar($properties);
 
         if (!$row->hasAttribute('data-mpc-nothumb') && !empty($this->properties['thumbSnippet'])) {
             $src = $this->getThumb([
@@ -222,9 +225,10 @@ class PlaceholderProcessor
                 'complexName' => $complexName,
                 'srcAttr' => 'src',
                 'useLexicon' => $this->shouldLexiconize('image', $fieldName, $parentFieldName),
+                'deferVar' => $deferVar,
             ]);
         } else {
-            $src = $this->lex($firstSymbol, "$complexName.src", 'image', $fieldName, $parentFieldName);
+            $src = $this->lex($firstSymbol, "$complexName.src", 'image', $fieldName, $parentFieldName, $deferVar);
         }
 
         if ($this->properties['lazyloadAttr'] && !$row->hasAttribute('data-mpc-nolazy')) {
@@ -245,7 +249,7 @@ class PlaceholderProcessor
                 continue;
             }
             if ($spec && $this->shouldLexiconize($spec['contentType'], $spec['fieldName'], $parentFieldName)) {
-                $row->setAttribute($attr, $this->lex($firstSymbol, "$complexName.$attr", $spec['contentType'], $spec['fieldName'], $parentFieldName));
+                $row->setAttribute($attr, $this->lex($firstSymbol, "$complexName.$attr", $spec['contentType'], $spec['fieldName'], $parentFieldName, $deferVar));
             } else {
                 $row->setAttribute($attr, "{$firstSymbol}{$complexName}.{$attr}}");
             }
@@ -265,6 +269,7 @@ class PlaceholderProcessor
         [$firstSymbol, $complexName] = $this->getSymbolComplex($row, $fieldName, $properties['level'], $properties['isStatic']);
         $complexName .= '[0]';
         $parentFieldName = $properties['parentFieldName'] ?? '';
+        $deferVar = $this->deferLexiconVar($properties);
 
         $tag = $row->tagName();
         // content-type для атрибутов главного элемента: video/audio/picture
@@ -283,7 +288,8 @@ class PlaceholderProcessor
                 "$complexName.src",
                 $mainContentType,
                 $fieldName,
-                $parentFieldName
+                $parentFieldName,
+                $deferVar
             );
             if ($this->properties['lazyloadAttr'] && !$row->hasAttribute('data-mpc-nolazy')) {
                 $row->setAttribute($this->properties['lazyloadAttr'], $srcExpr);
@@ -306,7 +312,7 @@ class PlaceholderProcessor
                 'alt'    => $this->shouldLexiconize('text', $fieldName . '_alt', $parentFieldName),
             ];
 
-        $row = $this->setAttributes($row, $firstSymbol, $complexName, $mainLexiconAttrs);
+        $row = $this->setAttributes($row, $firstSymbol, $complexName, $mainLexiconAttrs, $deferVar);
         $html = $this->parser->getHTMLString($row);
 
         $sources = $row->find('source');
@@ -326,7 +332,7 @@ class PlaceholderProcessor
             //   (как наш $accumulatedParent).
             $sourceParent = $tag === 'picture' ? $fieldName : $accumulatedParent;
             $useSourceLexicon = $this->shouldLexiconize($sourceContentType, 'source', $sourceParent);
-            $source = $this->setAttributes($sources[$k], $firstSymbol, '$source', [$sourceAttr => $useSourceLexicon]);
+            $source = $this->setAttributes($sources[$k], $firstSymbol, '$source', [$sourceAttr => $useSourceLexicon], $deferVar);
             $search = ['##', 'complexName', 'html'];
             $replace = [$firstSymbol, $complexName];
 
@@ -340,9 +346,10 @@ class PlaceholderProcessor
                         'complexName' => '$source',
                         'srcAttr' => $sourceAttr,
                         'useLexicon' => $useSourceLexicon,
+                        'deferVar' => $deferVar,
                     ]);
                 } else {
-                    $src = $this->lex($firstSymbol, "\$source.$sourceAttr", $sourceContentType, 'source', $sourceParent);
+                    $src = $this->lex($firstSymbol, "\$source.$sourceAttr", $sourceContentType, 'source', $sourceParent, $deferVar);
                 }
                 $source->setAttribute($this->properties['lazyloadAttr'], $src);
                 $source->removeAttribute($sourceAttr);
@@ -366,7 +373,8 @@ class PlaceholderProcessor
                 $images[count($images) - 1],
                 $firstSymbol,
                 $complexName . '.img[0]',
-                $imgLexAttrs
+                $imgLexAttrs,
+                $deferVar
             );
             if (!$img->hasAttribute('data-mpc-nothumb') && !empty($this->properties['thumbSnippet'])) {
                 $src = $this->getThumb([
@@ -377,9 +385,10 @@ class PlaceholderProcessor
                     'complexName' => $complexName . '.img[0]',
                     'srcAttr' => 'src',
                     'useLexicon' => $imgLexAttrs['src'],
+                    'deferVar' => $deferVar,
                 ]);
             } else {
-                $src = $this->lex($firstSymbol, "$complexName.img[0].src", 'image', $imgFieldName, $parentFieldName);
+                $src = $this->lex($firstSymbol, "$complexName.img[0].src", 'image', $imgFieldName, $parentFieldName, $deferVar);
             }
 
             if ($this->properties['lazyloadAttr'] && !$row->hasAttribute('data-mpc-nolazy')) {
@@ -409,6 +418,7 @@ class PlaceholderProcessor
     {
         [$firstSymbol, $complexName] = $this->getSymbolComplex($row, $fieldName, $properties['level'], $properties['isStatic']);
         $parentFieldName = $properties['parentFieldName'] ?? '';
+        $deferVar = $this->deferLexiconVar($properties);
 
         if ($row->hasAttribute('href')) {
             // href — это URL/id ресурса. Не локализуется.
@@ -418,7 +428,7 @@ class PlaceholderProcessor
             $row->setAttribute('href', $pls);
         } else {
             // Внутренний текст элемента — content-type `text`.
-            $row->setInnerHtml($this->lex($firstSymbol, $complexName, 'text', $fieldName, $parentFieldName));
+            $row->setInnerHtml($this->lex($firstSymbol, $complexName, 'text', $fieldName, $parentFieldName, $deferVar));
         }
 
         $html = $this->parser->getHTMLString($row);
@@ -467,16 +477,22 @@ class PlaceholderProcessor
      * eager-пассе, лексикон-модификатор резолвит на final-пассе. Размеры
      * тоже баковатся литералом через `{$expr}` (на final-пассе `$item` не в
      * скоупе для нестатичных секций).
+     *
+     * Параметр `deferVar` (bool): static + foreach (см. {@see deferLexiconVar}).
+     * Тогда обёртывающий `##foreach}` отложен, и eager-интерполяция `{$expr}`
+     * вычислила бы `$itemN` мимо скоупа. Откладываем переменную целиком:
+     * `($expr | lexicon)` и размеры через bare `$expr` без `{...}`.
      */
     public function getThumb(array $params): string
     {
         $snippetName = $this->properties['thumbSnippet'];
         $thumbParams = $params['thumbParams'] ?: $this->properties['commonThumbParams'];
         $useLexicon = !empty($params['useLexicon']);
+        $deferVar = !empty($params['deferVar']);
         $src = $params['srcAttr'] ? "{$params['complexName']}.{$params['srcAttr']}" : $params['complexName'];
 
         if ($params['width']) {
-            $width = $useLexicon
+            $width = ($useLexicon && !$deferVar)
                 ? '{' . $params['complexName'] . '.width}'
                 : $params['complexName'] . '.width';
             $pls = ($params['setValues'] ?? false) ? $params['width'] : "'~$width" . ($params['height'] ? "~'" : '');
@@ -484,7 +500,7 @@ class PlaceholderProcessor
         }
 
         if ($params['height']) {
-            $height = $useLexicon
+            $height = ($useLexicon && !$deferVar)
                 ? '{' . $params['complexName'] . '.height}'
                 : $params['complexName'] . '.height';
             $pls = ($params['setValues'] ?? false) ? $params['height'] : "'~$height";
@@ -496,7 +512,7 @@ class PlaceholderProcessor
         }
 
         if ($useLexicon) {
-            $src = "('{" . $src . "}' | lexicon)";
+            $src = $deferVar ? "($src | lexicon)" : "('{" . $src . "}' | lexicon)";
             $params['firstSymbol'] = '##';
         }
 
@@ -540,16 +556,25 @@ class PlaceholderProcessor
      * правильным контекстом (имя поля, накопленный родитель).
      * Атрибуты, отсутствующие в карте или со значением `false`, выводятся
      * обычным `{$expr}`.
+     *
+     * `$deferVar` (bool): static + foreach (см. {@see deferLexiconVar}) —
+     * откладываем переменную целиком `##$expr | lexicon}` вместо eager-
+     * интерполяции `##'{$expr}' | lexicon}`, иначе `$itemN`/`$source`
+     * вычислится мимо скоупа отложенного `##foreach}`.
      */
-    public function setAttributes(Element $row, string $firstSymbol, string $complexName, array $lexiconAttrs = []): Element
+    public function setAttributes(Element $row, string $firstSymbol, string $complexName, array $lexiconAttrs = [], bool $deferVar = false): Element
     {
         $allowedAttrs = ['src', 'srcset', 'loop', 'media', 'type', 'sizes', 'autoplay', 'controls', 'preload', 'muted', 'height', 'width', 'poster', 'alt'];
 
         foreach ($allowedAttrs as $attrName) {
             if ($row->hasAttribute($attrName)) {
-                $row->setAttribute($attrName, !empty($lexiconAttrs[$attrName])
-                    ? "##'{" . "$complexName.$attrName" . "}' | lexicon}"
-                    : "{$firstSymbol}{$complexName}.{$attrName}}");
+                if (empty($lexiconAttrs[$attrName])) {
+                    $row->setAttribute($attrName, "{$firstSymbol}{$complexName}.{$attrName}}");
+                } elseif ($deferVar) {
+                    $row->setAttribute($attrName, "##" . "$complexName.$attrName" . " | lexicon}");
+                } else {
+                    $row->setAttribute($attrName, "##'{" . "$complexName.$attrName" . "}' | lexicon}");
+                }
             }
         }
 
@@ -570,25 +595,56 @@ class PlaceholderProcessor
     }
 
     /**
+     * Нужно ли откладывать саму переменную лексиконного выражения целиком
+     * (без eager-интерполяции `'{$expr}'`).
+     *
+     * Истинно для **статичных секций внутри foreach** (`isStatic && level > 0`):
+     * там обёртывающий `##foreach}` тоже отложен (firstSymbol = `##`), поэтому
+     * на eager-пассе loop-переменная `$itemN` ещё НЕ в скоупе. Если в такой
+     * ситуации эмитить `##'{$itemN.field}' | lexicon}`, eager-пасс
+     * интерполирует внутренний `{$itemN.field}` мимо скоупа → пусто →
+     * `{'' | lexicon}` в parsed/. Нужно отложить всё выражение: `##$itemN.field
+     * | lexicon}` → после `##→{` → `{$itemN.field | lexicon}`, резолвится когда
+     * отложенный foreach реально итерирует.
+     *
+     * Для нестатичных секций foreach исполняется на eager-пассе ({foreach}),
+     * `$itemN` в скоупе, и eager-интерполяция нужна (значение запекается, пока
+     * loop-переменная жива) — поэтому возвращаем false.
+     * PURE: не меняет состояние.
+     */
+    private function deferLexiconVar(array $properties): bool
+    {
+        return !empty($properties['isStatic']) && ($properties['level'] ?? 0) > 0;
+    }
+
+    /**
      * Собирает Fenom-плейсхолдер для выражения, добавляя `| lexicon` если
      * поле указанного content-type локализуется и не попадает под
      * exclusion-паттерны.
      *
      * Для нелексиконных — `{$expr}` (или `##$expr}` если firstSymbol = ##).
      *
-     * Для лексиконных — `##'{$expr}' | lexicon}`. Логика: лексикон-файл ресурса
-     * подгружается **позже** eager-пасса parseChunk, и `{$expr | lexicon}` на
-     * eager-пассе вернёт пусто (переопределённый модификатор отдаёт `''` для
-     * отсутствующих ключей). Решение — отложить вычисление лексикона до
-     * final-пасса через `##`. Внутренний `'{$expr}'` интерполируется на
-     * eager-пассе по pdoTools-конвенции (одинарные кавычки сохраняются,
-     * `{$expr}` подменяется значением): получаем `##'key' | lexicon}`,
-     * после `##→{` — `{'key' | lexicon}`, лексикон резолвится на final-пассе.
+     * Для лексиконных по умолчанию — `##'{$expr}' | lexicon}`. Логика:
+     * лексикон-файл ресурса подгружается **позже** eager-пасса parseChunk, и
+     * `{$expr | lexicon}` на eager-пассе вернёт пусто (переопределённый
+     * модификатор отдаёт `''` для отсутствующих ключей). Решение — отложить
+     * вычисление лексикона до final-пасса через `##`. Внутренний `'{$expr}'`
+     * интерполируется на eager-пассе по pdoTools-конвенции (одинарные кавычки
+     * сохраняются, `{$expr}` подменяется значением): получаем `##'key' |
+     * lexicon}`, после `##→{` — `{'key' | lexicon}`, лексикон резолвится на
+     * final-пассе.
+     *
+     * При `$deferVar = true` (static + foreach, см. {@see deferLexiconVar})
+     * откладывается сама переменная: `##$expr | lexicon}` — без eager-
+     * интерполяции, иначе `$itemN` вычислится мимо скоупа отложенного foreach.
      */
-    private function lex(string $firstSymbol, string $expr, string $contentType, string $fieldName, string $parentFieldName = ''): string
+    private function lex(string $firstSymbol, string $expr, string $contentType, string $fieldName, string $parentFieldName = '', bool $deferVar = false): string
     {
         if (!$this->shouldLexiconize($contentType, $fieldName, $parentFieldName)) {
             return "{$firstSymbol}{$expr}}";
+        }
+        if ($deferVar) {
+            return "##" . $expr . " | lexicon}";
         }
         return "##'{" . $expr . "}' | lexicon}";
     }

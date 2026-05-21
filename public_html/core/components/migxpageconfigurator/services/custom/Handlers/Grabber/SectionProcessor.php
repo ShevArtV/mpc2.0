@@ -13,29 +13,29 @@ class SectionProcessor
 {
     public array $properties;
 
-    private \modX           $modx;
-    private Parser          $parser;
-    private ContentParser   $contentParser;
-    private LexiconManager  $lexiconManager;
+    private \modX $modx;
+    private Parser $parser;
+    private ContentParser $contentParser;
+    private LexiconManager $lexiconManager;
     private MediaDownloader $mediaDownloader;
-    private Response        $response;
+    private Response $response;
 
     public function __construct(
-        \modX           $modx,
-        array           $properties,
-        Parser          $parser,
-        ContentParser   $contentParser,
-        LexiconManager  $lexiconManager,
+        \modX $modx,
+        array $properties,
+        Parser $parser,
+        ContentParser $contentParser,
+        LexiconManager $lexiconManager,
         MediaDownloader $mediaDownloader,
-        Response        $response
+        Response $response
     ) {
-        $this->modx            = $modx;
-        $this->properties      = $properties;
-        $this->parser          = $parser;
-        $this->contentParser   = $contentParser;
-        $this->lexiconManager  = $lexiconManager;
+        $this->modx = $modx;
+        $this->properties = $properties;
+        $this->parser = $parser;
+        $this->contentParser = $contentParser;
+        $this->lexiconManager = $lexiconManager;
         $this->mediaDownloader = $mediaDownloader;
-        $this->response        = $response;
+        $this->response = $response;
     }
 
     /**
@@ -66,26 +66,26 @@ class SectionProcessor
             return;
         }
 
-        $commonConfig     = $result['data']['object'];
+        $commonConfig = $result['data']['object'];
         $commonConfigData = $commonConfig->toArray();
         $this->properties['multipleFormtabs'] = explode('||', $commonConfigData['extended']['multiple_formtabs']);
 
-        $i             = 0;
+        $i = 0;
         $sectionValues = [];
 
         foreach ($sections as $section) {
             $this->mediaDownloader->setCurrentSectionName('');
             $i++;
-            $sectionName  = trim((string)$section->getAttribute('data-mpc-section'));
-            $fileName     = $sectionName . $this->properties['extension'];
-            $fileNameVis  = $this->properties['pdotoolsElementsPath'] . $this->properties['pathToSections'] . $fileName;
+            $sectionName = trim((string)$section->getAttribute('data-mpc-section'));
+            $fileName = $sectionName . $this->properties['extension'];
+            $fileNameVis = $this->properties['pdotoolsElementsPath'] . $this->properties['pathToSections'] . $fileName;
 
             $properties = [
                 'defaultFormTabs' => $defaultFormTabs,
-                'sectionName'     => $sectionName,
-                'isCopy'          => $section->hasAttribute('data-mpc-copy'),
-                'fileNameVis'     => $fileNameVis,
-                'fileName'        => $fileName,
+                'sectionName' => $sectionName,
+                'isCopy' => $section->hasAttribute('data-mpc-copy'),
+                'fileNameVis' => $fileNameVis,
+                'fileName' => $fileName,
             ];
 
             if (!$properties['isCopy'] && !empty($defaultFormTabs)) {
@@ -133,17 +133,17 @@ class SectionProcessor
     private function createSectionConfig(Element $section, array $properties): array
     {
         $properties['defaultFormTabs'][1]['fields'] = $this->getSectionFields($section, $properties['defaultFormTabs'][1]['fields']);
-        $properties['defaultFormTabs'][0]['fields'][2]['default']          = $properties['fileNameVis'];
+        $properties['defaultFormTabs'][0]['fields'][2]['default'] = $properties['fileNameVis'];
         $properties['defaultFormTabs'][0]['fields'][2]['useDefaultIfEmpty'] = 1;
-        $properties['defaultFormTabs'][0]['fields'][1]['default']          = $section->getAttribute('data-mpc-name');
+        $properties['defaultFormTabs'][0]['fields'][1]['default'] = $section->getAttribute('data-mpc-name');
         $properties['defaultFormTabs'][0]['fields'][1]['useDefaultIfEmpty'] = 1;
-        $properties['defaultFormTabs'][0]['fields'][0]['default']          = $properties['sectionName'];
+        $properties['defaultFormTabs'][0]['fields'][0]['default'] = $properties['sectionName'];
         $properties['defaultFormTabs'][0]['fields'][0]['useDefaultIfEmpty'] = 1;
 
-        $defaultConfigData['formtabs']                                         = json_encode($properties['defaultFormTabs']);
-        $defaultConfigData['name']                                             = $properties['sectionName'];
-        $defaultConfigData['extended']['multiple_formtabs_optionstext']        = $section->getAttribute('data-mpc-name');
-        $defaultConfigData['editedon']                                         = date('Y-m-d H:i:s');
+        $defaultConfigData['formtabs'] = json_encode($properties['defaultFormTabs']);
+        $defaultConfigData['name'] = $properties['sectionName'];
+        $defaultConfigData['extended']['multiple_formtabs_optionstext'] = $section->getAttribute('data-mpc-name');
+        $defaultConfigData['editedon'] = date('Y-m-d H:i:s');
 
         if (!$config = $this->modx->getObject('migxConfig', ['name' => $properties['sectionName']])) {
             $config = $this->modx->newObject('migxConfig');
@@ -167,9 +167,9 @@ class SectionProcessor
         $result = [];
         foreach ($entries as $entry) {
             $fieldName = $entry->getAttribute('data-mpc-field');
-            $width     = $entry->getAttribute('width');
-            $height    = $entry->getAttribute('height');
-            $result[]  = $fieldName;
+            $width = $entry->getAttribute('width');
+            $height = $entry->getAttribute('height');
+            $result[] = $fieldName;
             if ($fieldName === 'img') {
                 $result[] = $width ? 'img_w' : '';
                 $result[] = $height ? 'img_h' : '';
@@ -196,31 +196,31 @@ class SectionProcessor
 
     private function grabSection(Element $section, array $properties, ?int $i = 1): array
     {
-        $sectionName  = trim((string)$section->getAttribute('data-mpc-name'));
-        $prefix       = trim((string)$section->getAttribute('data-mpc-lexicon')) ?: $properties['sectionName'];
-        $isStatic     = $section->hasAttribute('data-mpc-static');
+        $sectionName = trim((string)$section->getAttribute('data-mpc-name'));
+        $prefix = trim((string)$section->getAttribute('data-mpc-lexicon')) ?: $properties['sectionName'];
+        $isStatic = $section->hasAttribute('data-mpc-static');
 
         $this->lexiconManager->setContext($prefix, $isStatic);
         $this->mediaDownloader->setCurrentSectionName($properties['sectionName']);
 
         $sectionId = $properties['sectionName'] . '_' . str_replace(['.', ',', ' '], '', microtime(true));
 
-        $fieldsValues              = $this->contentParser->getFieldsValues($this->parser->getHTMLString($section));
+        $fieldsValues = $this->contentParser->getFieldsValues($this->parser->getHTMLString($section));
         $fieldsValues['is_static'] = $isStatic;
-        $fieldsValues              = array_merge([
-            'MIGX_id'        => $i,
-            'MIGX_formname'  => $properties['sectionName'],
-            'id'             => $sectionId,
-            'section_name'   => $sectionName,
+        $fieldsValues = array_merge([
+            'MIGX_id' => $i,
+            'MIGX_formname' => $properties['sectionName'],
+            'id' => $sectionId,
+            'section_name' => $sectionName,
             'lexicon_prefix' => $prefix,
-            'file_name'      => $properties['fileNameVis'],
+            'file_name' => $properties['fileNameVis'],
         ], $fieldsValues);
 
         $this->modx->invokeEvent('mpcOnGetSectionFieldsValues', [
-            'sectionKey'   => $properties['sectionName'],
+            'sectionKey' => $properties['sectionName'],
             'fieldsValues' => $fieldsValues,
-            'section'      => $section,
-            'Grabber'      => $this,
+            'section' => $section,
+            'Grabber' => $this,
         ]);
 
         $fieldsValues = isset($this->modx->event->returnedValues) && !empty($this->modx->event->returnedValues['fieldsValues'])
@@ -236,7 +236,7 @@ class SectionProcessor
     private function updateStaticSectionValues(array $sectionFieldsValues, string $sectionName): void
     {
         $upd = false;
-        $i   = 0;
+        $i = 0;
 
         if (!empty($this->properties['sbpSectionValues'])) {
             foreach ($this->properties['sbpSectionValues'] as $k => $sectionValue) {

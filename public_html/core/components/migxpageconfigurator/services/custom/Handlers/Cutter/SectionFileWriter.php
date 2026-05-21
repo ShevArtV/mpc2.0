@@ -18,21 +18,21 @@ class SectionFileWriter
     /** @var string[] Имена уже обработанных чанков (дедупликация) */
     private array $chunkNames = [];
 
-    private array                $properties;
-    private Parser               $parser;
+    private array $properties;
+    private Parser $parser;
     private PlaceholderProcessor $placeholderProcessor;
-    private SpecialTagProcessor  $specialTagProcessor;
+    private SpecialTagProcessor $specialTagProcessor;
 
     public function __construct(
-        array                $properties,
-        Parser               $parser,
+        array $properties,
+        Parser $parser,
         PlaceholderProcessor $placeholderProcessor,
-        SpecialTagProcessor  $specialTagProcessor
+        SpecialTagProcessor $specialTagProcessor
     ) {
-        $this->properties           = $properties;
-        $this->parser               = $parser;
+        $this->properties = $properties;
+        $this->parser = $parser;
         $this->placeholderProcessor = $placeholderProcessor;
-        $this->specialTagProcessor  = $specialTagProcessor;
+        $this->specialTagProcessor = $specialTagProcessor;
     }
 
     /**
@@ -78,8 +78,8 @@ class SectionFileWriter
     public function createSectionFiles(Element $section): void
     {
         $sectionName = trim((string)$section->getAttribute('data-mpc-section'));
-        $isStatic    = $section->hasAttribute('data-mpc-static');
-        $fileName    = $sectionName . $this->properties['extension'];
+        $isStatic = $section->hasAttribute('data-mpc-static');
+        $fileName = $sectionName . $this->properties['extension'];
         $sectionsDir = $this->properties['pdotoolsElementsPath'] . $this->properties['pathToSections'];
 
         if (!is_dir($sectionsDir)) {
@@ -108,9 +108,9 @@ class SectionFileWriter
      */
     private function convertStaticToUnstatic(string $content): string
     {
-        $result     = '';
-        $len        = strlen($content);
-        $i          = 0;
+        $result = '';
+        $len = strlen($content);
+        $i = 0;
         $fenomDepth = 0;
 
         while ($i < $len) {
@@ -172,17 +172,17 @@ class SectionFileWriter
      */
     public function putToFile(Element $element, string $pathToFile, bool $isStatic): void
     {
-        $html                  = $this->parser->getHTMLString($element);
-        $sectionLexiconPrefix  = trim((string)$element->getAttribute('data-mpc-lexicon'));
+        $html = $this->parser->getHTMLString($element);
+        $sectionLexiconPrefix = trim((string)$element->getAttribute('data-mpc-lexicon'));
 
         $properties = [
-            'html'                 => $html,
-            'element'              => $element,
-            'fieldAttrName'        => 'data-mpc-field',
-            'itemAttrName'         => 'data-mpc-item',
-            'level'                => 0,
+            'html' => $html,
+            'element' => $element,
+            'fieldAttrName' => 'data-mpc-field',
+            'itemAttrName' => 'data-mpc-item',
+            'level' => 0,
             'sectionLexiconPrefix' => $sectionLexiconPrefix,
-            'isStatic'             => $isStatic,
+            'isStatic' => $isStatic,
         ];
 
         $properties = $this->placeholderProcessor->setPlaceholders($properties);
@@ -200,8 +200,8 @@ class SectionFileWriter
         // data-mpc-attr: заменить "data-mpc-attr="attr=val"" на сам атрибут
         if ($attrs = $this->parser->findByAttribute($properties['html'], '[data-mpc-attr]')) {
             foreach ($attrs as $attr) {
-                $attrValue          = $attr->getAttribute('data-mpc-attr');
-                $search             = 'data-mpc-attr="' . $attrValue . '"';
+                $attrValue = $attr->getAttribute('data-mpc-attr');
+                $search = 'data-mpc-attr="' . $attrValue . '"';
                 $properties['html'] = str_replace($search, $attrValue, $properties['html']);
             }
         }
@@ -226,8 +226,8 @@ class SectionFileWriter
 
         // Обёртка в условие если есть data-mpc-if на самой секции
         if ($element->hasAttribute('data-mpc-if')) {
-            $condition    = $element->getAttribute('data-mpc-if');
-            $firstSymbol  = (string)$element->getAttribute('data-mpc-symbol') ?: '{';
+            $condition = $element->getAttribute('data-mpc-if');
+            $firstSymbol = (string)$element->getAttribute('data-mpc-symbol') ?: '{';
             $properties['html'] = $this->placeholderProcessor->wrapInCondition(
                 $condition,
                 $properties['html'],

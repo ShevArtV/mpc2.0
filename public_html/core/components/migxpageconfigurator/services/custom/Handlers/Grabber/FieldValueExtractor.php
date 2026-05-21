@@ -13,30 +13,30 @@ class FieldValueExtractor
 {
     private array $downloadMethodsByTagName = [
         'picture' => 'downloadImage',
-        'video'   => 'downloadVideo',
-        'audio'   => 'downloadAudio',
+        'video' => 'downloadVideo',
+        'audio' => 'downloadAudio',
     ];
 
-    private array           $properties;
+    private array $properties;
     private MediaDownloader $mediaDownloader;
-    private LexiconManager  $lexiconManager;
-    private Parser          $parser;
+    private LexiconManager $lexiconManager;
+    private Parser $parser;
 
     public function __construct(
-        array           $properties,
+        array $properties,
         MediaDownloader $mediaDownloader,
-        LexiconManager  $lexiconManager,
-        Parser          $parser
+        LexiconManager $lexiconManager,
+        Parser $parser
     ) {
-        $this->properties      = $properties;
+        $this->properties = $properties;
         $this->mediaDownloader = $mediaDownloader;
-        $this->lexiconManager  = $lexiconManager;
-        $this->parser          = $parser;
+        $this->lexiconManager = $lexiconManager;
+        $this->parser = $parser;
     }
 
     public function getImageValue(Element $row, ?array $options = []): string
     {
-        $attrs   = ['src', 'alt', 'width', 'height'];
+        $attrs = ['src', 'alt', 'width', 'height'];
         $value[0]['MIGX_id'] = 1;
 
         foreach ($attrs as $attr) {
@@ -74,7 +74,7 @@ class FieldValueExtractor
             $parent = $parent->parent();
         }
 
-        $downloadMethod  = $this->downloadMethodsByTagName[$parent->tagName()];
+        $downloadMethod = $this->downloadMethodsByTagName[$parent->tagName()];
         $value['MIGX_id'] = $idx;
 
         foreach ($attrs as $attr) {
@@ -92,22 +92,22 @@ class FieldValueExtractor
 
     public function getPictureValue(Element $element, ?array $options = []): string
     {
-        $picture[0]['MIGX_id']  = 1;
-        $picture[0]['preview']  = '';
-        $picture[0]['img']      = [];
-        $picture[0]['sources']  = [];
+        $picture[0]['MIGX_id'] = 1;
+        $picture[0]['preview'] = '';
+        $picture[0]['img'] = [];
+        $picture[0]['sources'] = [];
 
         if ($img = $element->first('img')) {
-            $picture[0]['img']     = $this->getImageValue($img, $options);
+            $picture[0]['img'] = $this->getImageValue($img, $options);
             $picture[0]['preview'] = $img->getAttribute('src');
         }
 
         if ($sources = $element->find('source')) {
             $options['parentFieldName'] = $options['idx'] ? "{$options['fieldName']}_{$options['idx']}" : $options['fieldName'];
-            $options['fieldName']       = 'source';
+            $options['fieldName'] = 'source';
             foreach ($sources as $k => $source) {
-                $options['idx']                    = $k;
-                $picture[0]['sources'][$k]         = $this->getSourceValue($source, $k + 1);
+                $options['idx'] = $k;
+                $picture[0]['sources'][$k] = $this->getSourceValue($source, $k + 1);
                 $picture[0]['sources'][$k]['srcset'] = in_array('image', $this->properties['translatableContentTypes'])
                     ? $this->lexiconManager->setLexicons($picture[0]['sources'][$k]['srcset'], $options)
                     : $picture[0]['sources'][$k]['srcset'];
@@ -124,18 +124,18 @@ class FieldValueExtractor
 
         $media[0]['MIGX_id'] = 1;
         $attrs = [
-            'src'      => 'string',
+            'src' => 'string',
             'autoplay' => 'boolean',
             'controls' => 'boolean',
-            'loop'     => 'boolean',
-            'muted'    => 'boolean',
-            'preload'  => 'boolean',
+            'loop' => 'boolean',
+            'muted' => 'boolean',
+            'preload' => 'boolean',
         ];
 
         if ($element->tagName() === 'video') {
             $attrs = array_merge($attrs, [
-                'src'    => 'string',
-                'width'  => 'number',
+                'src' => 'string',
+                'width' => 'number',
                 'height' => 'number',
                 'poster' => 'string',
             ]);
@@ -154,7 +154,7 @@ class FieldValueExtractor
                     $media[0][$attr] = $this->mediaDownloader->downloadImage($media[0][$attr]);
                 }
                 $parentFieldName = $this->getParentFieldName($options);
-                $lexiconOptions  = ['fieldName' => 'poster', 'parentFieldName' => $parentFieldName, 'idx' => 0];
+                $lexiconOptions = ['fieldName' => 'poster', 'parentFieldName' => $parentFieldName, 'idx' => 0];
                 $media[0][$attr] = in_array('poster', $this->properties['translatableContentTypes'])
                     ? $this->lexiconManager->setLexicons($media[0][$attr], $lexiconOptions)
                     : $media[0][$attr];
@@ -162,7 +162,7 @@ class FieldValueExtractor
 
             if ($attr === 'src') {
                 if (strpos($media[0][$attr], 'http') !== false) {
-                    $downloadMethod  = $this->downloadMethodsByTagName[$element->tagName()];
+                    $downloadMethod = $this->downloadMethodsByTagName[$element->tagName()];
                     $media[0][$attr] = method_exists($this->mediaDownloader, $downloadMethod)
                         ? $this->mediaDownloader->$downloadMethod($media[0][$attr])
                         : $media[0][$attr];
@@ -175,11 +175,11 @@ class FieldValueExtractor
 
         if ($sources = $element->find('source')) {
             $parentFieldName = $this->getParentFieldName($options);
-            $lexiconOptions  = ['fieldName' => 'source', 'parentFieldName' => $parentFieldName];
+            $lexiconOptions = ['fieldName' => 'source', 'parentFieldName' => $parentFieldName];
             foreach ($sources as $k => $source) {
-                $lexiconOptions['idx']              = $k;
-                $media[0]['sources'][$k]            = $this->getSourceValue($source, $k + 1, false);
-                $media[0]['sources'][$k]['src']     = $useLexicons
+                $lexiconOptions['idx'] = $k;
+                $media[0]['sources'][$k] = $this->getSourceValue($source, $k + 1, false);
+                $media[0]['sources'][$k]['src'] = $useLexicons
                     ? $this->lexiconManager->setLexicons($media[0]['sources'][$k]['src'], $lexiconOptions)
                     : $media[0]['sources'][$k]['src'];
             }
@@ -228,9 +228,9 @@ class FieldValueExtractor
 
     public function getParentFieldName(array $options): string
     {
-        $fieldName       = $options['fieldName'] ?? '';
+        $fieldName = $options['fieldName'] ?? '';
         $parentFieldName = $options['parentFieldName'] ?? '';
-        $idx             = $options['idx'] ?? 0;
+        $idx = $options['idx'] ?? 0;
 
         if ($parentFieldName) {
             return $idx
