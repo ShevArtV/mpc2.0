@@ -1,3 +1,10 @@
+2.4.0-dev (в разработке)
+==============
+Крупный релиз: расширение address-space (`rfield`/`tv`/уровни), edit-mode рендер и публичный API под визуальный фронт-редактор **mpcVisualEditor**. Ведётся поэтапно (M0–M9); записи добавляются по мере готовности этапов. Версия в разработке — НЕ ставить в прод до перехода на `-rc`.
+
+- **[M0] Билдер под два пакета.** `_build/build.php` параметризован: `php build.php` собирает mpc (как раньше, backward-compatible), `php build.php mpcvisualeditor` — пакет mpcVE из `_build/mpcvisualeditor/config.inc.php`. Оба транспорт-пакета собираются с одного dev-сайта. Проверено боевой сборкой обоих на тестовом сайте.
+- **[M1] Address-space: `data-mpc-rfield` + `data-mpc-tv` (сторона Cutter).** Новый top-level пас `Cutter::handleResourceFields()` (по образцу `handleInformation`): `data-mpc-rfield="pagetitle"` → `{$resource.pagetitle}`, `data-mpc-tv="myTV"` → `{$resource.tvs.myTV}`. Render.php прокидывает в скоуп секции `$resource` — полный массив полей ресурса с подмассивом `tvs` (`Render::parseConfig`). Поддержаны: `href` (a/link), `src` (img/source), `innerHtml`/`data-mpc-unwrap`, обёртка `data-mpc-if`. rfield/tv **не лексиконятся** (значения per-resource, не общие между страницами) и предназначены для динамических, не `data-mpc-static`, секций. Грабер resource-поля в `mpc_config` **не пишет** (render+edit-only; запись значений — через будущий фасад `writeField`, M4). Маркеры `rfield|tv` добавлены в strip-паттерн. Тест `testCutterTransformsResourceFieldsAndTVs` (+1, всего 138, все зелёные).
+
 2.3.16-rc
 ==============
 - Обработка атрибута `title` для медиа (`img`, `picture`, `video`, `audio`). `title` — человекочитаемый текст (тултип/доступность), поэтому лексиконится как `text` с суффиксом поля `_title` — симметрично `alt`, на обеих сторонах (грабер пишет ключ, каттер навешивает `| lexicon`).

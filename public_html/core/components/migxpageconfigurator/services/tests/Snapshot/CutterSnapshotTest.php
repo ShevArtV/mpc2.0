@@ -170,6 +170,37 @@ class CutterSnapshotTest extends TestCase
         );
     }
 
+    /**
+     * Тест M1: data-mpc-rfield / data-mpc-tv → плейсхолдеры текущего ресурса.
+     *   rfield → {$resource.<field>}, tv → {$resource.tvs.<tv>}.
+     */
+    public function testCutterTransformsResourceFieldsAndTVs(): void
+    {
+        $cutter = new Cutter($this->modx, $this->makeBaseProperties());
+        $result = $cutter->handle('rfields.html');
+        $this->assertTrue($result['success'], 'Cutter::handle должен вернуть success=true');
+
+        $file = $this->outputDir . '/sections/rftest.tpl';
+        $this->assertFileExists($file, 'Файл секции rftest.tpl должен быть создан');
+        $tpl = file_get_contents($file);
+
+        // rfield → нативные поля ресурса
+        $this->assertStringContainsString('{$resource.pagetitle}', $tpl);
+        $this->assertStringContainsString('{$resource.content}', $tpl);
+        // tv → подмассив tvs
+        $this->assertStringContainsString('{$resource.tvs.subtitle}', $tpl);
+        // tv на img → src
+        $this->assertStringContainsString('src="{$resource.tvs.cover}"', $tpl);
+        // rfield на ссылке с data-mpc-if → href + обёртка {if}
+        $this->assertStringContainsString('{$resource.link}', $tpl);
+        $this->assertStringContainsString('{if $resource.link}', $tpl);
+        // обычное поле секции не сломалось
+        $this->assertStringContainsString('{$heading}', $tpl);
+        // маркеры удалены из выхлопа
+        $this->assertStringNotContainsString('data-mpc-rfield', $tpl);
+        $this->assertStringNotContainsString('data-mpc-tv', $tpl);
+    }
+
     // ---------------------------------------------------------------
 
     private function clearDir(string $dir): void

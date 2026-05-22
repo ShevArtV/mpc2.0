@@ -60,7 +60,7 @@ class Cutter extends Base
         $properties = [
             'pathToChunks'      => $this->modx->getOption('mpc_path_to_chunks', null, 'chunks/'),
             'chunkNames'        => [],
-            'pattern'           => '/(\s)*?data-mpc-(nolazy|copy|symbol|if|static|name|item|unwrap|section|snippet|chunk|include|parse|remove|attr|field|cfield|contact|ctx|info|lim|off|nothumb|thumb|lexicon|key)(-){0,1}([0-9]*)(=".*?"){0,1}(\s)*?/',
+            'pattern'           => '/(\s)*?data-mpc-(nolazy|copy|symbol|if|static|name|item|unwrap|section|snippet|chunk|include|parse|remove|attr|field|cfield|rfield|tv|contact|ctx|info|lim|off|nothumb|thumb|lexicon|key)(-){0,1}([0-9]*)(=".*?"){0,1}(\s)*?/',
             'wrapperName'       => $this->modx->getOption('mpc_wrapper_name', null, 'wrapper'),
             'thumbFormat'       => $this->modx->getOption('mpc_thumb_format', null, 'png'),
             'fakeImgPath'       => $this->modx->getOption('mpc_fake_img_path', null, 'assets/components/migxpageconfigurator/images/fake-img.png'),
@@ -175,6 +175,7 @@ class Cutter extends Base
 
         $this->handleInformation();
         $this->handleContacts();
+        $this->handleResourceFields();
         $this->handleSections();
 
         return $this->response->success(__METHOD__, "Processing of file $fileName is completed");
@@ -308,6 +309,82 @@ class Cutter extends Base
 
         if (!empty($replacement)) {
             $this->html = str_replace($search, $replacement, $this->html);
+        }
+    }
+
+    /**
+     * Заменяет [data-mpc-rfield] и [data-mpc-tv] на Fenom-плейсхолдеры,
+     * читающие поля/TV ТЕКУЩЕГО ресурса.
+     *
+     * Render.php прокидывает в скоуп секции `$resource` = полный массив полей
+     * ресурса, включая подмассив `tvs` (см. Render::parseConfig — `$section['resource']`).
+     * Поэтому:
+     *   - data-mpc-rfield="pagetitle" → {$resource.pagetitle}
+     *   - data-mpc-tv="myTV"          → {$resource.tvs.myTV}
+     *
+     * Значения per-resource (не общие между страницами) → НЕ лексиконятся.
+     * Эти поля динамические, в статичные секции (data-mpc-static) не предназначены.
+     * Адрес для редактирования (mpcVE) собирается отдельно — фасадом writeField.
+     *
+     * @return void
+     */
+    private function handleResourceFields(): void
+    {
+        // rfield — нативная колонка ресурса; tv — значение TV (через подмассив tvs).
+        $this->replaceResourceMarkers('[data-mpc-rfield]', 'data-mpc-rfield', '$resource.');
+        $this->replaceResourceMarkers('[data-mpc-tv]', 'data-mpc-tv', '$resource.tvs.');
+    }
+
+    /**
+     * Общий обход элементов-маркеров: подставляет `{$exprPrefix.<name>}` в
+     * нужное место (href для ссылок, src для img, иначе innerHtml/unwrap) и
+     * оборачивает в условие при data-mpc-if. По образцу handleInformation.
+     *
+     * @return void
+     */
+    private function replaceResourceMarkers(string $selector, string $attr, string $exprPrefix): void
+    {
+        if (!$items = $this->getItems($this->html, $selector)) {
+            return;
+        }
+
+        foreach ($items as $item) {
+            $name = trim((string)$item->getAttribute($attr));
+            if ($name === '') {
+                continue;
+            }
+
+            $expr        = $exprPrefix . $name;        // напр. $resource.pagetitle / $resource.tvs.myTV
+            $pls         = '{' . $expr . '}';
+            $itemHtml    = $this->parser->getHTMLString($item);
+            $itemHtmlNew = '';
+
+            switch ($item->tagName()) {
+                case 'a':
+                case 'link':
+                    $item->setAttribute('href', $pls);
+                    break;
+                case 'img':
+                case 'source':
+                    $item->setAttribute('src', $pls);
+                    break;
+                default:
+                    if ($item->hasAttribute('data-mpc-unwrap')) {
+                        $itemHtmlNew = $pls;
+                    } else {
+                        $item->setInnerHtml($pls);
+                    }
+                    break;
+            }
+
+            $itemHtmlNew = $itemHtmlNew ?: $this->parser->getHTMLString($item);
+
+            if ($item->hasAttribute('data-mpc-if')) {
+                $condition   = $item->getAttribute('data-mpc-if') ?: $expr;
+                $itemHtmlNew = $this->placeholderProcessor->wrapInCondition($condition, $itemHtmlNew);
+            }
+
+            $this->html = str_replace($itemHtml, $itemHtmlNew, $this->html);
         }
     }
 
