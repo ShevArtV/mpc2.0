@@ -36,6 +36,12 @@ class ModxObjectStub
         return $this->data["tv_{$tvName}"] ?? '';
     }
 
+    public function setTVValue(string $tvName, mixed $value): bool
+    {
+        $this->data["tv_{$tvName}"] = $value;
+        return true;
+    }
+
     public function toArray(): array
     {
         return $this->data;

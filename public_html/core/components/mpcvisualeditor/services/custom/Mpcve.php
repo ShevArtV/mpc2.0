@@ -57,15 +57,19 @@ class Mpcve
     }
 
     /**
-     * Записать значение поля по адресу. Делегирует в mpc-фасад (M4).
-     * Заглушка на этапе скаффолда (M6) — реализация в M7 после готовности
-     * MpcServices\Mpc::writeField (M4).
+     * Записать значение поля по адресу. Делегирует в write-API mpc
+     * (MpcServices\Handlers\FieldWriter, M4). Доступен через общий vendor mpc
+     * (см. services/autoload.php).
      *
      * @param array $address ['type'=>field|rfield|tv, 'resourceId'=>int, 'fieldName'=>..., 'level'=>..., ...]
      * @param mixed $value
      */
     public function writeField(array $address, $value): array
     {
-        return ['success' => false, 'message' => 'mpcve.writeField: not implemented yet (M4/M7)'];
+        if (!class_exists('\\MpcServices\\Handlers\\FieldWriter')) {
+            return ['success' => false, 'message' => 'migxpageconfigurator (mpc) 2.4.0+ is required'];
+        }
+        $writer = new \MpcServices\Handlers\FieldWriter($this->modx);
+        return $writer->write($address, $value);
     }
 }
