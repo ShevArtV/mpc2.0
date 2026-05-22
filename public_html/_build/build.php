@@ -754,11 +754,37 @@ class modExtraPackage
 
 }
 
-/** @var array $config */
-if (!file_exists(dirname(__FILE__) . '/config.inc.php')) {
-    exit('Could not load MODX config. Please specify correct MODX_CORE_PATH constant in config file!');
+/**
+ * Выбор пакета для сборки. На одном dev-сайте живут два пакета (mpc и
+ * mpcVisualEditor), у каждого свой build-конфиг под `_build/<pkg>/config.inc.php`.
+ *
+ *   php build.php                    → mpc        (_build/config.inc.php — дефолт, как было)
+ *   php build.php mpcvisualeditor    → mpcVE       (_build/mpcvisualeditor/config.inc.php)
+ *   MPC_BUILD_PKG=mpcvisualeditor php build.php
+ *   build.php?pkg=mpcvisualeditor&download=1   (через коннектор/браузер)
+ *
+ * Каждый config.inc.php сам определяет MODX_CORE_PATH (walk-up) и при
+ * необходимости переопределяет `elements`/`resolvers`/`build` на свой подкаталог.
+ */
+$buildTarget = '';
+if (!empty($argv[1]) && $argv[1][0] !== '-') {
+    $buildTarget = $argv[1];
+} elseif (!empty($_REQUEST['pkg'])) {
+    $buildTarget = $_REQUEST['pkg'];
+} elseif (getenv('MPC_BUILD_PKG')) {
+    $buildTarget = getenv('MPC_BUILD_PKG');
 }
-$config = require(dirname(__FILE__) . '/config.inc.php');
+$buildTarget = preg_replace('#[^a-z0-9_]#i', '', (string)$buildTarget);
+
+$configFile = $buildTarget
+    ? dirname(__FILE__) . '/' . $buildTarget . '/config.inc.php'
+    : dirname(__FILE__) . '/config.inc.php';
+
+/** @var array $config */
+if (!file_exists($configFile)) {
+    exit('Could not load build config: ' . $configFile . PHP_EOL);
+}
+$config = require($configFile);
 $install = new modExtraPackage(MODX_CORE_PATH, $config);
 $builder = $install->process();
 
