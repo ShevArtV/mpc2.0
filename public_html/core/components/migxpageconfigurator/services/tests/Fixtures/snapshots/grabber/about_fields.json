@@ -1,7 +1,7 @@
 {
     "title": "Заголовок секции",
     "text": "Текст описания секции о компании.",
-    "image": "[{\"MIGX_id\":1,\"src\":\"images\\\/about.jpg\",\"alt\":\"Изображение секции\",\"width\":\"800\",\"height\":\"600\"}]",
+    "image": "[{\"MIGX_id\":1,\"src\":\"images\\\/about.jpg\",\"alt\":\"Изображение секции\",\"title\":null,\"width\":\"800\",\"height\":\"600\"}]",
     "bg_img": "images\/bg.jpg",
     "items": "[{\"MIGX_id\":1}]",
     "item_title": "Заголовок элемента",

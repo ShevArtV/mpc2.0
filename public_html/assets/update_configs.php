@@ -26,3 +26,4 @@ echo 'Update configs complete';
 
 // пример команды для консоли
 // php -d display_errors -d error_reporting=E_ALL public_html/assets/update_configs.php
+// /usr/local/php/php-7.4/bin/php  -d display_errors -d error_reporting=E_ALL ~/art-sites.ru/htdocs/mpc-app/assets/update_configs.php

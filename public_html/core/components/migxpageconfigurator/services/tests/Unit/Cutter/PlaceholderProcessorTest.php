@@ -280,6 +280,25 @@ class PlaceholderProcessorTest extends TestCase
         $this->assertStringNotContainsString('alt}\' | lexicon', $html);
     }
 
+    public function testSetPlaceholdersImgFieldWithTitleLexicon(): void
+    {
+        $html = $this->lexHtml(
+            '<section data-mpc-section="test"><img data-mpc-field="image" src="x.jpg" alt="A" title="T"></section>'
+        );
+        // title — `text`, лексиконится с суффиксом _title (симметрично alt).
+        $this->assertStringContainsString("##'{\$image[0].title}' | lexicon}", $html);
+    }
+
+    public function testSetPlaceholdersImgTitleWithoutTextInTranslatable(): void
+    {
+        $html = $this->lexHtml(
+            '<section data-mpc-section="test"><img data-mpc-field="image" src="x.jpg" title="T"></section>',
+            ['image']  // text НЕ в списке → title без lexicon
+        );
+        $this->assertStringContainsString('{$image[0].title}', $html);
+        $this->assertStringNotContainsString('title}\' | lexicon', $html);
+    }
+
     public function testSetPlaceholdersImgWithThumbAndLexicon(): void
     {
         $proc = $this->makeProcessor([
@@ -316,6 +335,24 @@ class PlaceholderProcessorTest extends TestCase
         $this->assertStringContainsString("##'{\$clip[0].poster}' | lexicon}", $html);
         // controls — boolean-атрибут, не локализуется
         $this->assertStringNotContainsString("controls}' | lexicon", $html);
+    }
+
+    public function testSetPlaceholdersVideoTitleWithLexicon(): void
+    {
+        $html = $this->lexHtml(
+            '<section data-mpc-section="test"><video data-mpc-field="clip" src="m.mp4" title="Tip" controls></video></section>',
+            ['text', 'image', 'video', 'poster']
+        );
+        $this->assertStringContainsString("##'{\$clip[0].title}' | lexicon}", $html);
+    }
+
+    public function testSetPlaceholdersAudioTitleWithLexicon(): void
+    {
+        $html = $this->lexHtml(
+            '<section data-mpc-section="test"><audio data-mpc-field="track" src="a.mp3" title="Tip" controls></audio></section>',
+            ['text', 'audio']
+        );
+        $this->assertStringContainsString("##'{\$track[0].title}' | lexicon}", $html);
     }
 
     public function testSetPlaceholdersAudioSrcWithLexicon(): void

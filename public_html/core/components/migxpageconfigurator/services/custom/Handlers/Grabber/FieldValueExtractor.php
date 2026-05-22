@@ -36,8 +36,9 @@ class FieldValueExtractor
 
     public function getImageValue(Element $row, ?array $options = []): string
     {
-        $attrs = ['src', 'alt', 'width', 'height'];
+        $attrs = ['src', 'alt', 'title', 'width', 'height'];
         $value[0]['MIGX_id'] = 1;
+        $baseFieldName = $options['fieldName'] ?? '';
 
         foreach ($attrs as $attr) {
             $attrValue = $row->getAttribute($attr);
@@ -50,9 +51,17 @@ class FieldValueExtractor
                     ? $this->lexiconManager->setLexicons($attrValue, $options) : $attrValue;
             }
             if ($attr === 'alt') {
-                $options['fieldName'] = ($options['fieldName'] ?? '') . '_alt';
+                $options['fieldName'] = $baseFieldName . '_alt';
                 $attrValue = in_array('text', $this->properties['translatableContentTypes'])
                     ? $this->lexiconManager->setLexicons($attrValue, $options) : $attrValue;
+            }
+            if ($attr === 'title') {
+                // Локальная копия: не мутируем общий $options (его поле alt уже
+                // переписало на `_alt`, а ниже идут width/height без скоупа).
+                $titleOptions = $options;
+                $titleOptions['fieldName'] = $baseFieldName . '_title';
+                $attrValue = in_array('text', $this->properties['translatableContentTypes'])
+                    ? $this->lexiconManager->setLexicons($attrValue, $titleOptions) : $attrValue;
             }
             $value[0][$attr] = $attrValue;
         }
@@ -125,6 +134,7 @@ class FieldValueExtractor
         $media[0]['MIGX_id'] = 1;
         $attrs = [
             'src' => 'string',
+            'title' => 'string',
             'autoplay' => 'boolean',
             'controls' => 'boolean',
             'loop' => 'boolean',
@@ -169,6 +179,17 @@ class FieldValueExtractor
                 }
                 $media[0][$attr] = $useLexicons
                     ? $this->lexiconManager->setLexicons($media[0][$attr], $options)
+                    : $media[0][$attr];
+            }
+
+            if ($attr === 'title') {
+                // title — человекочитаемый текст (тултип). Лексиконим как `text`
+                // с суффиксом `_title` (симметрично alt). Локальная копия —
+                // чтобы не задеть scope src/poster/sources, использующих $options.
+                $titleOptions = $options;
+                $titleOptions['fieldName'] = ($options['fieldName'] ?? '') . '_title';
+                $media[0][$attr] = in_array('text', $this->properties['translatableContentTypes'])
+                    ? $this->lexiconManager->setLexicons($media[0][$attr], $titleOptions)
                     : $media[0][$attr];
             }
         }

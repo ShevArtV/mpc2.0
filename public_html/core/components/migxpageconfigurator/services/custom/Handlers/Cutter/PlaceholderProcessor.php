@@ -238,11 +238,13 @@ class PlaceholderProcessor
             $row->setAttribute('src', $src);
         }
 
-        // width/height — не локализуются; alt — `text` (грабер пишет ключ с суффиксом _alt).
+        // width/height — не локализуются; alt/title — `text` (грабер пишет ключ
+        // с суффиксом _alt / _title).
         $attrSpec = [
             'width'  => null,
             'height' => null,
             'alt'    => ['contentType' => 'text', 'fieldName' => $fieldName . '_alt'],
+            'title'  => ['contentType' => 'text', 'fieldName' => $fieldName . '_title'],
         ];
         foreach ($attrSpec as $attr => $spec) {
             if (!$row->hasAttribute($attr)) {
@@ -310,6 +312,7 @@ class PlaceholderProcessor
                 'src'    => $this->shouldLexiconize($mainContentType, $fieldName, $parentFieldName),
                 'poster' => $this->shouldLexiconize('poster', 'poster', $accumulatedParent),
                 'alt'    => $this->shouldLexiconize('text', $fieldName . '_alt', $parentFieldName),
+                'title'  => $this->shouldLexiconize('text', $fieldName . '_title', $parentFieldName),
             ];
 
         $row = $this->setAttributes($row, $firstSymbol, $complexName, $mainLexiconAttrs, $deferVar);
@@ -366,8 +369,9 @@ class PlaceholderProcessor
             // Грабер вызывает getImageValue с исходным options (fieldName = picture's field).
             $imgFieldName = $fieldName;
             $imgLexAttrs = [
-                'src' => $this->shouldLexiconize('image', $imgFieldName, $parentFieldName),
-                'alt' => $this->shouldLexiconize('text', $imgFieldName . '_alt', $parentFieldName),
+                'src'   => $this->shouldLexiconize('image', $imgFieldName, $parentFieldName),
+                'alt'   => $this->shouldLexiconize('text', $imgFieldName . '_alt', $parentFieldName),
+                'title' => $this->shouldLexiconize('text', $imgFieldName . '_title', $parentFieldName),
             ];
             $img = $this->setAttributes(
                 $images[count($images) - 1],
@@ -564,7 +568,7 @@ class PlaceholderProcessor
      */
     public function setAttributes(Element $row, string $firstSymbol, string $complexName, array $lexiconAttrs = [], bool $deferVar = false): Element
     {
-        $allowedAttrs = ['src', 'srcset', 'loop', 'media', 'type', 'sizes', 'autoplay', 'controls', 'preload', 'muted', 'height', 'width', 'poster', 'alt'];
+        $allowedAttrs = ['src', 'srcset', 'loop', 'media', 'type', 'sizes', 'autoplay', 'controls', 'preload', 'muted', 'height', 'width', 'poster', 'alt', 'title'];
 
         foreach ($allowedAttrs as $attrName) {
             if ($row->hasAttribute($attrName)) {

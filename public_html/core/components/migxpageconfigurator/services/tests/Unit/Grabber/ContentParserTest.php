@@ -70,6 +70,26 @@ class ContentParserTest extends TestCase
         $this->assertEquals('800', $imageData[0]['width']);
     }
 
+    public function testExtractsImageTitleAttribute(): void
+    {
+        $parser = $this->makeParser();
+        $result = $parser->getFieldsValues(
+            '<img data-mpc-field="image" src="images/test.jpg" alt="A" title="Tooltip">'
+        );
+        $imageData = json_decode($result['image'], true);
+        $this->assertEquals('Tooltip', $imageData[0]['title']);
+    }
+
+    public function testExtractsVideoTitleAttribute(): void
+    {
+        $parser = $this->makeParser();
+        $result = $parser->getFieldsValues(
+            '<video data-mpc-field="clip" src="m.mp4" title="Clip tooltip" controls></video>'
+        );
+        $mediaData = json_decode($result['clip'], true);
+        $this->assertEquals('Clip tooltip', $mediaData[0]['title']);
+    }
+
     public function testExtractsBackgroundImageValue(): void
     {
         $parser = $this->makeParser();
