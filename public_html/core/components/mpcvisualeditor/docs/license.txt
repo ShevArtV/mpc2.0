@@ -1,0 +1,5 @@
+mpcVisualEditor
+Copyright (c) Arthur Shevchenko (https://t.me/ShevArtV)
+
+Распространяется вместе с migxpageconfigurator. Все права защищены автором.
+Условия использования согласуются с лицензией основного пакета migxpageconfigurator.

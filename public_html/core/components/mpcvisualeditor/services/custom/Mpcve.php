@@ -1,0 +1,71 @@
+<?php
+/**
+ * Тонкий фасад mpcVisualEditor.
+ * Держит конфиг и (в M7) делегирует запись значений в фасад mpc.
+ */
+
+namespace MpcVEServices;
+
+/**
+ * @author Arthur Shevchenko (https://t.me/ShevArtV)
+ */
+class Mpcve
+{
+    public \modX $modx;
+    protected array $config;
+
+    public function __construct(\modX $modx, array $config = [])
+    {
+        $this->modx = $modx;
+
+        $assetsUrl = $modx->getOption('assets_url', null, MODX_ASSETS_URL) . 'components/mpcvisualeditor/';
+        $corePath  = $modx->getOption('core_path', null, MODX_CORE_PATH) . 'components/mpcvisualeditor/';
+
+        $this->config = array_merge([
+            'corePath'     => $corePath,
+            'assetsUrl'    => $assetsUrl,
+            'connectorUrl' => $assetsUrl . 'connector.php',
+            'editParam'    => $modx->getOption('mpcve_edit_param', null, 'mpcedit'),
+            'permission'   => $modx->getOption('mpcve_permission', null, 'mpcve_edit'),
+            'active'       => (bool)$modx->getOption('mpcve_active', null, true),
+        ], $config);
+    }
+
+    /**
+     * @return mixed весь конфиг или конкретный ключ
+     */
+    public function getConfig(?string $key = null)
+    {
+        if ($key === null) {
+            return $this->config;
+        }
+        return $this->config[$key] ?? null;
+    }
+
+    /**
+     * Конфиг для фронт-бутстрапа (window.mpcVEConfig).
+     */
+    public function getClientConfig(): array
+    {
+        $resource = $this->modx->resource ?? null;
+        return [
+            'connectorUrl' => $this->config['connectorUrl'],
+            'assetsUrl'    => $this->config['assetsUrl'],
+            'editParam'    => $this->config['editParam'],
+            'resourceId'   => $resource ? (int)$resource->get('id') : 0,
+        ];
+    }
+
+    /**
+     * Записать значение поля по адресу. Делегирует в mpc-фасад (M4).
+     * Заглушка на этапе скаффолда (M6) — реализация в M7 после готовности
+     * MpcServices\Mpc::writeField (M4).
+     *
+     * @param array $address ['type'=>field|rfield|tv, 'resourceId'=>int, 'fieldName'=>..., 'level'=>..., ...]
+     * @param mixed $value
+     */
+    public function writeField(array $address, $value): array
+    {
+        return ['success' => false, 'message' => 'mpcve.writeField: not implemented yet (M4/M7)'];
+    }
+}

@@ -1,0 +1,12 @@
+1.0.0-alpha (в разработке)
+==============
+Визуальный фронт-редактор контента для проектов на migxpageconfigurator (mpc).
+Зависит от mpc 2.4.0+. Ведётся поэтапно; в прод — после перехода на -rc.
+
+- [M6] Скаффолд пакета:
+  - bootstrap-плагин (OnWebPagePrerender) — инжектит overlay-UI на фронте, если у текущего mgr-пользователя есть permission `mpcve_edit` и edit-режим включён (query-параметр / cookie);
+  - standalone connector `assets/components/mpcvisualeditor/connector.php` → роутер `Connector` (экшены — в M7);
+  - фасад `Mpcve` (тонкий, делегирует в mpc для записи значений);
+  - PSR-4 автозагрузчик `services/autoload.php` (+ переиспользует vendor mpc);
+  - permission `mpcve_edit` (resolver), системные настройки `mpcve_*`;
+  - overlay.css / mpcve.js — каркас (редакторы — M8).
