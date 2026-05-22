@@ -10,3 +10,7 @@
   - PSR-4 автозагрузчик `services/autoload.php` (+ переиспользует vendor mpc);
   - permission `mpcve_edit` (resolver), системные настройки `mpcve_*`;
   - overlay.css / mpcve.js — каркас (редакторы — M8).
+- [M7, частично] Бэкенд save-путь для rfield/tv:
+  - экшен коннектора `field/save` → `Handlers\FieldSaveHandler` → `Mpcve::writeField` → mpc `FieldWriter` (M4);
+  - принимает address (JSON) + value, resourceId из адреса/запроса; типы rfield/tv сохраняются, type=field вернёт «not implemented» до M2;
+  - фронт-редакторы, вызывающие `field/save` (TextEditor и пр.), — M8. RowSave/ImageUpload-хендлеры — далее.

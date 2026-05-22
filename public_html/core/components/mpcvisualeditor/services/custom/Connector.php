@@ -35,8 +35,9 @@ class Connector
 
         $action = (string)($request['action'] ?? '');
         switch ($action) {
-            // TODO M7:
-            // case 'field/save':  return (new Handlers\FieldSaveHandler($this->modx, $this->mpcve))->handle($request);
+            case 'field/save':
+                return (new Handlers\FieldSaveHandler($this->modx, $this->mpcve))->handle($request);
+            // TODO M7 (далее):
             // case 'row/save':    return (new Handlers\RowSaveHandler($this->modx, $this->mpcve))->handle($request);
             // case 'image/upload':return (new Handlers\ImageUploadHandler($this->modx, $this->mpcve))->handle($request);
             default:
