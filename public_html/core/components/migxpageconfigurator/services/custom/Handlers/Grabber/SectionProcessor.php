@@ -110,6 +110,15 @@ class SectionProcessor
         }
         $grabResource->save();
 
+        // Грабим data-mpc-rfield / data-mpc-tv в нативные поля / TV ресурса.
+        // Это данные уровня type (ресурс-тип), которые при рендере перекрывает
+        // контент-ресурс (приоритет resource > type). Overwrite, кроме
+        // защищённых полей (alias/uri/template + структурный минимум).
+        if ($this->properties['updContent']) {
+            (new ResourceFieldGrabber($this->parser, $this->getProtectedResourceFields()))->grab($html, $grabResource);
+            $grabResource->save();
+        }
+
         if ($this->properties['updContent'] && !empty($sectionValues)) {
             $this->properties['resource']->setTVValue(
                 $this->properties['commonConfigTvName'],
@@ -261,6 +270,21 @@ class SectionProcessor
         if (!$upd) {
             $this->properties['sbpSectionValues'][$i] = $sectionFieldsValues;
         }
+    }
+
+    /**
+     * Список защищённых от overwrite полей ресурса (rfield не пишет в них).
+     * Настройка mpc_protected_resource_fields (csv). По умолчанию: alias/uri/template
+     * + структурный минимум, чтобы разметка не сломала дерево/класс ресурса.
+     */
+    private function getProtectedResourceFields(): array
+    {
+        $list = $this->modx->getOption(
+            'mpc_protected_resource_fields',
+            null,
+            'id,class_key,context_key,parent,uri_override,alias,uri,template'
+        );
+        return array_values(array_filter(array_map('trim', explode(',', (string)$list))));
     }
 
     private function getObject(string $className, array $conditions, ?bool $asArray = false): array
