@@ -16,6 +16,16 @@ return [
         'value' => 'id,class_key,context_key,parent,uri_override,alias,uri,template',
         'area' => 'resource',
     ],
+    'mpc_media_source' => [
+        'xtype' => 'modx-combo-source',
+        'value' => '',
+        'area' => 'media',
+    ],
+    'mpc_media_path' => [
+        'xtype' => 'textfield',
+        'value' => 'assets/components/migxpageconfigurator/media/',
+        'area' => 'media',
+    ],
     'mpc_common_config_name' => [
         'xtype' => 'textfield',
         'value' => 'mpc_config',

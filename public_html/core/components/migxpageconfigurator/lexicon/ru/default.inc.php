@@ -97,6 +97,10 @@ $_lang['mpc_err_missing_params']   = 'Не указаны обязательны
 $_lang['mpc_err_invalid_lang']     = 'Недопустимый код языка';
 $_lang['mpc_err_file_not_found']   = 'Файл [[+file]] не найден, проверьте имя файла';
 
+$_lang['setting_mpc_media_source'] = 'Источник файлов для медиа';
+$_lang['setting_mpc_media_source_desc'] = 'Единый источник (modMediaSource), куда загружаются все скачанные медиа. Пусто — используется источник по умолчанию (default_media_source).';
+$_lang['setting_mpc_media_path'] = 'Базовый путь медиа в источнике';
+$_lang['setting_mpc_media_path_desc'] = 'Относительный путь внутри источника, под которым создаются подпапки images/videos/audios. По умолчанию assets/components/migxpageconfigurator/media/.';
 $_lang['setting_mpc_editable_resource_fields'] = 'Редактируемые поля ресурса';
 $_lang['setting_mpc_editable_resource_fields_desc'] = 'Список (через запятую) нативных полей ресурса, которые разрешено писать через write-API (FieldWriter, type=rfield).';
 $_lang['setting_mpc_protected_resource_fields'] = 'Защищённые поля ресурса';
