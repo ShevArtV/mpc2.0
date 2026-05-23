@@ -6,6 +6,16 @@ return [
         'value' => 'mpc_base',
         'area' => 'default',
     ],
+    'mpc_editable_resource_fields' => [
+        'xtype' => 'textfield',
+        'value' => 'pagetitle,longtitle,description,introtext,content,menutitle',
+        'area' => 'resource',
+    ],
+    'mpc_protected_resource_fields' => [
+        'xtype' => 'textfield',
+        'value' => 'id,class_key,context_key,parent,uri_override,alias,uri,template',
+        'area' => 'resource',
+    ],
     'mpc_common_config_name' => [
         'xtype' => 'textfield',
         'value' => 'mpc_config',

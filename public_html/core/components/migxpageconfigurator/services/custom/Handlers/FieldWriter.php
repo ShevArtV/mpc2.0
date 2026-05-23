@@ -118,10 +118,10 @@ class FieldWriter
     /**
      * Запись значения config-поля (mpc_config) с учётом уровня.
      *
-     * Уровни (M2):
-     *   local    — TV mpc_config самого ресурса (resourceId);
-     *   template — донор: ребёнок staticBlocksPage с тем же шаблоном (как в Render);
-     *   global   — staticBlocksPage (mpc_static_block_page_id).
+     * Уровни (приоритет рендера resource > type > global):
+     *   resource (alias local)    — TV mpc_config самого ресурса (resourceId);
+     *   type     (alias template) — донор: ребёнок staticBlocksPage с тем же шаблоном;
+     *   global                    — staticBlocksPage (mpc_static_block_page_id).
      *
      * ВНИМАНИЕ (лексиконы, проверить на сайте): для лексиконных полей в
      * mpc_config лежит КЛЮЧ, а текст — в lexicon-файле ресурса. Перезапись
@@ -139,7 +139,7 @@ class FieldWriter
             return $this->result(false, 'lexicon-backed config field: write to lexicon file not implemented yet (verify on site)');
         }
 
-        $level = (string)($address['level'] ?? 'local');
+        $level = (string)($address['level'] ?? 'resource');
         $resource = $this->resolveLevelResource($level, (int)($address['resourceId'] ?? 0));
         if (!$resource) {
             return $this->result(false, 'target resource for level "' . $level . '" not found');
@@ -174,20 +174,24 @@ class FieldWriter
      */
     private function resolveLevelResource(string $level, int $resourceId)
     {
+        // Алиасы старых имён уровней → новая терминология (global не переименовываем).
+        $aliases = ['local' => 'resource', 'template' => 'type'];
+        $level = $aliases[$level] ?? $level;
+
         switch ($level) {
             case 'global':
                 return $this->modx->getObject('modResource', $this->staticBlocksPageId);
-            case 'template':
-                $local = $this->modx->getObject('modResource', $resourceId);
-                if (!$local) {
+            case 'type':
+                $resource = $this->modx->getObject('modResource', $resourceId);
+                if (!$resource) {
                     return null;
                 }
-                $tpl = (int)$local->get('template');
+                $tpl = (int)$resource->get('template');
                 return $this->modx->getObject('modResource', [
                     'parent'   => $this->staticBlocksPageId,
                     'template' => $tpl,
                 ]);
-            case 'local':
+            case 'resource':
             default:
                 return $resourceId > 0 ? $this->modx->getObject('modResource', $resourceId) : null;
         }

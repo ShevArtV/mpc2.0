@@ -97,6 +97,11 @@ $_lang['mpc_err_missing_params']   = 'Missing required parameters';
 $_lang['mpc_err_invalid_lang']     = 'Invalid language code';
 $_lang['mpc_err_file_not_found']   = 'File [[+file]] not found, check the filename';
 
+$_lang['setting_mpc_editable_resource_fields'] = 'Editable resource fields';
+$_lang['setting_mpc_editable_resource_fields_desc'] = 'Comma-separated list of native resource fields writable via the write-API (FieldWriter, type=rfield).';
+$_lang['setting_mpc_protected_resource_fields'] = 'Protected resource fields';
+$_lang['setting_mpc_protected_resource_fields_desc'] = 'Comma-separated list of fields NOT overwritten by grab-side data-mpc-rfield handling (structural + alias/uri/template).';
+
 // Custom resource type names (shown in manager instead of class_key)
 $_lang['mpctype']                       = 'Page type';
 $_lang['mpctype_create_here']           = 'Create page type here';

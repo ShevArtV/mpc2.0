@@ -97,6 +97,11 @@ $_lang['mpc_err_missing_params']   = 'Не указаны обязательны
 $_lang['mpc_err_invalid_lang']     = 'Недопустимый код языка';
 $_lang['mpc_err_file_not_found']   = 'Файл [[+file]] не найден, проверьте имя файла';
 
+$_lang['setting_mpc_editable_resource_fields'] = 'Редактируемые поля ресурса';
+$_lang['setting_mpc_editable_resource_fields_desc'] = 'Список (через запятую) нативных полей ресурса, которые разрешено писать через write-API (FieldWriter, type=rfield).';
+$_lang['setting_mpc_protected_resource_fields'] = 'Защищённые поля ресурса';
+$_lang['setting_mpc_protected_resource_fields_desc'] = 'Список (через запятую) полей, которые НЕ перезаписываются при граб-сторонней обработке data-mpc-rfield (структурные + alias/uri/template).';
+
 // Названия кастомных типов ресурсов (показываются в админке вместо class_key)
 $_lang['mpctype']                       = 'Тип страницы';
 $_lang['mpctype_create_here']           = 'Создать тип страницы здесь';
