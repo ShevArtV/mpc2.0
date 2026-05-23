@@ -60,10 +60,12 @@ class Render extends Base
 
         $resourceData = $this->updateResourceData($resourceData);
         $resourceData['tvs'] = $this->getResourceTVs($resourceData['id']);
-        if ($donor = $this->modx->getObject('modResource', ['parent' => $this->properties['staticBlocksPageId'], 'template' => $resourceData['template']])) {
-            $donorResourceData = $this->updateResourceData($donor->toArray());
-            $resourceData = array_merge($donorResourceData, $resourceData);
-            $resourceData['tvs'] = array_merge($this->getResourceTVs($donorResourceData['id'], true), $resourceData['tvs']);
+        // Уровень «тип страницы» (mpcType — по шаблону) — база, поверх которой
+        // ложатся данные самого ресурса. Приоритет рендера: resource > type.
+        if ($type = $this->getTypeResource($resourceData['template'])) {
+            $typeResourceData = $this->updateResourceData($type->toArray());
+            $resourceData = array_merge($typeResourceData, $resourceData);
+            $resourceData['tvs'] = array_merge($this->getResourceTVs($typeResourceData['id'], true), $resourceData['tvs']);
         }
         $resourceData['contacts'] = $this->contacts;
         $resourceData['sbp_id'] = $this->properties['staticBlocksPageId']; // передаем на страницу id ресурса со статичными блоками
@@ -78,6 +80,25 @@ class Render extends Base
             ? $this->modx->event->returnedValues['resourceData'] : $resourceData;
 
         return !empty($resourceData['sections']) && $this->putToFile($resourceData);
+    }
+
+    /**
+     * Ресурс уровня «тип страницы» (mpcType): донор с тем же шаблоном под
+     * коллекцией (staticBlocksPage). База, поверх которой ложится сам ресурс
+     * (приоритет resource > type). Связь по шаблону — как и было.
+     *
+     * @param mixed $template id шаблона ресурса
+     * @return \modResource|null
+     */
+    private function getTypeResource($template)
+    {
+        if (empty($template)) {
+            return null;
+        }
+        return $this->modx->getObject('modResource', [
+            'parent'   => $this->properties['staticBlocksPageId'],
+            'template' => $template,
+        ]);
     }
 
     /**
@@ -218,10 +239,13 @@ class Render extends Base
     private function parseConfig(array $resourceData): array
     {
         $staticConfig = '';
-        $config = $this->reformatConfig(json_decode($resourceData['tvs'][$this->properties['commonConfigTvName']], true)); // декодируем конфиг в массив
-        $donorConfig = $resourceData['tvs']['donor_' . $this->properties['commonConfigTvName']]
-            ? $this->reformatConfig(json_decode($resourceData['tvs']['donor_' . $this->properties['commonConfigTvName']], true)) : []; // декодируем конфиг в массив
-        $sections = array_merge($donorConfig, $config);
+        // resourceConfig — конфиг самого ресурса; typeConfig — конфиг типа
+        // страницы (mpcType; ключ TV исторически с префиксом donor_).
+        $resourceConfig = $this->reformatConfig(json_decode($resourceData['tvs'][$this->properties['commonConfigTvName']], true));
+        $typeConfig = $resourceData['tvs']['donor_' . $this->properties['commonConfigTvName']]
+            ? $this->reformatConfig(json_decode($resourceData['tvs']['donor_' . $this->properties['commonConfigTvName']], true)) : [];
+        // Приоритет рендера: тип — база, ресурс перекрывает (resource > type).
+        $sections = array_merge($typeConfig, $resourceConfig);
 
         $this->modx->invokeEvent('mpcOnBeforeParseConfig', [
             'sections' => $sections,
@@ -395,23 +419,23 @@ class Render extends Base
         $parent = $resource->get('parent');
         if ($parent !== $this->properties['staticBlocksPageId']) {
             if ($template && $this->modx->getCount('modTemplateVarTemplate', array('tmplvarid' => $this->properties['commonConfigTvId'], 'templateid' => $template))) {
-                if ($donor = $this->modx->getObject('modResource', array('template' => $template, 'parent' => $this->properties['staticBlocksPageId']))) {
-                    if ($donor_config = $donor->getTVValue($this->properties['commonConfigTvName'])) {
+                if ($type = $this->getTypeResource($template)) {
+                    if ($typeConfig = $type->getTVValue($this->properties['commonConfigTvName'])) {
                         $config = $resource->getTVValue($this->properties['commonConfigTvName']);
                         $copy_all = $resource->getTVValue($this->properties['copyConfigTvName']);
                         if (!$config && $copy_all) {
-                            $resource->setTVValue($this->properties['commonConfigTvName'], $donor_config); // копируем конфиг полностью
+                            $resource->setTVValue($this->properties['commonConfigTvName'], $typeConfig); // копируем конфиг типа полностью
                             $resource->setTVValue($this->properties['copyConfigTvName'], false);
                         } else {
                             // копируем содержимое отдельных секций
                             $flag = false;
                             $config = json_decode($config, 1) ?: [];
-                            $donor_config = $this->reformatConfig(json_decode($donor_config, 1));
+                            $typeConfig = $this->reformatConfig(json_decode($typeConfig, 1));
                             if (!empty($config)) {
                                 foreach ($config as $key => $item) {
-                                    if ($item['copy_from_origin'] && $donor_config[$item['section_name']]) {
+                                    if ($item['copy_from_origin'] && $typeConfig[$item['section_name']]) {
                                         $flag = true;
-                                        $config[$key] = array_merge($item, $donor_config[$item['section_name']]);
+                                        $config[$key] = array_merge($item, $typeConfig[$item['section_name']]);
                                     }
                                 }
                             }
