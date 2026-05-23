@@ -29,7 +29,9 @@ class OnDocFormSave extends PluginHandler
             'template' => $this->scriptProperties['resource']->get('template'),
             'parent' => $Mpc->cutter->properties['staticBlocksPageId']
         ])) {
-            $fileName = $typeResource->get('introtext');
+            // Имя файла типа: новое каноничное поле file_name (mpc_type),
+            // фоллбэк на introtext для ещё не перенарезанных типов.
+            $fileName = $typeResource->get('file_name') ?: $typeResource->get('introtext');
             $Mpc->cutter->staticSectionNames = $Mpc->grabber->staticSectionNames = $Mpc->cutter->getStaticSectionNames($this->scriptProperties['id']);
             $Mpc->handleFile($fileName);
 

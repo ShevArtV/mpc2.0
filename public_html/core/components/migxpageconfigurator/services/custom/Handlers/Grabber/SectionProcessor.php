@@ -99,8 +99,16 @@ class SectionProcessor
             $sectionValues[$i] = $values;
         }
 
-        $this->properties['resource']->set('introtext', $this->properties['fileName'] ?? '');
-        $this->properties['resource']->save();
+        // Имя файла секции — служебка типа страницы. Для mpcType пишем в
+        // file_name (mpc_type), для прочих ресурсов — в introtext (легаси).
+        $grabResource = $this->properties['resource'];
+        $fileName = $this->properties['fileName'] ?? '';
+        if ($grabResource->get('class_key') === 'mpcType') {
+            $grabResource->set('file_name', $fileName);
+        } else {
+            $grabResource->set('introtext', $fileName);
+        }
+        $grabResource->save();
 
         if ($this->properties['updContent'] && !empty($sectionValues)) {
             $this->properties['resource']->setTVValue(

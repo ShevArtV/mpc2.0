@@ -61,6 +61,14 @@ class Base
      */
     protected function initialize(): void
     {
+        // Регистрируем xPDO-модель пакета (mpcType / mpcTypeCollection / mpcTypeData),
+        // чтобы getObject/newObject видели кастомные resource-классы в грабере,
+        // каттере и рендере.
+        $this->modx->addPackage(
+            'migxpageconfigurator',
+            ($this->properties['corePath'] ?? $this->modx->getOption('core_path')) . 'components/migxpageconfigurator/model/'
+        );
+
         $translatableContentTypes = $this->modx->getOption('mpc_translated_content', '', 'text,image,poster,video,audio');
 
         // excludeLexiconFields подгружаем здесь (Base), а не только в Grabber,

@@ -47,19 +47,25 @@ class TemplateUpdater
             return null;
         }
 
+        // Ресурс-тип страницы (class_key = mpcType): ищем по шаблону под коллекцией
+        // (staticBlocksPage). Служебка хранится в mpc_type (type_name/file_name),
+        // не в pagetitle/introtext.
+        $typeName = 'Шаблон ' . $tplData['templatename'];
         if (!$resource = $this->modx->getObject('modResource', [
-            'pagetitle' => 'Шаблон ' . $tplData['templatename'],
-            'parent'    => $this->properties['staticBlocksPageId'],
+            'parent'   => $this->properties['staticBlocksPageId'],
+            'template' => $template->get('id'),
         ])) {
-            $resource = $this->modx->newObject('modResource');
+            $resource = $this->modx->newObject('mpcType');
         }
 
         $resource->fromArray([
-            'pagetitle' => 'Шаблон ' . $tplData['templatename'],
+            'class_key' => 'mpcType',
+            'pagetitle' => $typeName,
             'parent'    => $this->properties['staticBlocksPageId'],
             'template'  => $template->get('id'),
             'alias'     => $resource->cleanAlias('tpl-' . mb_strtolower($tplData['templatename'])),
             'hidemenu'  => 1,
+            'type_name' => $typeName, // служебка → mpc_type (вместо pagetitle)
         ]);
 
         if (!$resource->save()) {
