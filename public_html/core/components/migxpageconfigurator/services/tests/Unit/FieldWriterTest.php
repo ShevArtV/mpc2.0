@@ -77,15 +77,45 @@ class FieldWriterTest extends TestCase
         $this->assertFalse($writer->write(['type' => 'rfield', 'resourceId' => 5], 'x')['success']);
     }
 
-    public function testConfigFieldNotImplementedYet(): void
+    public function testWritesConfigFieldLocalLevel(): void
     {
-        $resource = new ModxObjectStub('modResource', ['id' => 5]);
+        $config = json_encode([
+            '1' => ['section_name' => 'hero', 'MIGX_formname' => 'mpc_hero', 'title' => 'Old'],
+        ], JSON_UNESCAPED_UNICODE);
+        $resource = new ModxObjectStub('modResource', ['id' => 5, 'context_key' => 'web', 'tv_mpc_config' => $config]);
         $writer = new FieldWriter($this->makeModx($resource));
 
-        $result = $writer->write(['type' => 'field', 'resourceId' => 5, 'fieldName' => 'title', 'section' => 'hero'], 'x');
+        $result = $writer->write(
+            ['type' => 'field', 'level' => 'local', 'resourceId' => 5, 'section' => 'hero', 'fieldName' => 'title'],
+            'New'
+        );
+
+        $this->assertTrue($result['success'], $result['message']);
+        $stored = json_decode($resource->getTVValue('mpc_config'), true);
+        $this->assertSame('New', $stored['1']['title']);
+    }
+
+    public function testConfigFieldLexiconizedNotImplemented(): void
+    {
+        $resource = new ModxObjectStub('modResource', ['id' => 5, 'tv_mpc_config' => '{}']);
+        $writer = new FieldWriter($this->makeModx($resource));
+
+        $result = $writer->write(
+            ['type' => 'field', 'level' => 'local', 'resourceId' => 5, 'section' => 'hero', 'fieldName' => 'title', 'lexiconized' => true],
+            'x'
+        );
 
         $this->assertFalse($result['success']);
         $this->assertStringContainsString('not implemented', $result['message']);
+    }
+
+    public function testConfigFieldEmptyConfigRejected(): void
+    {
+        $resource = new ModxObjectStub('modResource', ['id' => 5]); // нет tv_mpc_config
+        $writer = new FieldWriter($this->makeModx($resource));
+
+        $result = $writer->write(['type' => 'field', 'level' => 'local', 'resourceId' => 5, 'section' => 'hero', 'fieldName' => 'title'], 'x');
+        $this->assertFalse($result['success']);
     }
 
     public function testUnknownTypeRejected(): void

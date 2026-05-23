@@ -1,0 +1,110 @@
+<?php
+
+namespace MpcTests\Unit;
+
+use MpcServices\Handlers\ConfigFieldWriter;
+use PHPUnit\Framework\TestCase;
+
+/**
+ * Тесты чистой мутации mpc_config (ConfigFieldWriter).
+ */
+class ConfigFieldWriterTest extends TestCase
+{
+    private function sampleConfig(): string
+    {
+        return json_encode([
+            '1' => [
+                'section_name'  => 'hero',
+                'MIGX_formname' => 'mpc_hero',
+                'position'      => 1,
+                'title'         => 'Старый заголовок',
+                'cards'         => json_encode([
+                    ['MIGX_id' => 1, 'title' => 'Карточка 1'],
+                    ['MIGX_id' => 2, 'title' => 'Карточка 2'],
+                ], JSON_UNESCAPED_UNICODE),
+            ],
+            '2' => [
+                'section_name'  => 'about',
+                'MIGX_formname' => 'mpc_about',
+                'position'      => 2,
+                'text'          => 'О нас',
+            ],
+        ], JSON_UNESCAPED_UNICODE);
+    }
+
+    public function testSetsTopLevelField(): void
+    {
+        $w = new ConfigFieldWriter();
+        $res = $w->setValue($this->sampleConfig(), ['section' => 'hero', 'fieldName' => 'title'], 'Новый');
+        $this->assertTrue($res['success'], $res['message']);
+
+        $config = json_decode($res['data']['json'], true);
+        $this->assertSame('Новый', $config['1']['title']);
+        $this->assertSame('О нас', $config['2']['text'], 'другие секции не тронуты');
+    }
+
+    public function testSetsMigxRowField(): void
+    {
+        $w = new ConfigFieldWriter();
+        $res = $w->setValue(
+            $this->sampleConfig(),
+            ['section' => 'hero', 'parentField' => 'cards', 'idx' => 1, 'fieldName' => 'title'],
+            'Карточка ДВА'
+        );
+        $this->assertTrue($res['success'], $res['message']);
+
+        $config = json_decode($res['data']['json'], true);
+        $rows = json_decode($config['1']['cards'], true);
+        $this->assertSame('Карточка ДВА', $rows[1]['title']);
+        $this->assertSame('Карточка 1', $rows[0]['title'], 'соседняя строка не тронута');
+    }
+
+    public function testFindsSectionByMigxFormname(): void
+    {
+        $w = new ConfigFieldWriter();
+        $res = $w->setValue($this->sampleConfig(), ['section' => 'mpc_about', 'fieldName' => 'text'], 'Изменено');
+        $this->assertTrue($res['success'], $res['message']);
+        $config = json_decode($res['data']['json'], true);
+        $this->assertSame('Изменено', $config['2']['text']);
+    }
+
+    public function testRejectsUnknownSection(): void
+    {
+        $w = new ConfigFieldWriter();
+        $res = $w->setValue($this->sampleConfig(), ['section' => 'nope', 'fieldName' => 'title'], 'x');
+        $this->assertFalse($res['success']);
+        $this->assertStringContainsString('section not found', $res['message']);
+    }
+
+    public function testRejectsUnknownRow(): void
+    {
+        $w = new ConfigFieldWriter();
+        $res = $w->setValue(
+            $this->sampleConfig(),
+            ['section' => 'hero', 'parentField' => 'cards', 'idx' => 9, 'fieldName' => 'title'],
+            'x'
+        );
+        $this->assertFalse($res['success']);
+        $this->assertStringContainsString('row not found', $res['message']);
+    }
+
+    public function testRejectsInvalidJson(): void
+    {
+        $w = new ConfigFieldWriter();
+        $res = $w->setValue('not-json', ['section' => 'hero', 'fieldName' => 'title'], 'x');
+        $this->assertFalse($res['success']);
+    }
+
+    public function testGetValueTopLevelAndRow(): void
+    {
+        $w = new ConfigFieldWriter();
+        $this->assertSame(
+            'Старый заголовок',
+            $w->getValue($this->sampleConfig(), ['section' => 'hero', 'fieldName' => 'title'])['data']['value']
+        );
+        $this->assertSame(
+            'Карточка 2',
+            $w->getValue($this->sampleConfig(), ['section' => 'hero', 'parentField' => 'cards', 'idx' => 1, 'fieldName' => 'title'])['data']['value']
+        );
+    }
+}

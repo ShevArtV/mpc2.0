@@ -30,6 +30,12 @@ class FieldWriter
     /** @var string[] белый список редактируемых нативных полей ресурса */
     private array $editableResourceFields;
 
+    /** Имя TV с конфигом секций (mpc_config). */
+    private string $configTvName;
+
+    /** ID ресурса со статичными блоками (база для template/global уровней). */
+    private int $staticBlocksPageId;
+
     public function __construct(\modX $modx, array $properties = [])
     {
         $this->modx = $modx;
@@ -42,6 +48,11 @@ class FieldWriter
         $this->editableResourceFields = is_array($list)
             ? $list
             : array_values(array_filter(array_map('trim', explode(',', (string)$list))));
+
+        $this->configTvName = (string)($properties['commonConfigTvName']
+            ?? $this->modx->getOption('mpc_common_config_name', null, 'mpc_config'));
+        $this->staticBlocksPageId = (int)($properties['staticBlocksPageId']
+            ?? $this->modx->getOption('mpc_static_block_page_id', null, 1));
     }
 
     /**
@@ -105,16 +116,81 @@ class FieldWriter
     }
 
     /**
-     * TODO M2: запись значения config-поля (mpc_config) с учётом уровня
-     * (local/template/global) и lexicon-значений. Намеренно не реализовано
-     * вслепую — требует проверки модели хранения на живом сайте.
+     * Запись значения config-поля (mpc_config) с учётом уровня.
+     *
+     * Уровни (M2):
+     *   local    — TV mpc_config самого ресурса (resourceId);
+     *   template — донор: ребёнок staticBlocksPage с тем же шаблоном (как в Render);
+     *   global   — staticBlocksPage (mpc_static_block_page_id).
+     *
+     * ВНИМАНИЕ (лексиконы, проверить на сайте): для лексиконных полей в
+     * mpc_config лежит КЛЮЧ, а текст — в lexicon-файле ресурса. Перезапись
+     * значения тут затёрла бы ключ. Поэтому если caller помечает адрес
+     * `lexiconized=true` — возвращаем not-implemented (запись текста лексикона
+     * через LexiconManager доделаем вместе). Нелексиконные поля пишутся прямо.
+     *
+     * ВНИМАНИЕ (инвалидация, проверить): правка на template/global уровне
+     * влияет на все ресурсы шаблона/сайта — нужна более широкая инвалидация
+     * кэша, чем resource-cache одного контекста.
      */
     private function writeConfigField(array $address, $value): array
     {
-        return $this->result(
-            false,
-            'config-field (type=field) write not implemented yet — requires level hierarchy (M2)'
-        );
+        if (!empty($address['lexiconized'])) {
+            return $this->result(false, 'lexicon-backed config field: write to lexicon file not implemented yet (verify on site)');
+        }
+
+        $level = (string)($address['level'] ?? 'local');
+        $resource = $this->resolveLevelResource($level, (int)($address['resourceId'] ?? 0));
+        if (!$resource) {
+            return $this->result(false, 'target resource for level "' . $level . '" not found');
+        }
+
+        $configJson = (string)$resource->getTVValue($this->configTvName);
+        if ($configJson === '') {
+            return $this->result(false, 'empty mpc_config for level "' . $level . '"');
+        }
+
+        $res = (new ConfigFieldWriter())->setValue($configJson, $address, $value);
+        if (!$res['success']) {
+            return $res;
+        }
+        if (!method_exists($resource, 'setTVValue')) {
+            return $this->result(false, 'setTVValue unavailable on resource');
+        }
+        $resource->setTVValue($this->configTvName, $res['data']['json']);
+
+        $this->afterSave($resource, [
+            'type'      => 'field',
+            'level'     => $level,
+            'section'   => (string)($address['section'] ?? ''),
+            'fieldName' => (string)($address['fieldName'] ?? ''),
+        ]);
+
+        return $this->result(true, 'saved', ['type' => 'field', 'level' => $level]);
+    }
+
+    /**
+     * Резолвит ресурс-носитель mpc_config для уровня. PURE-ish (только getObject).
+     */
+    private function resolveLevelResource(string $level, int $resourceId)
+    {
+        switch ($level) {
+            case 'global':
+                return $this->modx->getObject('modResource', $this->staticBlocksPageId);
+            case 'template':
+                $local = $this->modx->getObject('modResource', $resourceId);
+                if (!$local) {
+                    return null;
+                }
+                $tpl = (int)$local->get('template');
+                return $this->modx->getObject('modResource', [
+                    'parent'   => $this->staticBlocksPageId,
+                    'template' => $tpl,
+                ]);
+            case 'local':
+            default:
+                return $resourceId > 0 ? $this->modx->getObject('modResource', $resourceId) : null;
+        }
     }
 
     /**
