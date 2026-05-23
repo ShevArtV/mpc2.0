@@ -51,6 +51,12 @@ class mpcType extends modResource
         return parent::loadCollection($xpdo, $className, $criteria, $cacheFlag);
     }
 
+    public static function getControllerPath(xPDO & $modx)
+    {
+        return $modx->getOption('core_path', null, MODX_CORE_PATH)
+            . 'components/migxpageconfigurator/controllers/res/mpctype/';
+    }
+
     public function getContextMenuText()
     {
         $this->xpdo->lexicon->load('migxpageconfigurator:default');
