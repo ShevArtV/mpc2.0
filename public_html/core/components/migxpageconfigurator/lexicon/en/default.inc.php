@@ -96,3 +96,9 @@ $_lang['mpc_err_zip_create']       = 'Cannot create ZIP archive';
 $_lang['mpc_err_missing_params']   = 'Missing required parameters';
 $_lang['mpc_err_invalid_lang']     = 'Invalid language code';
 $_lang['mpc_err_file_not_found']   = 'File [[+file]] not found, check the filename';
+
+// Custom resource type names (shown in manager instead of class_key)
+$_lang['mpctype']                       = 'Page type';
+$_lang['mpctype_create_here']           = 'Create page type here';
+$_lang['mpctypecollection']             = 'Types collection';
+$_lang['mpctypecollection_create_here'] = 'Create types collection here';

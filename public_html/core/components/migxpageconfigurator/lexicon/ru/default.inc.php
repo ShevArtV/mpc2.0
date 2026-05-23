@@ -96,3 +96,9 @@ $_lang['mpc_err_zip_create']       = 'Не удалось создать ZIP-а�
 $_lang['mpc_err_missing_params']   = 'Не указаны обязательные параметры';
 $_lang['mpc_err_invalid_lang']     = 'Недопустимый код языка';
 $_lang['mpc_err_file_not_found']   = 'Файл [[+file]] не найден, проверьте имя файла';
+
+// Названия кастомных типов ресурсов (показываются в админке вместо class_key)
+$_lang['mpctype']                       = 'Тип страницы';
+$_lang['mpctype_create_here']           = 'Создать тип страницы здесь';
+$_lang['mpctypecollection']             = 'Коллекция типов';
+$_lang['mpctypecollection_create_here'] = 'Создать коллекцию типов здесь';
