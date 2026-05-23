@@ -222,20 +222,27 @@ class SectionFileWriter
 
         // Финальная очистка
         $properties['html'] = str_replace('`', '"', $properties['html']);
+
+        // Версия с сохранёнными data-mpc-* маркерами (до strip) — для edit-mode
+        // рендера mpcVE: фронт-редактору нужны маркеры, чтобы найти поля и адреса.
+        $htmlMarked = $properties['html'];
         $properties['html'] = preg_replace($this->properties['pattern'], '', $properties['html']);
 
         // Обёртка в условие если есть data-mpc-if на самой секции
         if ($element->hasAttribute('data-mpc-if')) {
             $condition = $element->getAttribute('data-mpc-if');
             $firstSymbol = (string)$element->getAttribute('data-mpc-symbol') ?: '{';
-            $properties['html'] = $this->placeholderProcessor->wrapInCondition(
-                $condition,
-                $properties['html'],
-                $firstSymbol
-            );
+            $properties['html'] = $this->placeholderProcessor->wrapInCondition($condition, $properties['html'], $firstSymbol);
+            $htmlMarked = $this->placeholderProcessor->wrapInCondition($condition, $htmlMarked, $firstSymbol);
         }
 
         file_put_contents($pathToFile, $properties['html']);
+
+        // _edit-вариант (маркеры целы) — только если включён edit-mode.
+        if (!empty($this->properties['editMode'])) {
+            $editPath = preg_replace('/(\.[^.\/]+)$/', '_edit$1', $pathToFile) ?: ($pathToFile . '_edit');
+            file_put_contents($editPath, $htmlMarked);
+        }
     }
 
     /**

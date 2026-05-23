@@ -97,6 +97,8 @@ $_lang['mpc_err_missing_params']   = 'Не указаны обязательны
 $_lang['mpc_err_invalid_lang']     = 'Недопустимый код языка';
 $_lang['mpc_err_file_not_found']   = 'Файл [[+file]] не найден, проверьте имя файла';
 
+$_lang['setting_mpc_edit_mode'] = 'Режим редактирования (mpcVisualEditor)';
+$_lang['setting_mpc_edit_mode_desc'] = 'Если включено — при нарезке создаются _edit-варианты чанков секций с сохранёнными data-mpc-* маркерами (нужны фронт-редактору mpcVE). После включения перенарезать. На прод-рендер не влияет.';
 $_lang['setting_mpc_media_source'] = 'Источник файлов для медиа';
 $_lang['setting_mpc_media_source_desc'] = 'Единый источник (modMediaSource), куда загружаются все скачанные медиа. Пусто — используется источник по умолчанию (default_media_source).';
 $_lang['setting_mpc_media_path'] = 'Базовый путь медиа в источнике';

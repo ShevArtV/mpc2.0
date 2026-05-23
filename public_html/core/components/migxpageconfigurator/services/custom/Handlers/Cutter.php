@@ -69,6 +69,7 @@ class Cutter extends Base
             'presets'           => [],
             'commonThumbParams' => $this->modx->getOption('mpc_common_thumb_params', null, ''),
             'thumbSnippet'      => $this->modx->getOption('mpc_thumb_snippet', null, ''),
+            'editMode'          => (bool)$this->modx->getOption('mpc_edit_mode', null, false),
         ];
         $this->properties = array_merge($this->properties, $properties);
 

@@ -16,6 +16,11 @@ return [
         'value' => 'id,class_key,context_key,parent,uri_override,alias,uri,template',
         'area' => 'resource',
     ],
+    'mpc_edit_mode' => [
+        'xtype' => 'combo-boolean',
+        'value' => false,
+        'area' => 'default',
+    ],
     'mpc_media_source' => [
         'xtype' => 'modx-combo-source',
         'value' => '',

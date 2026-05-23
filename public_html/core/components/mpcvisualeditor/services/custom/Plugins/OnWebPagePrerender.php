@@ -34,6 +34,26 @@ class OnWebPagePrerender extends PluginHandler
             return;
         }
 
+        $resource = $this->modx->resource;
+        if (!$resource) {
+            return;
+        }
+
+        // Edit-mode рендер mpc: страница с сохранёнными data-mpc-* маркерами
+        // (из _edit-чанков, в памяти). Подменяем выхлоп — фронт-редактору нужны
+        // маркеры. Требует mpc_edit_mode + перенарезку (генерация _edit-чанков).
+        if (class_exists('\\MpcServices\\Mpc')) {
+            try {
+                $Mpc = new \MpcServices\Mpc($this->modx);
+                $editHtml = $Mpc->render->renderEditMode($resource->toArray());
+                if (is_string($editHtml) && $editHtml !== '') {
+                    $resource->_output = $editHtml;
+                }
+            } catch (\Throwable $e) {
+                $this->modx->log(\modX::LOG_LEVEL_ERROR, '[mpcVE] editMode render failed: ' . $e->getMessage());
+            }
+        }
+
         $assetsUrl = $mpcve->getConfig('assetsUrl');
         $clientCfg = json_encode($mpcve->getClientConfig(), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
 
@@ -41,9 +61,7 @@ class OnWebPagePrerender extends PluginHandler
             . '<script>window.mpcVEConfig=' . $clientCfg . ';</script>' . PHP_EOL
             . '<script defer src="' . $assetsUrl . 'js/mpcve.js"></script>' . PHP_EOL;
 
-        // ВАЖНО (проверить на сайте): доступ к выхлопу страницы в OnWebPagePrerender.
-        $resource = $this->modx->resource;
-        if ($resource && is_string($resource->_output) && stripos($resource->_output, '</body>') !== false) {
+        if (is_string($resource->_output) && stripos($resource->_output, '</body>') !== false) {
             $resource->_output = str_ireplace('</body>', $inject . '</body>', $resource->_output);
         }
     }

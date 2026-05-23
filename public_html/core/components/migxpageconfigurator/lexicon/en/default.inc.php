@@ -97,6 +97,8 @@ $_lang['mpc_err_missing_params']   = 'Missing required parameters';
 $_lang['mpc_err_invalid_lang']     = 'Invalid language code';
 $_lang['mpc_err_file_not_found']   = 'File [[+file]] not found, check the filename';
 
+$_lang['setting_mpc_edit_mode'] = 'Edit mode (mpcVisualEditor)';
+$_lang['setting_mpc_edit_mode_desc'] = 'When enabled, the cutter also writes _edit variants of section chunks keeping data-mpc-* markers (needed by the mpcVE frontend editor). Re-cut after enabling. Does not affect production render.';
 $_lang['setting_mpc_media_source'] = 'Media file source';
 $_lang['setting_mpc_media_source_desc'] = 'Single media source (modMediaSource) where all downloaded media go. Empty = use default_media_source.';
 $_lang['setting_mpc_media_path'] = 'Media base path in source';

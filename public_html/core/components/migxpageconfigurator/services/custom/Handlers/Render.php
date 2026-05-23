@@ -49,11 +49,47 @@ class Render extends Base
         $this->pdo->config['elementsPath'] = str_replace('\\', '/', $this->pdo->config['elementsPath']);
     }
 
+    /** @var bool edit-mode рендер (mpcVE) — берёт _edit-чанки, собирает в память */
+    private bool $editMode = false;
+
     /**
      * @param array $resourceData
      * @return bool
      */
     public function handle(array $resourceData): bool
+    {
+        $resourceData = $this->prepareResourceData($resourceData);
+        return !empty($resourceData['sections']) && $this->putToFile($resourceData);
+    }
+
+    /**
+     * Edit-mode рендер для mpcVE: собирает страницу В ПАМЯТИ из _edit-чанков
+     * (с сохранёнными data-mpc-* маркерами), без записи в parsed/. Возвращает
+     * готовый HTML — фронт-редактор по маркерам находит поля и их адреса.
+     * Прод-рендер (handle/putToFile) не затрагивается.
+     */
+    public function renderEditMode(array $resourceData): string
+    {
+        $this->editMode = true;
+        $resourceData = $this->prepareResourceData($resourceData);
+        if (empty($resourceData['sections'])) {
+            return '';
+        }
+        if ($this->wrapperTpl) {
+            $html = $this->pdo->parseChunk($this->wrapperTpl, $resourceData);
+            $html = str_replace('##', '{', $html);
+        } else {
+            $html = implode("\n", $resourceData['sections']);
+        }
+        return $html;
+    }
+
+    /**
+     * Общая подготовка resourceData (контакты, wrapper, TV, уровень type,
+     * парсинг секций, событие mpcOnBeforeRender). Используется handle() и
+     * renderEditMode(). В edit-mode parseConfig берёт _edit-чанки.
+     */
+    private function prepareResourceData(array $resourceData): array
     {
         $this->contacts = $this->getContacts();
         $this->wrapperTpl = $this->getWrapperTpl($resourceData['template']);
@@ -68,18 +104,18 @@ class Render extends Base
             $resourceData['tvs'] = array_merge($this->getResourceTVs($typeResourceData['id'], true), $resourceData['tvs']);
         }
         $resourceData['contacts'] = $this->contacts;
-        $resourceData['sbp_id'] = $this->properties['staticBlocksPageId']; // передаем на страницу id ресурса со статичными блоками
-        $resourceData['cp_id'] = $this->properties['contactsPageId']; // передаем на страницу id ресурса с контактами
-        $resourceData['sections'] = $this->parseConfig($resourceData); // парсим её и генерируем файл
+        $resourceData['sbp_id'] = $this->properties['staticBlocksPageId']; // id ресурса со статичными блоками
+        $resourceData['cp_id'] = $this->properties['contactsPageId']; // id ресурса с контактами
+        $resourceData['sections'] = $this->parseConfig($resourceData);
 
         $this->modx->invokeEvent('mpcOnBeforeRender', [
             'resourceData' => $resourceData,
-            'Render' => $this
+            'Render' => $this,
         ]);
         $resourceData = isset($this->modx->event->returnedValues) && !empty($this->modx->event->returnedValues['resourceData'])
             ? $this->modx->event->returnedValues['resourceData'] : $resourceData;
 
-        return !empty($resourceData['sections']) && $this->putToFile($resourceData);
+        return $resourceData;
     }
 
     /**
@@ -326,6 +362,13 @@ class Render extends Base
                 $chunkSuffix = $chunkBaseName . '_unstatic';
             } else {
                 $chunkSuffix = $chunkBaseName;
+            }
+            // edit-mode: берём _edit-чанк (data-mpc-* маркеры сохранены), если он есть
+            if ($this->editMode) {
+                $editFilePath = $sectionsDir . $chunkBaseName . '_edit' . $this->properties['extension'];
+                if (file_exists($editFilePath)) {
+                    $chunkSuffix = $chunkBaseName . '_edit';
+                }
             }
             $chunk = $this->properties['sectionChunkPrefix'] . $chunkSuffix . $this->properties['extension']; // получаем путь к чанку
 
