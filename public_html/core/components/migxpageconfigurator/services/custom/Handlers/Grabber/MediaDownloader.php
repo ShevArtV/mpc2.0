@@ -195,7 +195,7 @@ class MediaDownloader
      * Источник файлов: mpc_media_source, иначе default_media_source. Кэшируется.
      * @return \modMediaSource|null
      */
-    private function getMediaSource()
+    protected function getMediaSource()
     {
         if ($this->source !== null) {
             return $this->source ?: null;
@@ -237,7 +237,7 @@ class MediaDownloader
     /**
      * Качает содержимое URL (curl). '' при ошибке.
      */
-    private function fetch(string $url): string
+    protected function fetch(string $url): string
     {
         $ch = curl_init($url);
         curl_setopt_array($ch, [

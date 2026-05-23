@@ -6,6 +6,12 @@ require_once dirname(__DIR__) . '/vendor/autoload.php';
 if (!class_exists('modX')) {
     class modX
     {
+        const LOG_LEVEL_FATAL = 0;
+        const LOG_LEVEL_ERROR = 1;
+        const LOG_LEVEL_WARN = 2;
+        const LOG_LEVEL_INFO = 3;
+        const LOG_LEVEL_DEBUG = 4;
+
         public object $event;
         public object $cacheManager;
 

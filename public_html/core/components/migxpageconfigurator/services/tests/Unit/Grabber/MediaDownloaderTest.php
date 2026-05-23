@@ -3,23 +3,25 @@
 namespace MpcTests\Unit\Grabber;
 
 use MpcServices\Handlers\Grabber\MediaDownloader;
-use MpcTests\Stubs\ModxObjectStub;
 use MpcTests\Stubs\ModxStub;
 use PHPUnit\Framework\TestCase;
 
 // ---------------------------------------------------------------------------
-// Тестируемый подкласс: перехватывает HTTP и перенаправляет FS в tmpDir
+// Тестируемый подкласс: мокает fetch() (HTTP) и getMediaSource() (источник).
+// Фейковый источник пишет в baseDir (tmpDir) и копит createObject-вызовы.
 // ---------------------------------------------------------------------------
 
 class TestableMediaDownloader extends MediaDownloader
 {
     public string $baseDir;
-    /** @var array<array{url:string, path:string}> */
-    public array $downloadCalls = [];
-    /** Возвращаемый контент (null = имитировать ошибку curl) */
+    /** Возвращаемый fetch()-контент (null = имитировать ошибку curl) */
     public ?string $httpContent = 'fake-image-content';
     /** Имитация Content-Type для detectExtensionByContentType ('' = не определён) */
     public string $fakeContentType = '';
+    public int $fetchCalls = 0;
+    public bool $noSource = false;
+    /** @var object фейковый источник (createObject пишет в baseDir, копит created) */
+    public $fakeSource;
 
     private array $testProps;
 
@@ -28,11 +30,53 @@ class TestableMediaDownloader extends MediaDownloader
         parent::__construct($modx, $properties);
         $this->testProps = $properties;
         $this->baseDir = rtrim($baseDir, '/');
-    }
 
-    protected function getBaseDir(): string
-    {
-        return $this->baseDir;
+        $base = $this->baseDir;
+        $this->fakeSource = new class($base) {
+            public string $base;
+            /** @var array<array{dir:string,name:string,content:string}> */
+            public array $created = [];
+
+            public function __construct(string $b)
+            {
+                $this->base = rtrim($b, '/');
+            }
+
+            public function initialize(): void {}
+
+            public function createContainer($name, $parent)
+            {
+                $rel = ($parent === '/' ? '' : $parent) . $name;
+                $p = $this->base . '/' . trim((string)$rel, '/');
+                if (!is_dir($p)) {
+                    @mkdir($p, 0777, true);
+                }
+                return true;
+            }
+
+            public function createObject($dir, $name, $content)
+            {
+                $this->created[] = ['dir' => $dir, 'name' => $name, 'content' => $content];
+                $full = $this->base . '/' . ltrim($dir . $name, '/');
+                @mkdir(dirname($full), 0777, true);
+                return file_put_contents($full, $content) !== false ? ($dir . $name) : false;
+            }
+
+            public function getObjectUrl($path)
+            {
+                return '/' . ltrim((string)$path, '/');
+            }
+
+            public function getBasePath($object = '')
+            {
+                return $this->base . '/';
+            }
+
+            public function getErrors()
+            {
+                return [];
+            }
+        };
     }
 
     public function detectExtensionByContentType(string $url): string
@@ -46,30 +90,15 @@ class TestableMediaDownloader extends MediaDownloader
         return in_array($extension, $this->testProps['downloadExtensions']) ? $extension : '';
     }
 
-    public function download(string $url, string $path): string
+    protected function getMediaSource()
     {
-        $this->downloadCalls[] = ['url' => $url, 'path' => $path];
+        return $this->noSource ? null : $this->fakeSource;
+    }
 
-        if (!$path) {
-            return '';
-        }
-
-        $fullPath = $this->baseDir . $path;
-
-        if (file_exists($fullPath)) {
-            return $path;
-        }
-
-        if ($this->httpContent === null) {
-            return '';
-        }
-
-        $dir = dirname($fullPath);
-        if (!file_exists($dir)) {
-            mkdir($dir, 0777, true);
-        }
-
-        return file_put_contents($fullPath, $this->httpContent) ? $path : '';
+    protected function fetch(string $url): string
+    {
+        $this->fetchCalls++;
+        return $this->httpContent ?? '';
     }
 }
 
@@ -109,12 +138,7 @@ class MediaDownloaderTest extends TestCase
 
         $props = array_merge([
             'downloadExtensions' => ['jpg', 'png', 'webp', 'mp4'],
-            'downloadPaths'      => [
-                'images' => '/assets/images/',
-                'videos' => '/assets/videos/',
-                'audios' => '/assets/audios/',
-                'others' => '/assets/others/',
-            ],
+            'mediaPath'          => '', // пусто → каталог в источнике = <type>/[section/]
             'mimeToExt' => [
                 'image/jpeg' => 'jpg', 'image/png' => 'png', 'image/webp' => 'webp',
                 'video/mp4' => 'mp4', 'audio/mpeg' => 'mp3',
@@ -228,7 +252,7 @@ class MediaDownloaderTest extends TestCase
     }
 
     // -----------------------------------------------------------------------
-    // downloadFile() с фоллбэком на Content-Type
+    // downloadFile() — фоллбэк на Content-Type / ранние возвраты
     // -----------------------------------------------------------------------
 
     public function testDownloadFileFallsBackToContentType(): void
@@ -237,9 +261,9 @@ class MediaDownloaderTest extends TestCase
         $d->fakeContentType = 'image/jpeg';
         $result = $d->downloadFile('https://example.com/download/12345/', 'images');
 
-        $this->assertStringStartsWith('/assets/images/', $result);
+        $this->assertStringStartsWith('/images/', $result);
         $this->assertStringEndsWith('.jpg', $result);
-        $this->assertCount(1, $d->downloadCalls);
+        $this->assertCount(1, $d->fakeSource->created);
     }
 
     public function testDownloadFileReturnsOriginalWhenBothDetectionsFail(): void
@@ -249,72 +273,69 @@ class MediaDownloaderTest extends TestCase
         $result = $d->downloadFile('https://example.com/download/no-ext/', 'images');
 
         $this->assertEquals('https://example.com/download/no-ext/', $result);
-        $this->assertEmpty($d->downloadCalls);
+        $this->assertEmpty($d->fakeSource->created);
     }
 
-    // -----------------------------------------------------------------------
-    // downloadFile() ранние возвраты
-    // -----------------------------------------------------------------------
-
-    public function testDownloadFileReturnsOriginalWhenNoDownloadPath(): void
+    public function testDownloadFileReturnsOriginalWhenNoSource(): void
     {
-        $d = $this->makeDownloader([
-            'downloadPaths' => ['images' => '', 'videos' => '', 'audios' => '', 'others' => ''],
-        ]);
+        $d = $this->makeDownloader();
+        $d->noSource = true;
         $result = $d->downloadFile('https://example.com/photo.jpg', 'images');
+
         $this->assertEquals('https://example.com/photo.jpg', $result);
-        $this->assertEmpty($d->downloadCalls);
+        $this->assertEmpty($d->fakeSource->created);
     }
 
     public function testDownloadFileReturnsOriginalForDisallowedExtension(): void
     {
         $d = $this->makeDownloader(['downloadExtensions' => ['jpg']]);
         $result = $d->downloadFile('https://example.com/photo.gif', 'images');
+
         $this->assertEquals('https://example.com/photo.gif', $result);
-        $this->assertEmpty($d->downloadCalls);
+        $this->assertEmpty($d->fakeSource->created);
     }
 
     // -----------------------------------------------------------------------
-    // downloadFile() — успешная загрузка
+    // downloadFile() — успешная загрузка в источник
     // -----------------------------------------------------------------------
 
-    public function testDownloadFileCallsDownloadWithCorrectPath(): void
+    public function testDownloadFileWritesToSourceWithCorrectPath(): void
     {
         $d = $this->makeDownloader();
         $d->downloadFile('https://example.com/hero.jpg', 'images');
 
-        $this->assertCount(1, $d->downloadCalls);
-        $this->assertEquals('https://example.com/hero.jpg', $d->downloadCalls[0]['url']);
-        $this->assertStringStartsWith('/assets/images/', $d->downloadCalls[0]['path']);
-        $this->assertStringEndsWith('.jpg', $d->downloadCalls[0]['path']);
+        $this->assertCount(1, $d->fakeSource->created);
+        $this->assertStringStartsWith('images/', $d->fakeSource->created[0]['dir']);
+        $this->assertStringEndsWith('.jpg', $d->fakeSource->created[0]['name']);
     }
 
-    public function testDownloadFileReturnsLocalPathOnSuccess(): void
+    public function testDownloadFileReturnsObjectUrlOnSuccess(): void
     {
         $d = $this->makeDownloader();
         $result = $d->downloadFile('https://example.com/hero.jpg', 'images');
 
-        $this->assertStringStartsWith('/assets/images/', $result);
+        $this->assertStringStartsWith('/images/', $result);
         $this->assertStringEndsWith('.jpg', $result);
     }
 
-    public function testDownloadFileReturnsOriginalUrlOnCurlFailure(): void
+    public function testDownloadFileReturnsOriginalUrlOnFetchFailure(): void
     {
         $d = $this->makeDownloader();
         $d->httpContent = null; // имитируем ошибку curl
 
         $result = $d->downloadFile('https://example.com/hero.jpg', 'images');
         $this->assertEquals('https://example.com/hero.jpg', $result);
+        $this->assertEmpty($d->fakeSource->created);
     }
 
-    public function testDownloadFileSavesContentToDisk(): void
+    public function testDownloadFileSavesContentToSource(): void
     {
         $d = $this->makeDownloader();
-        $localPath = $d->downloadFile('https://example.com/banner.png', 'images');
+        $url = $d->downloadFile('https://example.com/banner.png', 'images');
 
-        $fullPath = $this->tmpDir . $localPath;
-        $this->assertFileExists($fullPath);
-        $this->assertEquals('fake-image-content', file_get_contents($fullPath));
+        $full = $d->baseDir . $url; // url = /images/..., baseDir без слеша
+        $this->assertFileExists($full);
+        $this->assertEquals('fake-image-content', file_get_contents($full));
     }
 
     // -----------------------------------------------------------------------
@@ -327,19 +348,15 @@ class MediaDownloaderTest extends TestCase
         $d->setCurrentSectionName('hero');
         $d->downloadFile('https://example.com/photo.jpg', 'images');
 
-        $path = $d->downloadCalls[0]['path'];
-        $this->assertStringContainsString('hero/', $path);
-        $this->assertStringStartsWith('/assets/images/hero/', $path);
+        $this->assertStringStartsWith('images/hero/', $d->fakeSource->created[0]['dir']);
     }
 
-    public function testDownloadFileWithoutSectionUsesBasePath(): void
+    public function testDownloadFileWithoutSectionUsesTypeDir(): void
     {
         $d = $this->makeDownloader();
         $d->downloadFile('https://example.com/photo.jpg', 'images');
 
-        $path = $d->downloadCalls[0]['path'];
-        $this->assertStringStartsWith('/assets/images/', $path);
-        $this->assertStringNotContainsString('/images//', $path);
+        $this->assertEquals('images/', $d->fakeSource->created[0]['dir']);
     }
 
     public function testDownloadFileAddsLanguagePrefixToFilename(): void
@@ -347,9 +364,7 @@ class MediaDownloaderTest extends TestCase
         $d = $this->makeDownloader();
         $d->downloadFile('https://example.com/hero.jpg', 'images', 'en');
 
-        $path = $d->downloadCalls[0]['path'];
-        $filename = basename($path);
-        $this->assertStringStartsWith('en-', $filename);
+        $this->assertStringStartsWith('en-', $d->fakeSource->created[0]['name']);
     }
 
     public function testDownloadFileNoLanguagePrefixWhenEmpty(): void
@@ -357,57 +372,24 @@ class MediaDownloaderTest extends TestCase
         $d = $this->makeDownloader();
         $d->downloadFile('https://example.com/hero.jpg', 'images', '');
 
-        $path = $d->downloadCalls[0]['path'];
-        $filename = basename($path);
-        $this->assertStringNotContainsString('-', $filename);
+        $this->assertEquals('hero.jpg', $d->fakeSource->created[0]['name']);
     }
 
     // -----------------------------------------------------------------------
-    // downloadFile() — повторный вызов не скачивает снова
+    // downloadFile() — повторный вызов не качает снова (файл уже в источнике)
     // -----------------------------------------------------------------------
 
-    public function testDownloadFileSkipsHttpIfFileAlreadyExists(): void
+    public function testDownloadFileSkipsFetchIfFileExists(): void
     {
         $d = $this->makeDownloader();
 
-        // первый вызов — скачивает
-        $path1 = $d->downloadFile('https://example.com/photo.jpg', 'images');
-        $callsAfterFirst = count($d->downloadCalls);
+        $url1 = $d->downloadFile('https://example.com/photo.jpg', 'images');
+        $this->assertEquals(1, $d->fetchCalls);
 
-        // обнуляем счётчик вызовов download()
-        $d->downloadCalls = [];
-        // второй вызов с тем же URL — файл уже есть на диске
-        $path2 = $d->downloadFile('https://example.com/photo.jpg', 'images');
-
-        $this->assertCount(1, $d->downloadCalls, 'download() должен вызваться, но файл уже есть');
-        $this->assertEquals($path1, $path2, 'возвращаемый путь должен совпадать');
-    }
-
-    // -----------------------------------------------------------------------
-    // download() — низкоуровневые тесты
-    // -----------------------------------------------------------------------
-
-    public function testDownloadReturnsEmptyForEmptyPath(): void
-    {
-        $d = $this->makeDownloader();
-        $this->assertEquals('', $d->download('https://example.com/photo.jpg', ''));
-    }
-
-    public function testDownloadReturnsPathIfFileExists(): void
-    {
-        $d = $this->makeDownloader();
-
-        // создаём файл заранее
-        $path = '/assets/images/existing.jpg';
-        $fullPath = $this->tmpDir . $path;
-        mkdir(dirname($fullPath), 0777, true);
-        file_put_contents($fullPath, 'existing');
-
-        $result = $d->download('https://example.com/existing.jpg', $path);
-
-        $this->assertEquals($path, $result);
-        // download() не должна идти в HTTP (нет вызовов curl в TestableMediaDownloader)
-        // т.к. родительский download() переопределён — просто проверяем возврат
+        // второй вызов с тем же URL — файл уже на диске источника
+        $url2 = $d->downloadFile('https://example.com/photo.jpg', 'images');
+        $this->assertEquals(1, $d->fetchCalls, 'повторно fetch() не вызывается');
+        $this->assertEquals($url1, $url2);
     }
 
     // -----------------------------------------------------------------------
@@ -418,31 +400,20 @@ class MediaDownloaderTest extends TestCase
     {
         $d = $this->makeDownloader();
         $d->downloadImage('https://example.com/banner.jpg');
-
-        $this->assertStringStartsWith('/assets/images/', $d->downloadCalls[0]['path']);
+        $this->assertStringStartsWith('images/', $d->fakeSource->created[0]['dir']);
     }
 
     public function testDownloadVideoDelegatesToVideos(): void
     {
         $d = $this->makeDownloader();
         $d->downloadVideo('https://example.com/clip.mp4');
-
-        $this->assertStringStartsWith('/assets/videos/', $d->downloadCalls[0]['path']);
+        $this->assertStringStartsWith('videos/', $d->fakeSource->created[0]['dir']);
     }
 
     public function testDownloadAudioDelegatesToAudios(): void
     {
-        $d = $this->makeDownloader([
-            'downloadExtensions' => ['mp3', 'ogg'],
-            'downloadPaths' => [
-                'images' => '/assets/images/',
-                'videos' => '/assets/videos/',
-                'audios' => '/assets/audios/',
-                'others' => '/assets/others/',
-            ],
-        ]);
+        $d = $this->makeDownloader(['downloadExtensions' => ['mp3', 'ogg']]);
         $d->downloadAudio('https://example.com/track.mp3');
-
-        $this->assertStringStartsWith('/assets/audios/', $d->downloadCalls[0]['path']);
+        $this->assertStringStartsWith('audios/', $d->fakeSource->created[0]['dir']);
     }
 }
