@@ -9,8 +9,28 @@ $xpdo_meta_map['mpcTypeCollection']= array (
   ),
   'fields' => 
   array (
+    'class_key' => 'mpcTypeCollection',
   ),
   'fieldMeta' => 
   array (
+    'class_key' => 
+    array (
+      'dbtype' => 'varchar',
+      'precision' => '100',
+      'phptype' => 'string',
+      'null' => false,
+      'default' => 'mpcTypeCollection',
+    ),
+  ),
+  'composites' => 
+  array (
+    'OwnTypes' => 
+    array (
+      'class' => 'mpcType',
+      'local' => 'id',
+      'foreign' => 'parent',
+      'cardinality' => 'many',
+      'owner' => 'local',
+    ),
   ),
 );

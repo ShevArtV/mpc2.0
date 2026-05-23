@@ -61,11 +61,11 @@ $xpdo_meta_map['mpcTypeData']= array (
       ),
     ),
   ),
-  'composites' => 
+  'aggregates' => 
   array (
     'Resource' => 
     array (
-      'class' => 'modResource',
+      'class' => 'mpcType',
       'local' => 'id',
       'foreign' => 'id',
       'cardinality' => 'one',

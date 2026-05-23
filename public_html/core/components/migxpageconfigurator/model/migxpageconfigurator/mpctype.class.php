@@ -1,25 +1,54 @@
 <?php
 /**
- * mpcType — тип страницы. Наследует modResource и добавляет служебные поля
- * type_name / file_name, которые хранятся ОТДЕЛЬНО от modx_site_content —
- * в таблице mpc_type (1:1 по id ресурса). Так основной контент ресурса
- * (pagetitle/content/…) свободен и его можно безопасно перезаписывать.
- * В админке type_name/file_name — read-only (через CRC).
+ * mpcType — тип страницы. Наследует modResource; служебные поля type_name /
+ * file_name хранятся отдельно (таблица mpc_type, объект mpcTypeData, 1:1 по id).
+ * Реализация по образцу minishop2 msProduct: маршрутизация полей по
+ * _originalFieldMeta (нативные поля ресурса → parent, остальные → Data),
+ * ленивый loadData(), сохранение Data каскадом через composite на parent::save().
  */
 class mpcType extends modResource
 {
-    public $showInTree = true;
+    public $showInContextMenu = true;
+    public $allowChildrenResources = true;
 
-    /** @var string[] виртуальные поля, проксируемые в mpcTypeData */
-    protected $_mpcExtra = ['type_name', 'file_name'];
+    /** @var mpcTypeData $Data */
+    protected $Data;
 
-    /** @var array стэш значений доп-полей до save() */
-    protected $_mpcStash = [];
+    /** @var array алиасы связей, принадлежащих Data (для маршрутизации getOne/addOne) */
+    protected $dataRelated = array();
+
+    /** @var array метаданные «родных» полей ресурса (modResource + class_key) */
+    protected $_originalFieldMeta;
 
     public function __construct(xPDO & $xpdo)
     {
         parent::__construct($xpdo);
-        $this->set('class_key', 'mpcType');
+        parent::set('class_key', 'mpcType');
+        $this->_originalFieldMeta = $this->_fieldMeta;
+
+        $aggregates = $this->xpdo->getAggregates('mpcTypeData');
+        $composites = $this->xpdo->getComposites('mpcTypeData');
+        $this->dataRelated = array_merge(array_keys($aggregates), array_keys($composites));
+    }
+
+    public static function load(xPDO & $xpdo, $className, $criteria = null, $cacheFlag = true)
+    {
+        if (!is_object($criteria)) {
+            $criteria = $xpdo->getCriteria($className, $criteria, $cacheFlag);
+        }
+        $xpdo->addDerivativeCriteria($className, $criteria);
+
+        return parent::load($xpdo, $className, $criteria, $cacheFlag);
+    }
+
+    public static function loadCollection(xPDO & $xpdo, $className, $criteria = null, $cacheFlag = true)
+    {
+        if (!is_object($criteria)) {
+            $criteria = $xpdo->getCriteria($className, $criteria, $cacheFlag);
+        }
+        $xpdo->addDerivativeCriteria($className, $criteria);
+
+        return parent::loadCollection($xpdo, $className, $criteria, $cacheFlag);
     }
 
     public static function getControllerPath(xPDO & $modx)
@@ -28,80 +57,117 @@ class mpcType extends modResource
             . 'components/migxpageconfigurator/controllers/res/mpctype/';
     }
 
-    public function getResourceTypeName()
+    public function getContextMenuText()
     {
         $this->xpdo->lexicon->load('migxpageconfigurator:default');
-        $name = $this->xpdo->lexicon('mpctype');
-        return $name ?: 'mpcType';
-    }
 
-    /** Регистрирует пакет с mpcTypeData (на случай, если ещё не добавлен). */
-    protected function loadMpcPackage()
-    {
-        $this->xpdo->addPackage(
-            'migxpageconfigurator',
-            $this->xpdo->getOption('core_path', null, MODX_CORE_PATH) . 'components/migxpageconfigurator/model/'
+        return array(
+            'text_create' => $this->xpdo->lexicon('mpctype') ?: 'mpcType',
+            'text_create_here' => $this->xpdo->lexicon('mpctype_create_here') ?: 'mpcType',
         );
     }
 
-    public function get($k, $format = null, $formatTemplate = null)
+    public function getResourceTypeName()
     {
-        if (is_string($k) && in_array($k, $this->_mpcExtra, true)) {
-            if (array_key_exists($k, $this->_mpcStash)) {
-                return $this->_mpcStash[$k];
-            }
-            $id = (int)parent::get('id');
-            if ($id) {
-                $this->loadMpcPackage();
-                if ($data = $this->xpdo->getObject('mpcTypeData', $id)) {
-                    return $data->get($k);
-                }
-            }
-            return '';
-        }
-        return parent::get($k, $format, $formatTemplate);
+        $this->xpdo->lexicon->load('migxpageconfigurator:default');
+
+        return $this->xpdo->lexicon('mpctype') ?: 'mpcType';
     }
 
-    public function set($k, $v = null)
+    public function set($k, $v = null, $vType = '')
     {
-        if (is_string($k) && in_array($k, $this->_mpcExtra, true)) {
-            $this->_mpcStash[$k] = $v;
-            return true;
-        }
-        return parent::set($k, $v);
+        return isset($this->_originalFieldMeta[$k])
+            ? parent::set($k, $v, $vType)
+            : $this->loadData()->set($k, $v, $vType);
+    }
+
+    protected function _setRaw($key, $val)
+    {
+        return isset($this->_originalFieldMeta[$key])
+            ? parent::_setRaw($key, $val)
+            : $this->loadData()->_setRaw($key, $val);
     }
 
     public function save($cacheFlag = null)
     {
-        $saved = parent::save($cacheFlag);
-        if ($saved && !empty($this->_mpcStash)) {
-            $this->loadMpcPackage();
-            $id = (int)parent::get('id');
-            $data = $this->xpdo->getObject('mpcTypeData', $id);
-            if (!$data) {
-                $data = $this->xpdo->newObject('mpcTypeData');
-                $data->set('id', $id);
-            }
-            foreach ($this->_mpcExtra as $f) {
-                if (array_key_exists($f, $this->_mpcStash)) {
-                    $data->set($f, $this->_mpcStash[$f]);
-                }
-            }
-            $data->save();
-            $this->_mpcStash = [];
+        // Сменили класс ресурса на не-mpcType — чистим Data; иначе гарантируем Data.
+        if (!$this->isNew() && parent::get('class_key') != 'mpcType') {
+            $this->loadData()->remove();
+        } else {
+            $this->loadData();
         }
-        return $saved;
+
+        return parent::save($cacheFlag);
     }
 
-    public function remove(array $ancestors = [])
+    public function get($k, $format = null, $formatTemplate = null)
     {
-        $id = (int)parent::get('id');
-        if ($id) {
-            $this->loadMpcPackage();
-            if ($data = $this->xpdo->getObject('mpcTypeData', $id)) {
-                $data->remove();
+        if (is_array($k)) {
+            $array = array();
+            foreach ($k as $v) {
+                $array[$v] = $this->get($v, $format, $formatTemplate);
+            }
+
+            return $array;
+        } elseif (isset($this->_originalFieldMeta[$k])) {
+            return parent::get($k, $format, $formatTemplate);
+        } elseif (isset($this->loadData()->_fields[$k])) {
+            return $this->loadData()->get($k, $format, $formatTemplate);
+        }
+
+        return parent::get($k, $format, $formatTemplate);
+    }
+
+    public function toArray($keyPrefix = '', $rawValues = false, $excludeLazy = false, $includeRelated = false)
+    {
+        $original = parent::toArray($keyPrefix, $rawValues, $excludeLazy, $includeRelated);
+        $additional = $this->loadData()->toArray($keyPrefix, $rawValues, $excludeLazy, $includeRelated);
+        $intersect = array_keys(array_intersect_key($original, $additional));
+        foreach ($intersect as $key) {
+            unset($additional[$key]);
+        }
+
+        return array_merge($original, $additional);
+    }
+
+    /**
+     * @return mpcTypeData
+     */
+    public function loadData()
+    {
+        if (!is_object($this->Data) || !($this->Data instanceof mpcTypeData)) {
+            if (!$this->Data = $this->getOne('Data')) {
+                $this->Data = $this->xpdo->newObject('mpcTypeData');
+                parent::addOne($this->Data);
             }
         }
-        return parent::remove($ancestors);
+
+        return $this->Data;
+    }
+
+    public function & getOne($alias, $criteria = null, $cacheFlag = true)
+    {
+        $object = in_array($alias, $this->dataRelated, true)
+            ? $this->loadData()->getOne($alias, $criteria, $cacheFlag)
+            : parent::getOne($alias, $criteria, $cacheFlag);
+
+        return $object;
+    }
+
+    public function addOne(&$obj, $alias = '')
+    {
+        if (empty($alias)) {
+            if ($obj->_alias == $obj->_class) {
+                $aliases = $this->_getAliases($obj->_class, 1);
+                if (!empty($aliases)) {
+                    $obj->_alias = reset($aliases);
+                }
+            }
+            $alias = $obj->_alias;
+        }
+
+        return in_array($alias, $this->dataRelated, true)
+            ? $this->loadData()->addOne($obj, $alias)
+            : parent::addOne($obj, $alias);
     }
 }

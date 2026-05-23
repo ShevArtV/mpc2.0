@@ -1,17 +1,19 @@
 <?php
 /**
  * mpcTypeCollection — контейнер типов страниц. Наследует modResource без
- * дополнительных полей; служит папкой-группировкой для ресурсов mpcType.
+ * дополнительных полей (по образцу minishop2 msCategory). Группирует ресурсы
+ * mpcType (composite OwnTypes по parent).
  */
 class mpcTypeCollection extends modResource
 {
-    public $showInTree = true;
+    public $showInContextMenu = true;
+    public $allowChildrenResources = true;
 
     public function __construct(xPDO & $xpdo)
     {
         parent::__construct($xpdo);
-        $this->set('class_key', 'mpcTypeCollection');
-        $this->set('isfolder', true);
+        parent::set('class_key', 'mpcTypeCollection');
+        parent::set('isfolder', true);
     }
 
     public static function getControllerPath(xPDO & $modx)
@@ -20,10 +22,20 @@ class mpcTypeCollection extends modResource
             . 'components/migxpageconfigurator/controllers/res/mpctypecollection/';
     }
 
+    public function getContextMenuText()
+    {
+        $this->xpdo->lexicon->load('migxpageconfigurator:default');
+
+        return array(
+            'text_create' => $this->xpdo->lexicon('mpctypecollection') ?: 'mpcTypeCollection',
+            'text_create_here' => $this->xpdo->lexicon('mpctypecollection_create_here') ?: 'mpcTypeCollection',
+        );
+    }
+
     public function getResourceTypeName()
     {
         $this->xpdo->lexicon->load('migxpageconfigurator:default');
-        $name = $this->xpdo->lexicon('mpctypecollection');
-        return $name ?: 'mpcTypeCollection';
+
+        return $this->xpdo->lexicon('mpctypecollection') ?: 'mpcTypeCollection';
     }
 }

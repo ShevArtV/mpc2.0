@@ -1,10 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <model package="migxpageconfigurator" baseClass="xPDOObject" platform="mysql" defaultEngine="InnoDB" phpdoc-package="migxpageconfigurator" version="1.1">
     <!--
-        Служебные данные типа страницы (class_key = mpcType), хранятся отдельно
-        от modx_site_content (1:1 по id ресурса). type_name ← бывш. pagetitle,
-        file_name ← бывш. introtext. Сами resource-классы mpcType/mpcTypeCollection
-        написаны вручную (наследуют modResource); схема описывает только эту таблицу.
+        Расширение полей ресурса по образцу minishop2 (msProduct/msProductData).
+        mpcType хранит служебные поля типа страницы (type_name ← бывш. pagetitle,
+        file_name ← бывш. introtext) ОТДЕЛЬНО — в таблице mpc_type (1:1 по id),
+        чтобы контент ресурса был свободен и перезаписывался безопасно.
+        mpcTypeCollection — контейнер типов (по образцу msCategory).
     -->
     <object class="mpcTypeData" table="mpc_type" extends="xPDOObject">
         <field key="id" dbtype="int" precision="10" phptype="integer" null="false" index="pk" comment="id ресурса (modResource.id)" />
@@ -15,17 +16,18 @@
             <column key="id" length="" collation="A" null="false" />
         </index>
 
-        <composite alias="Resource" class="modResource" local="id" foreign="id" cardinality="one" owner="foreign" />
+        <aggregate alias="Resource" class="mpcType" local="id" foreign="id" cardinality="one" owner="foreign" />
     </object>
 
-    <!--
-        Кастомные resource-классы. Без своих полей/таблицы — single-table
-        inheritance (живут в modx_site_content, различаются class_key).
-        Объявлены в схеме, чтобы попасть в metadata-карту (иначе loadClass их
-        не находит). Логика классов — в hand-written mpctype.class.php /
-        mpctypecollection.class.php (генератор НЕ перезаписывает существующие
-        root-классы, только карту и mysql/-платформу).
-    -->
-    <object class="mpcType" extends="modResource" />
-    <object class="mpcTypeCollection" extends="modResource" />
+    <object class="mpcType" extends="modResource">
+        <field key="class_key" dbtype="varchar" precision="100" phptype="string" null="false" default="mpcType" />
+
+        <composite alias="Data" class="mpcTypeData" local="id" foreign="id" cardinality="one" owner="local" />
+    </object>
+
+    <object class="mpcTypeCollection" extends="modResource">
+        <field key="class_key" dbtype="varchar" precision="100" phptype="string" null="false" default="mpcTypeCollection" />
+
+        <composite alias="OwnTypes" class="mpcType" local="id" foreign="parent" cardinality="many" owner="local" />
+    </object>
 </model>
