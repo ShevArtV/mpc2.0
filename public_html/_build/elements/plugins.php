@@ -12,6 +12,7 @@ return [
             'OnGetFormParams' => [],
             'OnHandleRequest' => [],
             'OnLoadWebDocument' => [],
+            'OnMODXInit' => [],
 
             'OnResourceUndelete' => [],
             'pdoToolsOnFenomInit' => [],

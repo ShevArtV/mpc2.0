@@ -16,12 +16,6 @@ class mpcTypeCollection extends modResource
         parent::set('isfolder', true);
     }
 
-    public static function getControllerPath(xPDO & $modx)
-    {
-        return $modx->getOption('core_path', null, MODX_CORE_PATH)
-            . 'components/migxpageconfigurator/controllers/res/mpctypecollection/';
-    }
-
     public function getContextMenuText()
     {
         $this->xpdo->lexicon->load('migxpageconfigurator:default');
