@@ -30,11 +30,43 @@ class LexiconManager
 
     /**
      * Устанавливает контекст текущей секции перед её обработкой.
+     *
+     * Для статик-секций дополнительно вычищает прежние ключи ЭТОЙ секции из
+     * предзагруженного массива лексиконов (wipe-then-refill). Зачем: статик-файл
+     * (`page-types.inc.php`) предзагружается целиком в `lexicons[$staticId]`
+     * (см. Grabber), а `createLexicons` переписывает файл этим массивом. Exclude
+     * гейтит только запись НОВЫХ ключей и ничего не удаляет → excluded/orphan
+     * ключ, записанный до попадания в exclude, переживал бы реграб. У нестатики
+     * файл не предзагружается и пересобирается с нуля, поэтому чистка не нужна —
+     * этим wipe приводим статику к тому же поведению.
+     *
+     * Копии (`data-mpc-copy`) wipe пропускают (`$isCopy`): это часто пустой
+     * плейсхолдер-ссылка на оригинал без полей — wipe удалил бы ключи секции, а
+     * refill не наполнил (полей нет) → ключи пропали бы безвозвратно. Лексиконами
+     * секции владеет грабинг non-copy оригинала.
+     *
+     * No-op для cutter-флоу: там `lexicons[$rid]` не предзагружается, guard
+     * `empty(...)` коротко замыкает. Глобалки (`mpc_resource_*` и пр.) целы —
+     * они не начинаются с префикса секции.
      */
-    public function setContext(string $prefix, bool $isStatic): void
+    public function setContext(string $prefix, bool $isStatic, bool $isCopy = false): void
     {
         $this->sectionLexiconPrefix = $prefix;
         $this->sectionIsStatic      = $isStatic;
+
+        if (!$isStatic || $isCopy || $prefix === '') {
+            return;
+        }
+        $rid = $this->properties['staticBlocksPageLexiconFilename'] ?? '';
+        if ($rid === '' || empty($this->lexicons[$rid])) {
+            return;
+        }
+        $needle = $prefix . '_';
+        foreach (array_keys($this->lexicons[$rid]) as $key) {
+            if (strpos((string)$key, $needle) === 0) {
+                unset($this->lexicons[$rid][$key]);
+            }
+        }
     }
 
     /**

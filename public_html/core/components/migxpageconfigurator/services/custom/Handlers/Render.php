@@ -288,7 +288,7 @@ class Render extends Base
             'Render' => $this
         ]);
 
-        $sections = isset($this->modx->event->returnedValues) && !isset($this->modx->event->returnedValues['sections'])
+        $sections = isset($this->modx->event->returnedValues) && !empty($this->modx->event->returnedValues['sections'])
             ? $this->modx->event->returnedValues['sections'] : $sections;
 
         if (empty($sections)) {
@@ -376,7 +376,21 @@ class Render extends Base
             if ($section['is_static']) {
                 $tmp = $sets . $tmp;
             }
-            $sectionsHtml[] = str_replace('##', '{', $tmp); // чтобы на фронте работал парсер pdoTools
+            $tmp = str_replace('##', '{', $tmp); // чтобы на фронте работал парсер pdoTools
+
+            // Только прод-рендер: в edit-mode (mpcVE) событие не дёргаем — плагин
+            // мог бы переписать HTML секции и сломать data-mpc-маркеры редактора.
+            if (!$this->editMode) {
+                $this->modx->invokeEvent('mpcOnGetSectionHtml', [
+                    'section' => $section,
+                    'html' => $tmp,
+                    'Render' => $this,
+                ]);
+                $tmp = isset($this->modx->event->returnedValues) && !empty($this->modx->event->returnedValues['html'])
+                    ? $this->modx->event->returnedValues['html'] : $tmp;
+            }
+
+            $sectionsHtml[] = $tmp;
             $i++;
         }
         return $sectionsHtml;

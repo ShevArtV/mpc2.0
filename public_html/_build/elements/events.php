@@ -25,6 +25,9 @@ return [
     'mpcOnGetNewHtml' => [
         'groupname' => 'MigxPageConfigurator',
     ],
+    'mpcOnGetSectionHtml' => [
+        'groupname' => 'MigxPageConfigurator',
+    ],
 
     'mpcOnImportLexiconValue' => [
         'groupname' => 'MigxPageConfigurator',

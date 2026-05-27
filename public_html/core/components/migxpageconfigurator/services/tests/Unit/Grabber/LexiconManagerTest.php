@@ -240,6 +240,59 @@ class LexiconManagerTest extends TestCase
     }
 
     // ---------------------------------------------------------------
+    // setContext() — wipe прежних статик-ключей секции (orphan/excluded)
+    // ---------------------------------------------------------------
+
+    public function testSetContextWipesStaleStaticKeysByPrefix(): void
+    {
+        $m = $this->makeManager();
+        // Предзагрузка статик-файла (как Grabber: lexicons[$staticId]).
+        $m->lexicons['static'] = [
+            'cta_old_orphan'  => 'stale',   // ключ грабимой секции — должен уйти
+            'cta_btn'         => 'old',     // тоже секции cta — уйдёт (наполнится заново)
+            'hero_title'      => 'keep',    // другая секция — цел
+            'mpc_resource_x'  => 'keep',    // глобалка — цела
+        ];
+
+        $m->setContext('cta', true);
+
+        $this->assertArrayNotHasKey('cta_old_orphan', $m->lexicons['static']);
+        $this->assertArrayNotHasKey('cta_btn', $m->lexicons['static']);
+        $this->assertArrayHasKey('hero_title', $m->lexicons['static']);
+        $this->assertArrayHasKey('mpc_resource_x', $m->lexicons['static']);
+    }
+
+    public function testSetContextSkipsWipeForCopySection(): void
+    {
+        $m = $this->makeManager();
+        $m->lexicons['static'] = ['cta_btn' => 'orig'];
+
+        // Копия (data-mpc-copy) не владеет лексиконами оригинала — wipe пропускается.
+        $m->setContext('cta', true, true);
+
+        $this->assertArrayHasKey('cta_btn', $m->lexicons['static']);
+        $this->assertEquals('orig', $m->lexicons['static']['cta_btn']);
+    }
+
+    public function testSetContextNoWipeWithoutPreload(): void
+    {
+        // Cutter-флоу: lexicons не предзагружены → no-op, без ошибок.
+        $m = $this->makeManager();
+        $m->setContext('cta', true);
+        $this->assertArrayNotHasKey('static', $m->lexicons);
+    }
+
+    public function testSetContextDoesNotWipeForNonStaticSection(): void
+    {
+        $m = $this->makeManager();
+        $m->lexicons['static'] = ['cta_btn' => 'orig'];
+
+        $m->setContext('cta', false);
+
+        $this->assertArrayHasKey('cta_btn', $m->lexicons['static']);
+    }
+
+    // ---------------------------------------------------------------
     // isLexiconField()
     // ---------------------------------------------------------------
 

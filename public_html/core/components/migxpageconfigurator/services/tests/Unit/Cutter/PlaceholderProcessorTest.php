@@ -116,6 +116,16 @@ class PlaceholderProcessorTest extends TestCase
         $this->assertEquals('$list_images', $complex);
     }
 
+    public function testGetSymbolComplexNestedListImageField(): void
+    {
+        // Медиа-список внутри элемента списка (level > 0) получает префикс $itemN.
+        $proc    = $this->makeProcessor();
+        $element = $this->makeElement('img', ['data-mpc-field-1' => 'list_images']);
+        [, $complex] = $proc->getSymbolComplex($element, 'list_images[0].img', 1, false);
+
+        $this->assertEquals('$item1.list_images[0].img', $complex);
+    }
+
     public function testGetSymbolComplexTableMode(): void
     {
         $proc    = $this->makeProcessor();
@@ -212,6 +222,67 @@ class PlaceholderProcessorTest extends TestCase
 
         $this->assertStringContainsString('{if $banner}', $result['html']);
         $this->assertStringContainsString('{/if}', $result['html']);
+    }
+
+    public function testSetPlaceholdersTopLevelListImages(): void
+    {
+        // Регресс: top-level медиа-список → индексированный $list_images[k],
+        // без префикса $itemN и без статичных URL.
+        $proc = $this->makeProcessor();
+        $html = '<section data-mpc-section="test">'
+            . '<img data-mpc-field="list_images" src="a.jpg" width="10" height="10" alt="A">'
+            . '<img data-mpc-field="list_images" src="b.jpg" width="20" height="20" alt="B">'
+            . '</section>';
+
+        $properties = [
+            'html'          => $html,
+            'element'       => (new Document($html))->find('[data-mpc-section]')[0],
+            'fieldAttrName' => 'data-mpc-field',
+            'itemAttrName'  => 'data-mpc-item',
+            'level'         => 0,
+            'isStatic'      => false,
+        ];
+
+        $result = $proc->setPlaceholders($properties)['html'];
+
+        $this->assertStringContainsString('{$list_images[0].img[0].src}', $result);
+        $this->assertStringContainsString('{$list_images[1].img[0].src}', $result);
+        $this->assertStringNotContainsString('a.jpg', $result);
+        $this->assertStringNotContainsString('b.jpg', $result);
+        $this->assertStringNotContainsString('$item', $result);
+    }
+
+    public function testSetPlaceholdersNestedListImages(): void
+    {
+        // Медиа-список list_images внутри элемента списка list_triple_images
+        // должен превратиться в $item1.list_images[k]..., а не остаться статикой
+        // и не получить двойной префикс $item1.item1.
+        $proc = $this->makeProcessor();
+        $html = '<section data-mpc-section="test">'
+            . '<ul data-mpc-field="list_triple_images"><li data-mpc-item>'
+            . '<h5 data-mpc-field-1="title">T</h5>'
+            . '<img data-mpc-field-1="list_images" src="lake.jpg" width="53" height="53" alt="O">'
+            . '<img data-mpc-field-1="list_images" src="rain.jpg" width="52" height="52" alt="R">'
+            . '</li></ul></section>';
+
+        $properties = [
+            'html'          => $html,
+            'element'       => (new Document($html))->find('[data-mpc-section]')[0],
+            'fieldAttrName' => 'data-mpc-field',
+            'itemAttrName'  => 'data-mpc-item',
+            'level'         => 0,
+            'isStatic'      => false,
+        ];
+
+        $result = $proc->setPlaceholders($properties)['html'];
+
+        $this->assertStringContainsString('{foreach $list_triple_images as $item1', $result);
+        $this->assertStringContainsString('{$item1.title}', $result);
+        $this->assertStringContainsString('{$item1.list_images[0].img[0].src}', $result);
+        $this->assertStringContainsString('{$item1.list_images[1].img[0].src}', $result);
+        $this->assertStringNotContainsString('$item1.item1', $result);
+        $this->assertStringNotContainsString('lake.jpg', $result);
+        $this->assertStringNotContainsString('rain.jpg', $result);
     }
 
     // ---------------------------------------------------------------

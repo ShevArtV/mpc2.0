@@ -217,7 +217,7 @@ class SectionProcessor
         $prefix = trim((string)$section->getAttribute('data-mpc-lexicon')) ?: $properties['sectionName'];
         $isStatic = $section->hasAttribute('data-mpc-static');
 
-        $this->lexiconManager->setContext($prefix, $isStatic);
+        $this->lexiconManager->setContext($prefix, $isStatic, !empty($properties['isCopy']));
         $this->mediaDownloader->setCurrentSectionName($properties['sectionName']);
 
         $sectionId = $properties['sectionName'] . '_' . str_replace(['.', ',', ' '], '', microtime(true));

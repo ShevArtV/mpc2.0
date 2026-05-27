@@ -61,22 +61,27 @@ class PlaceholderProcessor
             } elseif (in_array($field->tagName(), ['video', 'audio', 'picture']) && !in_array($fieldName, ['list_pictures', 'list_audios', 'list_videos'])) {
                 $fieldHTMLNew = $this->setMediaPlaceholder($field, $fieldName, $properties);
             } elseif (in_array($fieldName, ['list_images', 'list_pictures', 'list_audios', 'list_videos'])) {
-                $parentNode = $this->getParentNode($properties['parentElement'] ?? $field, $fieldAttrName);
-                if ($parentNode != $properties['element']) {
+                // Медиа-список обрабатываем, только если он — поле текущего
+                // scope, а не вложен в ДРУГОЙ field-элемент того же уровня.
+                // Если ближайший предок несёт тот же field-атрибут — список
+                // принадлежит ему, не нам → пропускаем. Вложенность в item
+                // (`data-mpc-item`) границей не считается: list_images внутри
+                // элемента списка — легитимный кейс.
+                $parentNode = $this->getParentNode($field, $fieldAttrName);
+                if ($parentNode instanceof Element && $parentNode->hasAttribute($fieldAttrName)) {
                     continue;
                 }
-                $prefix = '';
-                if ($properties['parentElement'] ?? null) {
-                    $prefix = 'item' . $properties['level'] . '.';
-                    $fieldName = strpos($fieldName, $prefix) === 0 ? $fieldName : $prefix . $fieldName;
-                }
+                // Индекс элемента списка кодируется в имени как [$k]. Префикс
+                // $itemN для вложенных списков навешивает getSymbolComplex по
+                // фактическому уровню вложенности ($properties['level']) —
+                // ручной item-префикс здесь НЕ добавляем, иначе получится
+                // двойной $itemN.$itemN.
                 $k = isset($mediaLists[$fieldName]) ? count($mediaLists[$fieldName]) : 0;
-                $listProperties = array_merge($properties, ['level' => $k]);
 
-                if ($fieldName === $prefix . 'list_images') {
-                    $fieldHTMLNew = $this->setImgPlaceholder($field, $fieldName . "[$k].img", $listProperties);
+                if ($fieldName === 'list_images') {
+                    $fieldHTMLNew = $this->setImgPlaceholder($field, $fieldName . "[$k].img", $properties);
                 } else {
-                    $fieldHTMLNew = $this->setMediaPlaceholder($field, $fieldName . "[$k]." . $field->tagName(), $listProperties);
+                    $fieldHTMLNew = $this->setMediaPlaceholder($field, $fieldName . "[$k]." . $field->tagName(), $properties);
                 }
                 $mediaLists[$fieldName][] = $field;
             } elseif ($items = $this->findByAttr($this->parser->getHTMLString($field), '[' . $itemAttrName . ']')) {
@@ -85,7 +90,6 @@ class PlaceholderProcessor
                 $props = [
                     'html' => $this->parser->getHTMLString($items[0]),
                     'element' => $items[0],
-                    'parentElement' => $this->getParentNode($items[0], $fieldAttrName),
                     'level' => $properties['level'] + 1,
                 ];
                 // Накапливаем parentFieldName по образцу grabber'а (без idx —
@@ -458,11 +462,10 @@ class PlaceholderProcessor
         $table = $row->getAttribute('data-mpc-table') ?: 'config';
 
         if ($table === 'config') {
-            if (preg_match('/^list_(images|pictures|videos|audios)/', $fieldName)) {
-                $complexName = "\${$fieldName}";
-            } else {
-                $complexName = $level > 0 ? "\$item{$level}.{$fieldName}" : "\${$fieldName}";
-            }
+            // Уровень вложенности задаёт префикс $itemN. Имена медиа-списков
+            // (list_images[$k].img и т.п.) идут той же дорогой: на top-level
+            // (level 0) → $list_images[..], внутри элемента списка → $itemN.list_images[..].
+            $complexName = $level > 0 ? "\$item{$level}.{$fieldName}" : "\${$fieldName}";
         } else {
             $complexName = "($rid | resource: '$fieldName')";
         }
