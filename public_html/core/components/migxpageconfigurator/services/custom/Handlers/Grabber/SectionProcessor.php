@@ -115,7 +115,9 @@ class SectionProcessor
         // контент-ресурс (приоритет resource > type). Overwrite, кроме
         // защищённых полей (alias/uri/template + структурный минимум).
         if ($this->properties['updContent']) {
-            (new ResourceFieldGrabber($this->parser, $this->getProtectedResourceFields()))->grab($html, $grabResource);
+            // Медиа из rfield/tv складываем в подпапку "resource" источника.
+            $this->mediaDownloader->setCurrentSectionName('resource');
+            (new ResourceFieldGrabber($this->parser, $this->getProtectedResourceFields(), $this->mediaDownloader))->grab($html, $grabResource);
             $grabResource->save();
         }
 

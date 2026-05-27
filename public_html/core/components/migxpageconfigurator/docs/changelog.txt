@@ -1,3 +1,10 @@
+2.4.1-rc
+==============
+- Фикс: при ОБНОВЛЕНИИ пакета плагину MigxPageConfigurator не до-привязывались новые системные события (в частности `OnMODXInit`). MODX на upgrade обновляет код плагина, но не пересоздаёт `modPluginEvent` для уже существующего плагина (в `build.php` PluginEvents пакуются с `PRESERVE_KEYS=true`, а `pluginid` на этапе сборки = 0). Из-за этого после апгрейда не выполнялась регистрация модели (`addPackage` в обработчике `OnMODXInit`) → кастомные типы ресурсов `mpcType`/`mpcTypeCollection` «не появлялись» в дереве. Добавлен резолвер `_build/resolvers/9bindevents.php`: идемпотентно довешивает плагину все нужные события (список синхронен с `plugins.php`) при install/upgrade. После установки/обновления — сбросить кэш.
+- Фикс: медиа в `data-mpc-rfield` / `data-mpc-tv` (img/source) теперь локализуется через `MediaDownloader` (как обычные `data-mpc-field`-картинки) — раньше в поле/TV сохранялся внешний URL без скачивания. `ResourceFieldGrabber` принимает `MediaDownloader` (DI); `SectionProcessor` прокидывает его и складывает медиа rfield/tv в подпапку `resource`. Напоминание: `data-mpc-tv` пишется только в СУЩЕСТВУЮЩИЙ TV (для несуществующего `setTVValue` — no-op).
+- Тесты: +1 (`ResourceFieldGrabber`: локализация img-src через `MediaDownloader`). Всего 164, все зелёные.
+- Версия пакета `2.4.0` → `2.4.1`.
+
 2.4.0-rc
 ==============
 Крупный релиз: расширение address-space (`rfield`/`tv`/уровни), edit-mode рендер и публичный API под визуальный фронт-редактор **mpcVisualEditor** (отдельный пакет, собирается командой `build.php mpcvisualeditor`). mpc-сторона (M0–M5, M-types) завершена и проверена на сайте.

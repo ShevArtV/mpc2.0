@@ -16,7 +16,9 @@ use MpcServices\Handlers\Parser;
  * + структурный минимум (id/class_key/context_key/parent/uri_override) — чтобы
  * разметка не сломала дерево/класс ресурса. Список настраивается.
  *
- * Извлечение значения чистое (DiDom), запись — через resource->set/setTVValue.
+ * Запись — через resource->set/setTVValue. Значение img/source (src)
+ * локализуется через MediaDownloader (если он передан), как обычные
+ * data-mpc-field картинки; иначе сохраняется исходный URL.
  */
 class ResourceFieldGrabber
 {
@@ -25,13 +27,16 @@ class ResourceFieldGrabber
     /** @var string[] */
     private array $protected;
 
-    public function __construct(Parser $parser, array $protectedFields = [])
+    private ?MediaDownloader $mediaDownloader;
+
+    public function __construct(Parser $parser, array $protectedFields = [], ?MediaDownloader $mediaDownloader = null)
     {
         $this->parser = $parser;
         $this->protected = $protectedFields ?: [
             'id', 'class_key', 'context_key', 'parent', 'uri_override',
             'alias', 'uri', 'template',
         ];
+        $this->mediaDownloader = $mediaDownloader;
     }
 
     /**
@@ -67,17 +72,31 @@ class ResourceFieldGrabber
     }
 
     /**
-     * Значение маркера: src для img/source, href для a/link, иначе innerHtml.
+     * Значение маркера: src для img/source (локализуется через MediaDownloader),
+     * href для a/link, иначе innerHtml.
      */
     private function extractValue(Element $el): string
     {
         $tag = $el->tagName();
         if (in_array($tag, ['img', 'source'], true)) {
-            return (string)$el->getAttribute('src');
+            return $this->resolveMedia((string)$el->getAttribute('src'));
         }
         if (in_array($tag, ['a', 'link'], true)) {
             return (string)$el->getAttribute('href');
         }
         return trim($el->innerHtml());
+    }
+
+    /**
+     * Скачивает медиа в источник и возвращает локальный URL (как обычные
+     * data-mpc-field картинки). Без MediaDownloader (юнит-тесты / нет DI) или
+     * для пустого src — возвращает значение как есть.
+     */
+    private function resolveMedia(string $src): string
+    {
+        if ($src === '' || $this->mediaDownloader === null) {
+            return $src;
+        }
+        return $this->mediaDownloader->downloadImage($src);
     }
 }

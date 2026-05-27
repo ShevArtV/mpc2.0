@@ -2,6 +2,7 @@
 
 namespace MpcTests\Unit\Grabber;
 
+use MpcServices\Handlers\Grabber\MediaDownloader;
 use MpcServices\Handlers\Grabber\ResourceFieldGrabber;
 use MpcServices\Handlers\Parser;
 use MpcTests\Stubs\ModxObjectStub;
@@ -34,9 +35,33 @@ class ResourceFieldGrabberTest extends TestCase
         $this->assertSame('Контент', $res->get('content'));
         $this->assertSame('/path', $res->get('link_attributes'));
         $this->assertSame('Значение TV', $res->getTVValue('subtitle'));
-        $this->assertSame('cover.jpg', $res->getTVValue('cover'));
+        $this->assertSame('cover.jpg', $res->getTVValue('cover'), 'без MediaDownloader src сохраняется как есть');
         $this->assertArrayHasKey('pagetitle', $written['fields']);
         $this->assertArrayHasKey('cover', $written['tvs']);
+    }
+
+    public function testLocalizesImageSrcViaMediaDownloader(): void
+    {
+        // Стаб загрузчика: возвращает «локальный» URL вместо скачивания.
+        $downloader = new class extends MediaDownloader {
+            public function __construct() {}
+            public function downloadImage(string $attrValue, string $language = ''): string
+            {
+                return '/assets/dl/' . basename((string)parse_url($attrValue, PHP_URL_PATH));
+            }
+        };
+        $grabber = new ResourceFieldGrabber(new Parser(), [], $downloader);
+
+        $html = '<div>'
+            . '<img data-mpc-tv="cover" src="https://ext.example/img/bedroom.jpg">'
+            . '<span data-mpc-tv="subtitle">текст</span>'
+            . '</div>';
+        $res = new ModxObjectStub('modResource', ['id' => 5]);
+
+        $grabber->grab($html, $res);
+
+        $this->assertSame('/assets/dl/bedroom.jpg', $res->getTVValue('cover'), 'src картинки локализован через MediaDownloader');
+        $this->assertSame('текст', $res->getTVValue('subtitle'), 'текстовый TV загрузчиком не трогается');
     }
 
     public function testProtectedFieldsNotWritten(): void
