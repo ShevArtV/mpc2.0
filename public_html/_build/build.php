@@ -717,10 +717,19 @@ class modExtraPackage
             'source' => $this->config['core'],
             'target' => "return MODX_CORE_PATH . 'components/';",
         ]);
-        $vehicle->resolve('file', [
-            'source' => $this->config['assets'],
-            'target' => "return MODX_ASSETS_PATH . 'components/';",
-        ]);
+        // Ассеты пакуем поэлементно, ИСКЛЮЧАЯ runtime-папку media/: туда
+        // MediaDownloader скачивает медиа-контент сайта (rfield/tv + поля),
+        // в транспорт-пакет он не нужен и раздувает его.
+        $assetsDir = rtrim($this->config['assets'], '/\\');
+        foreach (scandir($assetsDir) as $item) {
+            if (in_array($item, ['.', '..', 'media'], true)) {
+                continue;
+            }
+            $vehicle->resolve('file', [
+                'source' => $assetsDir . '/' . $item,
+                'target' => "return MODX_ASSETS_PATH . 'components/" . $this->config['name_lower'] . "/';",
+            ]);
+        }
 
         // Add resolvers into vehicle
         $resolvers = scandir($this->config['resolvers']);
