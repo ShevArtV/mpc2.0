@@ -10,16 +10,33 @@ if ($transport->xpdo) {
         case xPDOTransport::ACTION_UPGRADE:
             $configs = file_get_contents(MODX_CORE_PATH . 'components/migxpageconfigurator/elements/configs/migx_configs.json');
             $modx->addPackage('migx', MODX_CORE_PATH . 'components/migx/model/');
-            if($configs){
-                $configs = json_decode($configs, 1);
-                foreach ($configs as $config){
-                    if(!$migx = $modx->getObject('migxConfig', array('name' => $config['name']))){
-                        $migx = $modx->newObject('migxConfig');
-                    }
-                    unset($config['id']);
-                    $migx->fromArray($config, '', true);
-                    $migx->save();
+            if (!$configs) {
+                break;
+            }
+
+            $mergerFile = MODX_CORE_PATH . 'components/migxpageconfigurator/services/custom/Helpers/MigxConfigMerger.php';
+            if (!class_exists('MpcServices\\Helpers\\MigxConfigMerger') && is_file($mergerFile)) {
+                require_once $mergerFile;
+            }
+            $merger = class_exists('MpcServices\\Helpers\\MigxConfigMerger')
+                ? new \MpcServices\Helpers\MigxConfigMerger()
+                : null;
+
+            $configs = json_decode($configs, true);
+            foreach ($configs as $config) {
+                $existing = $modx->getObject('migxConfig', ['name' => $config['name']]);
+
+                $row = $config;
+                unset($row['id']);
+                if ($existing && $merger !== null) {
+                    $row = $merger->merge($row, $existing->toArray());
                 }
+
+                if (!$existing) {
+                    $existing = $modx->newObject('migxConfig');
+                }
+                $existing->fromArray($row, '', true);
+                $existing->save();
             }
             break;
 
