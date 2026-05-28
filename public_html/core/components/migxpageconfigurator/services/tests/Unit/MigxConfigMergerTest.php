@@ -99,30 +99,52 @@ class MigxConfigMergerTest extends TestCase
         $this->assertContains('Мои поля', array_column($tabs, 'caption'));
     }
 
-    public function testColumnsMergedSameRule(): void
+    public function testColumnsMergedByDataIndex(): void
     {
         $bundle = [
             'columns' => json_encode([
-                ['field' => 'mpc_id', 'header' => 'NEW'],
-                ['field' => 'name', 'header' => 'std-new'],
+                ['dataIndex' => 'mpc_id', 'header' => 'NEW'],
+                ['dataIndex' => 'name', 'header' => 'std-new'],
             ]),
         ];
         $existing = [
             'columns' => json_encode([
-                ['field' => 'mpc_id', 'header' => 'OLD', 'width' => 100],
-                ['field' => 'name', 'header' => 'USER'],
-                ['field' => 'custom_col', 'header' => 'mine'],
+                ['dataIndex' => 'mpc_id', 'header' => 'OLD', 'width' => 100],
+                ['dataIndex' => 'name', 'header' => 'USER'],
+                ['dataIndex' => 'custom_col', 'header' => 'mine'],
             ]),
         ];
         $merged = (new MigxConfigMerger())->merge($bundle, $existing);
-        $byName = [];
+        $byIdx = [];
         foreach (json_decode($merged['columns'], true) as $c) {
-            $byName[$c['field']] = $c;
+            $byIdx[$c['dataIndex']] = $c;
         }
-        $this->assertSame('NEW', $byName['mpc_id']['header']);
-        $this->assertArrayNotHasKey('width', $byName['mpc_id']);
-        $this->assertSame('USER', $byName['name']['header']);
-        $this->assertSame('mine', $byName['custom_col']['header']);
+        $this->assertSame('NEW', $byIdx['mpc_id']['header']);
+        $this->assertArrayNotHasKey('width', $byIdx['mpc_id']);
+        $this->assertSame('USER', $byIdx['name']['header']);
+        $this->assertSame('mine', $byIdx['custom_col']['header']);
+    }
+
+    public function testColumnsDedupedFromDoubledExisting(): void
+    {
+        // Воспроизводит сломанное состояние 2.4.3-rc: после ошибочного апгрейда
+        // колонки с одинаковым dataIndex задвоились. Новый прогон merger'а
+        // должен схлопнуть их обратно (map по dataIndex → один entry).
+        $bundle = [
+            'columns' => json_encode([
+                ['dataIndex' => 'preview', 'header' => 'Превью', 'renderer' => 'this.renderImage'],
+            ]),
+        ];
+        $existing = [
+            'columns' => json_encode([
+                ['dataIndex' => 'preview', 'header' => 'Превью', 'renderer' => 'this.renderImage'],
+                ['dataIndex' => 'preview', 'header' => 'Превью', 'renderer' => 'this.renderImage'],
+            ]),
+        ];
+        $merged = (new MigxConfigMerger())->merge($bundle, $existing);
+        $cols = json_decode($merged['columns'], true);
+        $this->assertCount(1, $cols);
+        $this->assertSame('preview', $cols[0]['dataIndex']);
     }
 
     public function testMigxIdsRenumberedSequentially(): void

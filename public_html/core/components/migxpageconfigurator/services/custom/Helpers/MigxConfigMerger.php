@@ -39,7 +39,7 @@ class MigxConfigMerger
                 $this->mergeFlatList(
                     $this->decodeArr($bundle['columns'] ?? '[]'),
                     $this->decodeArr($existing['columns'] ?? '[]'),
-                    'field'
+                    'dataIndex'
                 )
             );
         }
