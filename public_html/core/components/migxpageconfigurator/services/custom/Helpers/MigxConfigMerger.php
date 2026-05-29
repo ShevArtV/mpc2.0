@@ -49,12 +49,17 @@ class MigxConfigMerger
 
     private function mergeTabs(array $bundleTabs, array $existingTabs): array
     {
+        // Tab'ы с непустым caption сопоставляются по caption. Tab'ы с пустым
+        // caption (а такими являются почти все конфиги — единственный безымянный
+        // tab) сопоставляются позиционно: иначе пустой caption — не ключ, и
+        // безымянный tab из бандла + безымянный из БД оба попадают в выдачу →
+        // задвоение tab'ов при апгрейде.
         $existingByCaption = [];
-        $existingTail = [];
+        $existingByPos = [];
         foreach ($existingTabs as $tab) {
             $caption = $tab['caption'] ?? null;
             if ($caption === null || $caption === '') {
-                $existingTail[] = $tab;
+                $existingByPos[] = $tab;
             } else {
                 $existingByCaption[$caption] = $tab;
             }
@@ -62,11 +67,24 @@ class MigxConfigMerger
 
         $merged = [];
         $consumed = [];
+        $posCursor = 0;
         foreach ($bundleTabs as $bTab) {
             $caption = $bTab['caption'] ?? null;
-            if ($caption !== null && $caption !== '' && isset($existingByCaption[$caption])) {
-                $eTab = $existingByCaption[$caption];
-                $consumed[$caption] = true;
+            $eTab = null;
+            if ($caption !== null && $caption !== '') {
+                if (isset($existingByCaption[$caption])) {
+                    $eTab = $existingByCaption[$caption];
+                    $consumed[$caption] = true;
+                }
+            } else {
+                if (array_key_exists($posCursor, $existingByPos)) {
+                    $eTab = $existingByPos[$posCursor];
+                    unset($existingByPos[$posCursor]);
+                }
+                $posCursor++;
+            }
+
+            if ($eTab !== null) {
                 $mergedTab = $bTab;
                 $mergedTab['fields'] = $this->mergeFlatList(
                     $bTab['fields'] ?? [],
@@ -84,7 +102,7 @@ class MigxConfigMerger
                 $merged[] = $eTab;
             }
         }
-        foreach ($existingTail as $eTab) {
+        foreach ($existingByPos as $eTab) {
             $merged[] = $eTab;
         }
 

@@ -406,6 +406,11 @@ class Cutter extends Base
                 continue;
             }
 
+            // Контекст секции (префикс лексикона) — чтобы exclude-проверка
+            // каттера видела префиксный lex-ключ симметрично граберу. Ставим до
+            // чанков и секции, чтобы поля чанков наследовали префикс секции.
+            $this->placeholderProcessor->setSectionContext($section);
+
             if ($innerChunks = $this->getItems($this->parser->getHTMLString($section), '[data-mpc-chunk]')) {
                 $this->sectionFileWriter->parseInnerChunks($innerChunks);
             }

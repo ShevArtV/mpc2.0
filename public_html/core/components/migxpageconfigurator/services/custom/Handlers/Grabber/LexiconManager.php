@@ -118,6 +118,25 @@ class LexiconManager
                 return false;
             }
         }
+        // Третья проверка — полный lex-ключ с префиксом секции
+        // (`{prefix}_{parent}_{field}`), зеркало грабера: `setLexicons` исключает
+        // по `isFieldExcluded($lexiconKey)` (строка ~227), где ключ строится с
+        // префиксом через `getLexiconKey`. Без неё каттер (единственный, кто
+        // вызывает shouldLexiconize) не видел exclude-записи в префиксной форме
+        // (`image_banner_content`, `*_content`) → ставил `| lexicon` там, где
+        // грабер ключ не заводил → на рендере `| lexicon` отдавал пусто.
+        // Префикс заполняется через setContext (грабер — SectionProcessor,
+        // каттер — PlaceholderProcessor::setSectionContext). Idx опускаем:
+        // каттер работает на уровне схемы (без row-индексов) — для row-агностики
+        // используйте glob.
+        if ($this->sectionLexiconPrefix !== '' && $fieldName !== '') {
+            $lexKey = $parentFieldName !== ''
+                ? "{$this->sectionLexiconPrefix}_{$parentFieldName}_{$fieldName}"
+                : "{$this->sectionLexiconPrefix}_{$fieldName}";
+            if ($this->isFieldExcluded($lexKey)) {
+                return false;
+            }
+        }
         return true;
     }
 

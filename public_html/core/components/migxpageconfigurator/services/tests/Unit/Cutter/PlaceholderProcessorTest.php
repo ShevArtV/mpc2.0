@@ -540,6 +540,82 @@ class PlaceholderProcessorTest extends TestCase
         $this->assertStringNotContainsString('| lexicon', $result);
     }
 
+    public function testSetPlaceholdersExcludedByPrefixedLexKeySkipsLexicon(): void
+    {
+        // Exclude в префиксной форме `{section}_content`. Грабер чтит её через
+        // полный lex-ключ (setLexicons → isFieldExcluded($lexiconKey)); каттер
+        // должен тоже — после setSectionContext. Иначе на рендере `| lexicon`
+        // отдаёт пусто (грабер ключ не завёл, каттер влепил модификатор).
+        $proc = $this->makeProcessor([
+            'useLexicons'              => true,
+            'translatableContentTypes' => ['text'],
+            'excludeLexiconFields'     => ['image_banner_content'],
+        ]);
+        $html    = '<section data-mpc-section="image_banner"><div data-mpc-field="content">x</div></section>';
+        $section = (new Document($html))->find('[data-mpc-section]')[0];
+        $proc->setSectionContext($section);
+        $result = $proc->setPlaceholders([
+            'html'          => $html,
+            'element'       => $section,
+            'fieldAttrName' => 'data-mpc-field',
+            'itemAttrName'  => 'data-mpc-item',
+            'level'         => 0,
+            'isStatic'      => false,
+        ])['html'];
+
+        $this->assertStringContainsString('{$content}', $result);
+        $this->assertStringNotContainsString('| lexicon', $result);
+    }
+
+    public function testPrefixedLexKeyExcludeRequiresSectionContext(): void
+    {
+        // Контроль асимметрии: тот же exclude `image_banner_content` БЕЗ
+        // setSectionContext (пустой префикс) не срабатывает — `content`
+        // лексиконится. Именно это (грабер чтил префиксный ключ, каттер — нет)
+        // и чинит setSectionContext в Cutter::handleSections.
+        $proc = $this->makeProcessor([
+            'useLexicons'              => true,
+            'translatableContentTypes' => ['text'],
+            'excludeLexiconFields'     => ['image_banner_content'],
+        ]);
+        $html = '<section data-mpc-section="image_banner"><div data-mpc-field="content">x</div></section>';
+        $result = $proc->setPlaceholders([
+            'html'          => $html,
+            'element'       => (new Document($html))->find('[data-mpc-section]')[0],
+            'fieldAttrName' => 'data-mpc-field',
+            'itemAttrName'  => 'data-mpc-item',
+            'level'         => 0,
+            'isStatic'      => false,
+        ])['html'];
+
+        $this->assertStringContainsString("##'{\$content}' | lexicon}", $result);
+    }
+
+    public function testPrefixedLexKeyExcludeViaGlobAndLexiconAttrOverride(): void
+    {
+        // data-mpc-lexicon переопределяет префикс (как у грабера), а exclude в
+        // glob-форме `*_content` матчит полный lex-ключ `hero_content`.
+        $proc = $this->makeProcessor([
+            'useLexicons'              => true,
+            'translatableContentTypes' => ['text'],
+            'excludeLexiconFields'     => ['*_content'],
+        ]);
+        $html    = '<section data-mpc-section="image_banner" data-mpc-lexicon="hero"><div data-mpc-field="content">x</div></section>';
+        $section = (new Document($html))->find('[data-mpc-section]')[0];
+        $proc->setSectionContext($section);
+        $result = $proc->setPlaceholders([
+            'html'          => $html,
+            'element'       => $section,
+            'fieldAttrName' => 'data-mpc-field',
+            'itemAttrName'  => 'data-mpc-item',
+            'level'         => 0,
+            'isStatic'      => false,
+        ])['html'];
+
+        $this->assertStringContainsString('{$content}', $result);
+        $this->assertStringNotContainsString('| lexicon', $result);
+    }
+
     public function testSetPlaceholdersDoesNotLeakParentFieldNameBetweenSiblings(): void
     {
         // Регрессионный кейс: после обработки одного top-level item-фольда

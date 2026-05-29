@@ -99,6 +99,48 @@ class MigxConfigMergerTest extends TestCase
         $this->assertContains('Мои поля', array_column($tabs, 'caption'));
     }
 
+    public function testEmptyCaptionTabNotDuplicatedOnUpgrade(): void
+    {
+        // Почти все конфиги — единственный tab с пустым caption. При апгрейде
+        // безымянный tab из бандла не должен задваиваться с безымянным из БД.
+        $bundle = [
+            'formtabs' => json_encode([$this->tab('', [$this->field('mpc_a', ['caption' => 'NEW'])])]),
+        ];
+        $existing = [
+            'formtabs' => json_encode([$this->tab('', [
+                $this->field('mpc_a', ['caption' => 'OLD']),
+                $this->field('user_custom', ['caption' => 'mine'], 2),
+            ])]),
+        ];
+        $merged = (new MigxConfigMerger())->merge($bundle, $existing);
+        $tabs = json_decode($merged['formtabs'], true);
+        $this->assertCount(1, $tabs);
+        $names = array_column($tabs[0]['fields'], 'field');
+        $this->assertSame('NEW', $tabs[0]['fields'][0]['caption']);
+        $this->assertContains('user_custom', $names);
+    }
+
+    public function testEmptyCaptionTabsMatchedPositionally(): void
+    {
+        $bundle = [
+            'formtabs' => json_encode([
+                $this->tab('', [$this->field('mpc_a')]),
+                $this->tab('', [$this->field('mpc_b')], 2),
+            ]),
+        ];
+        $existing = [
+            'formtabs' => json_encode([
+                $this->tab('', [$this->field('mpc_a'), $this->field('u1', [], 2)]),
+                $this->tab('', [$this->field('mpc_b'), $this->field('u2', [], 2)], 2),
+            ]),
+        ];
+        $merged = (new MigxConfigMerger())->merge($bundle, $existing);
+        $tabs = json_decode($merged['formtabs'], true);
+        $this->assertCount(2, $tabs);
+        $this->assertContains('u1', array_column($tabs[0]['fields'], 'field'));
+        $this->assertContains('u2', array_column($tabs[1]['fields'], 'field'));
+    }
+
     public function testColumnsMergedByDataIndex(): void
     {
         $bundle = [

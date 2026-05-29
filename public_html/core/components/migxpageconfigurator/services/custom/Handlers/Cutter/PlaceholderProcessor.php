@@ -593,6 +593,25 @@ class PlaceholderProcessor
     // ---------------------------------------------------------------
 
     /**
+     * Устанавливает контекст секции для решений о лексиконах.
+     *
+     * Префикс ({@see LexiconManager::setContext}) нужен, чтобы exclude-проверка
+     * в `shouldLexiconize` видела полный lex-ключ с префиксом
+     * (`{prefix}_..._field`) — симметрично граберу. Префикс: `data-mpc-lexicon`,
+     * иначе fallback на `data-mpc-section` (как Grabber/SectionProcessor).
+     * Вызывается из `Cutter::handleSections` ДО обработки секции и её вложенных
+     * чанков, чтобы поля чанков тоже наследовали префикс секции (грабер
+     * граблит чанки в DOM секции под её префиксом). Для cutter-флоу
+     * static-wipe в setContext — no-op (`lexicons[$rid]` пуст).
+     */
+    public function setSectionContext(Element $section): void
+    {
+        $prefix = trim((string)$section->getAttribute('data-mpc-lexicon'))
+            ?: trim((string)$section->getAttribute('data-mpc-section'));
+        $this->lexiconManager->setContext($prefix, $section->hasAttribute('data-mpc-static'));
+    }
+
+    /**
      * Должно ли поле быть лексиконизировано с учётом content-type и
      * exclusion-паттернов. Делегирует в `LexiconManager::shouldLexiconize`.
      */

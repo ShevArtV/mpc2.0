@@ -13,14 +13,17 @@ class ModxStub extends \modX
 {
     private array $config;
 
-    public function __construct(?string $fixturesDir = null)
+    public function __construct(?string $fixturesDir = null, array $configOverrides = [])
     {
         parent::__construct();
 
         $fixturesDir ??= dirname(__DIR__) . '/Fixtures';
         $configFile = $fixturesDir . '/config.php';
 
-        $this->config = file_exists($configFile) ? (require $configFile) : [];
+        $base = file_exists($configFile) ? (require $configFile) : [];
+        // configOverrides позволяют тесту включить mpc_use_lexicons / задать
+        // mpc_exclude_lexicons_filename, не плодя отдельные config.php.
+        $this->config = array_merge($base, $configOverrides);
 
         // Инициализируем event с пустым returnedValues
         $this->event = new \stdClass();
