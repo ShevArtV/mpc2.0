@@ -10,8 +10,8 @@
 
     <div>{foreach $items as $item1 index=$i1 last=$l1}
     <article>
-            <h3>{$item_title}</h3>
-            <p>{$item_text}</p>
+            <h3>{$item1.item_title}</h3>
+            <p>{$item1.item_text}</p>
         </article>
 {/foreach}
 </div>

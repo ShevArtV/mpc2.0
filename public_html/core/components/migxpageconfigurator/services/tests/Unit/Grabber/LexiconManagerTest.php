@@ -624,4 +624,84 @@ class LexiconManagerTest extends TestCase
         $m = $this->makeManagerWithUri('services/consulting/team/');
         $this->assertEquals('services_consulting_team', $m->getResourceIdentifierById(5));
     }
+
+    // ---------------------------------------------------------------
+    // excludeLexiconFields — числовые [...]-токены (списки/диапазоны/nth)
+    // shouldLexiconize('text', <ключ>, '') → false если ключ исключён.
+    // ---------------------------------------------------------------
+
+    private function makeNumericManager(array $patterns): LexiconManager
+    {
+        return $this->makeManager([
+            'useLexicons'              => true,
+            'translatableContentTypes' => ['text'],
+            'excludeLexiconFields'     => $patterns,
+        ]);
+    }
+
+    public function testNumericListToken(): void
+    {
+        $m = $this->makeNumericManager(['cards_[6,8,10]_title']);
+        $this->assertFalse($m->shouldLexiconize('text', 'cards_8_title', ''));
+        $this->assertFalse($m->shouldLexiconize('text', 'cards_6_title', ''));
+        $this->assertTrue($m->shouldLexiconize('text', 'cards_7_title', ''));
+    }
+
+    public function testNumericRangeToken(): void
+    {
+        $m = $this->makeNumericManager(['cards_[6-10]_title']);
+        $this->assertFalse($m->shouldLexiconize('text', 'cards_6_title', ''));
+        $this->assertFalse($m->shouldLexiconize('text', 'cards_10_title', ''));
+        $this->assertTrue($m->shouldLexiconize('text', 'cards_5_title', ''));
+        $this->assertTrue($m->shouldLexiconize('text', 'cards_11_title', ''));
+    }
+
+    public function testNumericNthEven(): void
+    {
+        $m = $this->makeNumericManager(['cards_[2n]_title']);
+        $this->assertFalse($m->shouldLexiconize('text', 'cards_2_title', ''));
+        $this->assertFalse($m->shouldLexiconize('text', 'cards_4_title', ''));
+        $this->assertTrue($m->shouldLexiconize('text', 'cards_3_title', ''));
+    }
+
+    public function testNumericNthOddWithOffset(): void
+    {
+        $m = $this->makeNumericManager(['cards_[2n+1]_title']);
+        $this->assertFalse($m->shouldLexiconize('text', 'cards_1_title', ''));
+        $this->assertFalse($m->shouldLexiconize('text', 'cards_3_title', ''));
+        $this->assertTrue($m->shouldLexiconize('text', 'cards_2_title', ''));
+    }
+
+    public function testNumericTwoTokensBothMustMatch(): void
+    {
+        $m = $this->makeNumericManager(['table_list_triple_[6,8,10]_subtitle_[6,8,10]']);
+        $this->assertFalse($m->shouldLexiconize('text', 'table_list_triple_8_subtitle_10', ''));
+        // второй idx вне списка → НЕ исключён
+        $this->assertTrue($m->shouldLexiconize('text', 'table_list_triple_8_subtitle_7', ''));
+    }
+
+    public function testNumericNthWithLiteralTail(): void
+    {
+        $m = $this->makeNumericManager(['table_list_triple_[2n+1]_subtitle_1']);
+        $this->assertFalse($m->shouldLexiconize('text', 'table_list_triple_3_subtitle_1', ''));
+        $this->assertTrue($m->shouldLexiconize('text', 'table_list_triple_4_subtitle_1', ''));
+        // литеральный хвост _1 не совпал
+        $this->assertTrue($m->shouldLexiconize('text', 'table_list_triple_3_subtitle_2', ''));
+    }
+
+    public function testNumericRangeCombinedWithGlob(): void
+    {
+        $m = $this->makeNumericManager(['cards_[6-10]_*']);
+        $this->assertFalse($m->shouldLexiconize('text', 'cards_7_subtitle', ''));
+        $this->assertTrue($m->shouldLexiconize('text', 'cards_5_subtitle', ''));
+    }
+
+    public function testNumericTokenDoesNotBreakPlainGlob(): void
+    {
+        // регресс: паттерны без [ работают как раньше
+        $m = $this->makeNumericManager(['*_picture', 'inline_styles']);
+        $this->assertFalse($m->shouldLexiconize('text', 'inline_styles', ''));
+        $this->assertFalse($m->shouldLexiconize('text', 'hero_picture', ''));
+        $this->assertTrue($m->shouldLexiconize('text', 'title', ''));
+    }
 }

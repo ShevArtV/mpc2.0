@@ -616,6 +616,59 @@ class PlaceholderProcessorTest extends TestCase
         $this->assertStringNotContainsString('| lexicon', $result);
     }
 
+    public function testBareFieldInsideItemThrowsClearError(): void
+    {
+        // Регресс: bare `data-mpc-field` внутри `data-mpc-item` (надо
+        // `data-mpc-field-1`) раньше валился непрозрачным DiDom TypeError
+        // (`hasAttribute must be of type bool, null returned`) на части PHP.
+        // Теперь — понятная ошибка ДО обработки полей.
+        $proc = $this->makeProcessor();
+        $html = '<section data-mpc-section="t">'
+            . '<div data-mpc-field="cards">'
+            .   '<div data-mpc-item="cards">'
+            .     '<h3 data-mpc-field="card_title">x</h3>'
+            .   '</div>'
+            . '</div>'
+            . '</section>';
+
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('data-mpc-field-1');
+
+        $proc->setPlaceholders([
+            'html'          => $html,
+            'element'       => (new Document($html))->find('[data-mpc-section]')[0],
+            'fieldAttrName' => 'data-mpc-field',
+            'itemAttrName'  => 'data-mpc-item',
+            'level'         => 0,
+            'isStatic'      => false,
+        ]);
+    }
+
+    public function testCorrectlyNumberedFieldInsideItemDoesNotThrow(): void
+    {
+        // Контроль: правильная вёрстка (`data-mpc-field-1` внутри
+        // `data-mpc-item`) не триггерит валидацию.
+        $proc = $this->makeProcessor();
+        $html = '<section data-mpc-section="t">'
+            . '<div data-mpc-field="cards">'
+            .   '<div data-mpc-item="cards">'
+            .     '<h3 data-mpc-field-1="card_title">x</h3>'
+            .   '</div>'
+            . '</div>'
+            . '</section>';
+
+        $result = $proc->setPlaceholders([
+            'html'          => $html,
+            'element'       => (new Document($html))->find('[data-mpc-section]')[0],
+            'fieldAttrName' => 'data-mpc-field',
+            'itemAttrName'  => 'data-mpc-item',
+            'level'         => 0,
+            'isStatic'      => false,
+        ])['html'];
+
+        $this->assertStringContainsString('{$item1.card_title}', $result);
+    }
+
     public function testSetPlaceholdersDoesNotLeakParentFieldNameBetweenSiblings(): void
     {
         // Регрессионный кейс: после обработки одного top-level item-фольда

@@ -43,6 +43,8 @@ class PlaceholderProcessor
         $fieldAttrName = $properties['level'] ? $properties['fieldAttrName'] . '-' . $properties['level'] : $properties['fieldAttrName'];
         $itemAttrName = $properties['level'] ? $properties['itemAttrName'] . '-' . $properties['level'] : $properties['itemAttrName'];
 
+        $this->assertNoMisplacedFields($properties['html'], $fieldAttrName, $itemAttrName, $properties);
+
         $fields = $this->findByAttr($properties['html'], '[' . $fieldAttrName . ']');
         if (!$fields) {
             return $properties;
@@ -68,7 +70,7 @@ class PlaceholderProcessor
                 // (`data-mpc-item`) границей не считается: list_images внутри
                 // элемента списка — легитимный кейс.
                 $parentNode = $this->getParentNode($field, $fieldAttrName);
-                if ($parentNode instanceof Element && $parentNode->hasAttribute($fieldAttrName)) {
+                if ($parentNode instanceof Element && $this->elementHasAttribute($parentNode, $fieldAttrName)) {
                     continue;
                 }
                 // Индекс элемента списка кодируется в имени как [$k]. Префикс
@@ -684,17 +686,77 @@ class PlaceholderProcessor
         return count($items) ? $items : null;
     }
 
+    /**
+     * Проверяет, что внутри элементов списка (`data-mpc-item[-N]`) поля несут
+     * атрибут уровня вложенности (`data-mpc-field-{N+1}`), а не родительский
+     * `data-mpc-field[-N]`.
+     *
+     * Зачем: bare `data-mpc-field` внутри `data-mpc-item` — частая ошибка
+     * вёрстки. На грабере это даёт плоские ключи + пустой список, а на каттере
+     * валится непрозрачным `DiDom\Element::hasAttribute() must be of type bool,
+     * null returned` (libxml на части PHP отдаёт null для node такого
+     * перемещённого элемента) в `setPlaceholders`. Детект делаем CSS-селектором
+     * `[item] [field]` (XPath, без хрупкого hasAttribute), имя поля достаём из
+     * сериализованного HTML регуляркой (getAttribute на проблемном node тоже
+     * мог бы вернуть null). Кидаем понятную ошибку ДО обработки полей.
+     */
+    private function assertNoMisplacedFields(string $html, string $fieldAttrName, string $itemAttrName, array $properties): void
+    {
+        if (empty($html)) {
+            return;
+        }
+        $offenders = $this->findByAttr($html, '[' . $itemAttrName . '] [' . $fieldAttrName . ']');
+        if (!$offenders) {
+            return;
+        }
+
+        $names = [];
+        foreach ($offenders as $el) {
+            $chunk = $this->parser->getHTMLString($el);
+            if (preg_match('/' . preg_quote($fieldAttrName, '/') . '="([^"]*)"/', $chunk, $m)) {
+                $names[] = $m[1];
+            }
+        }
+        $names = array_values(array_unique(array_filter($names)));
+
+        $expected = $properties['fieldAttrName'] . '-' . ($properties['level'] + 1);
+        throw new \RuntimeException(sprintf(
+            'MPC-разметка: внутри `%s` поля используют `%s`%s — поля элемента списка должны нести `%s`. Замените `%s` на `%s`.',
+            $itemAttrName,
+            $fieldAttrName,
+            $names ? ' (поля: ' . implode(', ', $names) . ')' : '',
+            $expected,
+            $fieldAttrName,
+            $expected
+        ));
+    }
+
     private function getParentNode($node, string $attrName)
     {
-        if ($node->parent() instanceof Document) {
-            return $node->parent();
+        // parent() → Element|Document|null. Не-Element (Document или конец
+        // дерева) — выше осмысленного родителя нет, отдаём как есть; вызывающий
+        // код проверяет `instanceof Element`. Раньше при parent()===null был бы
+        // фатал на ->hasAttribute(), а на «перемещённом» libxml-node
+        // hasAttribute мог вернуть null → TypeError в DiDom-обёртке.
+        $parent = $node->parent();
+        if (!$parent instanceof Element) {
+            return $parent;
         }
-        if ($node->parent()->hasAttribute($attrName)) {
-            return $node->parent();
+        if ($this->elementHasAttribute($parent, $attrName)
+            || $this->elementHasAttribute($parent, 'data-mpc-section')) {
+            return $parent;
         }
-        if ($node->parent()->hasAttribute('data-mpc-section')) {
-            return $node->parent();
-        }
-        return $this->getParentNode($node->parent(), $attrName);
+        return $this->getParentNode($parent, $attrName);
+    }
+
+    /**
+     * Безопасная проверка наличия атрибута: гард по DOMElement + приведение к
+     * bool. На части PHP/libxml `DOMElement::hasAttribute()` для проблемных node
+     * возвращает null, из-за чего DiDom-обёртка с `: bool` бросала TypeError.
+     */
+    private function elementHasAttribute(Element $el, string $name): bool
+    {
+        $node = $el->getNode();
+        return $node instanceof \DOMElement && (bool) $node->hasAttribute($name);
     }
 }

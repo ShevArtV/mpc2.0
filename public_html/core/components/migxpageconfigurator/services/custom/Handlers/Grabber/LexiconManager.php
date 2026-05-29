@@ -318,8 +318,20 @@ class LexiconManager
     /**
      * Проверяет, попадает ли имя поля под список исключений.
      * Каждая запись в excludeLexiconFields трактуется как:
-     *  - точное имя (`picture`), если не содержит `*` или `?`;
-     *  - glob-паттерн (`img*`, `*_picture`, `hero_*_img`), иначе.
+     *  - точное имя (`picture`), если не содержит `*`, `?` или `[`;
+     *  - glob-паттерн (`img*`, `*_picture`, `hero_*_img`), если есть `*`/`?`
+     *    и нет `[`;
+     *  - числовой паттерн с `[...]`-токенами, если есть `[` (см.
+     *    {@see matchNumericPattern}). Каждый `[...]` матчит ОДНО целое число
+     *    в этой позиции имени:
+     *      - список:   `[6,8,10]`        — число из перечисления;
+     *      - диапазон: `[6-10]`          — включительно;
+     *      - nth:      `[2n]`, `[2n+1]`, `[3n-1]`, `[n]` — `a*k+b`, k≥0, a≥1.
+     *    Литералы и `*`/`?` вокруг токенов работают как glob. Пример:
+     *    `table_list_triple_[2n+1]_subtitle_1` исключит row с нечётным idx.
+     *    Числа в ключе появляются на grabber-стороне (полный lex-ключ с `_idx`),
+     *    поэтому row-специфичные паттерны действуют там; на cutter-стороне
+     *    (без idx) такой паттерн просто не сматчится.
      */
     private function isFieldExcluded(string $name): bool
     {
@@ -337,8 +349,12 @@ class LexiconManager
                 continue;
             }
 
-            $isPattern = strpbrk($pattern, '*?') !== false;
-            $matches   = $isPattern ? fnmatch($pattern, $name) : $pattern === $name;
+            if (strpos($pattern, '[') !== false) {
+                $matches = $this->matchNumericPattern($pattern, $name);
+            } else {
+                $isGlob  = strpbrk($pattern, '*?') !== false;
+                $matches = $isGlob ? fnmatch($pattern, $name) : $pattern === $name;
+            }
 
             if ($matches) {
                 return true;
@@ -346,5 +362,130 @@ class LexiconManager
         }
 
         return false;
+    }
+
+    /**
+     * Матчит имя против паттерна с `[...]`-токенами (числовые списки/диапазоны/
+     * nth) и опциональными glob-символами в литеральных частях.
+     *
+     * Подход: компилируем паттерн в regex (литералы экранируем, `*`→`.*`,
+     * `?`→`.`, каждый распознанный `[...]`→`(\d+)`) и параллельно копим
+     * предикаты на числа. Затем `preg_match` + проверка каждого захваченного
+     * числа своим предикатом. Нераспознанный `[...]` трактуется буквально.
+     */
+    private function matchNumericPattern(string $pattern, string $name): bool
+    {
+        $regex      = '';
+        $predicates = [];
+        $offset     = 0;
+        $len        = strlen($pattern);
+
+        while ($offset < $len) {
+            $open = strpos($pattern, '[', $offset);
+            if ($open === false) {
+                $regex .= $this->globLiteralToRegex(substr($pattern, $offset));
+                break;
+            }
+            $close = strpos($pattern, ']', $open);
+            if ($close === false) {
+                $regex .= $this->globLiteralToRegex(substr($pattern, $offset));
+                break;
+            }
+
+            $regex .= $this->globLiteralToRegex(substr($pattern, $offset, $open - $offset));
+
+            $token     = substr($pattern, $open + 1, $close - $open - 1);
+            $predicate = $this->compileNumericToken($token);
+            if ($predicate === null) {
+                // не распознали — кладём [..] как литерал/glob
+                $regex .= $this->globLiteralToRegex(substr($pattern, $open, $close - $open + 1));
+            } else {
+                $regex       .= '(\d+)';
+                $predicates[] = $predicate;
+            }
+
+            $offset = $close + 1;
+        }
+
+        if (!preg_match('/^' . $regex . '$/', $name, $m)) {
+            return false;
+        }
+
+        foreach ($predicates as $i => $predicate) {
+            if (!$predicate((int) $m[$i + 1])) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * Экранирует литерал под regex, сохраняя glob-семантику `*`/`?`.
+     */
+    private function globLiteralToRegex(string $literal): string
+    {
+        $out = '';
+        $len = strlen($literal);
+        for ($i = 0; $i < $len; $i++) {
+            $ch = $literal[$i];
+            if ($ch === '*') {
+                $out .= '.*';
+            } elseif ($ch === '?') {
+                $out .= '.';
+            } else {
+                $out .= preg_quote($ch, '/');
+            }
+        }
+        return $out;
+    }
+
+    /**
+     * Парсит содержимое `[...]`-токена в предикат на целое число.
+     * Возвращает `callable(int): bool` или `null`, если синтаксис не распознан.
+     */
+    private function compileNumericToken(string $token): ?callable
+    {
+        $token = trim($token);
+        if ($token === '') {
+            return null;
+        }
+
+        // Список: 6,8,10
+        if (strpos($token, ',') !== false && preg_match('/^\d+(\s*,\s*\d+)*$/', $token)) {
+            $set = array_flip(array_map('intval', array_map('trim', explode(',', $token))));
+            return static fn(int $x): bool => isset($set[$x]);
+        }
+
+        // Диапазон: 6-10 (включительно)
+        if (preg_match('/^(\d+)\s*-\s*(\d+)$/', $token, $mm)) {
+            $from = (int) $mm[1];
+            $to   = (int) $mm[2];
+            if ($from > $to) {
+                [$from, $to] = [$to, $from];
+            }
+            return static fn(int $x): bool => $x >= $from && $x <= $to;
+        }
+
+        // nth: an+b / an-b / an / n+b / n  (a≥1, b — целое). a*k+b при k≥0.
+        if (preg_match('/^(\d*)n\s*([+-]\s*\d+)?$/', $token, $mm)) {
+            $a = ($mm[1] === '') ? 1 : (int) $mm[1];
+            $b = (isset($mm[2]) && $mm[2] !== '') ? (int) str_replace(' ', '', $mm[2]) : 0;
+            if ($a === 0) {
+                return static fn(int $x): bool => $x === $b;
+            }
+            return static function (int $x) use ($a, $b): bool {
+                $k = $x - $b;
+                return $k >= 0 && $k % $a === 0;
+            };
+        }
+
+        // Одиночное число: [6]
+        if (preg_match('/^\d+$/', $token)) {
+            $val = (int) $token;
+            return static fn(int $x): bool => $x === $val;
+        }
+
+        return null;
     }
 }
