@@ -704,4 +704,48 @@ class LexiconManagerTest extends TestCase
         $this->assertFalse($m->shouldLexiconize('text', 'hero_picture', ''));
         $this->assertTrue($m->shouldLexiconize('text', 'title', ''));
     }
+
+    // ---------------------------------------------------------------
+    // excludeLexiconFields — опциональные regex-литералы (гибрид)
+    // ---------------------------------------------------------------
+
+    public function testRegexLiteralExcludes(): void
+    {
+        $m = $this->makeNumericManager(['/^cards_\d+_title$/']);
+        $this->assertFalse($m->shouldLexiconize('text', 'cards_5_title', ''));
+        $this->assertTrue($m->shouldLexiconize('text', 'cards_5_subtitle', ''));
+    }
+
+    public function testRegexLiteralWithFlags(): void
+    {
+        $m = $this->makeNumericManager(['~^hero~i']);
+        $this->assertFalse($m->shouldLexiconize('text', 'HERO_title', ''));
+        $this->assertFalse($m->shouldLexiconize('text', 'hero_title', ''));
+        $this->assertTrue($m->shouldLexiconize('text', 'about_title', ''));
+    }
+
+    public function testRegexLiteralWithCharClassNotRoutedToNumeric(): void
+    {
+        // regex с `[...]` (char-class) идёт по regex-ветке, не по числовой
+        $m = $this->makeNumericManager(['/^cards_[0-9]+$/']);
+        $this->assertFalse($m->shouldLexiconize('text', 'cards_3', ''));
+        $this->assertTrue($m->shouldLexiconize('text', 'cards_x', ''));
+    }
+
+    public function testInvalidRegexDoesNotMatchOrThrow(): void
+    {
+        // невалидный regex → не исключает и не роняет
+        $m = $this->makeNumericManager(['/^cards_(/']);
+        $this->assertTrue($m->shouldLexiconize('text', 'cards_5', ''));
+    }
+
+    public function testGlobNotMistakenForRegex(): void
+    {
+        // регресс: glob/числовые/имена НЕ трактуются как regex
+        $m = $this->makeNumericManager(['*_picture', 'cards_[2n]', 'MIGX_id']);
+        $this->assertFalse($m->shouldLexiconize('text', 'hero_picture', ''));
+        $this->assertFalse($m->shouldLexiconize('text', 'cards_4', ''));
+        $this->assertFalse($m->shouldLexiconize('text', 'MIGX_id', ''));
+        $this->assertTrue($m->shouldLexiconize('text', 'title', ''));
+    }
 }

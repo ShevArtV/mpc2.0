@@ -318,6 +318,9 @@ class LexiconManager
     /**
      * Проверяет, попадает ли имя поля под список исключений.
      * Каждая запись в excludeLexiconFields трактуется как:
+     *  - regex-литерал, если обёрнут в разделители (`/^cards_\d+$/`, `~...~i`,
+     *    см. {@see looksLikeRegex}) — гоним `preg_match` напрямую; невалидный
+     *    паттерн = не матчит (тихо, чтобы не ронять сборку);
      *  - точное имя (`picture`), если не содержит `*`, `?` или `[`;
      *  - glob-паттерн (`img*`, `*_picture`, `hero_*_img`), если есть `*`/`?`
      *    и нет `[`;
@@ -349,7 +352,11 @@ class LexiconManager
                 continue;
             }
 
-            if (strpos($pattern, '[') !== false) {
+            if ($this->looksLikeRegex($pattern)) {
+                // невалидный regex → preg_match вернёт false + warning; @ глушит,
+                // трактуем как «не совпало» (запись просто не исключает).
+                $matches = @preg_match($pattern, $name) === 1;
+            } elseif (strpos($pattern, '[') !== false) {
                 $matches = $this->matchNumericPattern($pattern, $name);
             } else {
                 $isGlob  = strpbrk($pattern, '*?') !== false;
@@ -362,6 +369,25 @@ class LexiconManager
         }
 
         return false;
+    }
+
+    /**
+     * Похожа ли запись на regex-литерал: первый символ — небуквенно-цифровой
+     * разделитель (кроме `[`, `\`, пробела и glob-символов `*`/`?`) и тот же
+     * разделитель встречается дальше как закрывающий. Имена/glob/числовые
+     * паттерны (`MIGX_id`, `*_picture`, `cards_[2n]`) этому НЕ удовлетворяют
+     * (буква/цифра/`*`/`[` в начале), поэтому остаются на своих ветках.
+     */
+    private function looksLikeRegex(string $pattern): bool
+    {
+        if (strlen($pattern) < 2) {
+            return false;
+        }
+        $delim = $pattern[0];
+        if (ctype_alnum($delim) || strpbrk($delim, "*?[\\ ") !== false) {
+            return false;
+        }
+        return strrpos($pattern, $delim) > 0;
     }
 
     /**
