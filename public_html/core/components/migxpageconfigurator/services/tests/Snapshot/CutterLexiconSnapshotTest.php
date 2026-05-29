@@ -109,6 +109,31 @@ class CutterLexiconSnapshotTest extends TestCase
         $this->assertStringContainsString("##'{\$disclaimer}' | lexicon}", $tpl);
     }
 
+    /**
+     * Регресс: статик-секция, используемая и как НЕ-статик, с лексиконами.
+     * Статик-вариант `##'{$title}' | lexicon}` опирается на eager-интерполяцию
+     * кавычек; `convertStaticToUnstatic` должен снять кавычки → `{$title | lexicon}`
+     * (а не `{'$title' | lexicon}`, где Fenom видит литерал `$title` и `| lexicon`
+     * получает строку "$title" вместо значения ключа → пусто).
+     */
+    public function testUnstaticVariantLexiconUnquotesVariable(): void
+    {
+        $cutter = new Cutter($this->modx, $this->makeBaseProperties());
+        $this->assertTrue($cutter->handle('lexicon_static.html')['success']);
+
+        $static   = file_get_contents($this->outputDir . '/sections/promostatic.tpl');
+        $unstatic = file_get_contents($this->outputDir . '/sections/promostatic_unstatic.tpl');
+
+        // static — как раньше (кавычки + eager-интерполяция)
+        $this->assertStringContainsString("##'{\$title}' | lexicon}", $static);
+
+        // unstatic — переменная вычисляется, без кавычек-литерала
+        $this->assertStringContainsString('{$title | lexicon}', $unstatic);
+        $this->assertStringNotContainsString("{'\$title' | lexicon}", $unstatic);
+        // вложенное поле списка остаётся корректным
+        $this->assertStringContainsString('{$item1.content | lexicon}', $unstatic);
+    }
+
     private function clearDir(string $dir): void
     {
         if (!is_dir($dir)) {
