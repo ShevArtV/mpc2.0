@@ -29,7 +29,11 @@ if ($config) {
                         $section[$k] = $Mpc->render->jsonDecodeValue(json_decode($v, 1));
                     }
                 }
-                return $section;
+                // Каскад настроек/стилей: отложенные поля static-секции резолвятся
+                // здесь, поэтому ресурсные значения накладываем именно сейчас,
+                // иначе они перетираются статикой из staticBlocksPage.
+                $rid = $modx->resource instanceof \modResource ? (int)$modx->resource->get('id') : 0;
+                return $Mpc->render->applyResourceCascade($section, $rid);
             }
         }
     }

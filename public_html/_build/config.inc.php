@@ -16,7 +16,7 @@ if (!defined('PKG_NAME')) {
 return [
     'name' => 'MigxPageConfigurator',
     'name_lower' => 'migxpageconfigurator',
-    'version' => '2.4.9',
+    'version' => '2.4.10',
     'release' => 'rc',
     // Install package to site right after build
     'install' => false,

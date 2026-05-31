@@ -49,6 +49,13 @@ class Render extends Base
         $this->pdo->config['elementsPath'] = str_replace('\\', '/', $this->pdo->config['elementsPath']);
     }
 
+    /**
+     * Индекс контентного таба в формтабсе конфигуратора. По соглашению нарезки
+     * (SectionProcessor пишет data-mpc-field в defaultFormTabs[1]) контент всегда
+     * лежит в табе [1]; прочие табы («Настройки», «Стили» и кастомные) — каскадные.
+     */
+    private const CONTENT_TAB_INDEX = 1;
+
     /** @var bool edit-mode рендер (mpcVE) — берёт _edit-чанки, собирает в память */
     private bool $editMode = false;
 
@@ -319,6 +326,8 @@ class Render extends Base
             }
         }
 
+        $cascadeFields = $this->getCascadeFieldsMap();
+
         $sectionsHtml = [];
         $i = 1;
         foreach ($sections as $section) {
@@ -328,7 +337,15 @@ class Render extends Base
             }
 
             if ($section['is_static'] && $staticConfig[$section['section_name']]) {
-                $section = $staticConfig[$section['section_name']];
+                // Контент static-секции — из staticBlocksPage; настройки/стили
+                // (каскадные поля) — из ресурсного конфига с наследованием.
+                // Покрывает eager-поля, запекаемые parseChunk на рендере;
+                // отложенные (## → getStaticSection) каскадятся в самом сниппете.
+                $section = $this->applyCascadeOverrides(
+                    $staticConfig[$section['section_name']],
+                    $section,
+                    $cascadeFields
+                );
             }
             $section['contacts'] = $this->contacts;
             $section['rid'] = $resourceData['id']; // передаем на страницу id текущего ресурса
@@ -413,6 +430,117 @@ class Render extends Base
             }
         }
         return $result;
+    }
+
+    /**
+     * Множество имён каскадных полей (настройки/стили) — все поля табов
+     * конфигуратора, КРОМЕ контентного (self::CONTENT_TAB_INDEX). Берём из
+     * ЖИВОГО конфига mpc_base в БД, а не из сида: на сайте в табы «Настройки»/
+     * «Стили» могли добавить свои поля. Для static-секции контент идёт из
+     * staticBlocksPage, а каскадные поля — из ресурсного конфига, что и
+     * позволяет менять отображение одних и тех же данных per-resource/type.
+     *
+     * Пустой результат (нет конфига/формтабса) → merge-split вырождается в
+     * прежнее поведение (полная замена статикой) — безопасный фоллбэк.
+     *
+     * @return array<string,true> ключ => true для быстрой проверки isset()
+     */
+    public function getCascadeFieldsMap(): array
+    {
+        // Кешируем на запрос: getStaticSection создаёт new Mpc на каждую секцию,
+        // поэтому кеш функционально-статический (переживает разные экземпляры).
+        static $cache = null;
+        if ($cache !== null) {
+            return $cache;
+        }
+        // migxConfig — из пакета migx (Base его не регистрирует, в отличие от Grabber).
+        $this->modx->addPackage('migx', $this->properties['corePath'] . 'components/migx/model/');
+
+        $map = [];
+        if (!$base = $this->modx->getObject('migxConfig', ['name' => $this->properties['baseSectionName']])) {
+            return $cache = $map;
+        }
+        $tabs = json_decode((string)$base->get('formtabs'), true);
+        if (!is_array($tabs)) {
+            return $cache = $map;
+        }
+        foreach ($tabs as $idx => $tab) {
+            if ((int)$idx === self::CONTENT_TAB_INDEX) {
+                continue; // контентный таб → значения из staticBlocksPage
+            }
+            foreach ($tab['fields'] ?? [] as $field) {
+                if (!empty($field['field'])) {
+                    $map[$field['field']] = true;
+                }
+            }
+        }
+        return $cache = $map;
+    }
+
+    /**
+     * Накладывает каскадные поля (настройки/стили) из секции-источника
+     * (ресурс/тип) на статичный контент с наследованием: значение источника
+     * перекрывает статику только если задано (пусто/отсутствует → статика).
+     * Работает и для строковых, и для массивных полей (передаём как есть).
+     *
+     * @param array $staticSection статичный контент (из staticBlocksPage)
+     * @param array $sourceSection секция-источник каскада (ресурс/тип)
+     * @param array<string,true> $cascadeFields карта каскадных полей
+     * @return array
+     */
+    public function applyCascadeOverrides(array $staticSection, array $sourceSection, array $cascadeFields): array
+    {
+        $overrides = [];
+        foreach ($cascadeFields as $field => $_) {
+            if (isset($sourceSection[$field]) && $sourceSection[$field] !== '' && $sourceSection[$field] !== null) {
+                $overrides[$field] = $sourceSection[$field];
+            }
+        }
+        return array_merge($staticSection, $overrides);
+    }
+
+    /**
+     * Каскад настроек/стилей для static-секции на ЭТАПЕ РЕНДЕРА ФРОНТА
+     * (вызывается из сниппета getStaticSection): отложенные поля static-секции
+     * резолвятся на фронте через getStaticSection, поэтому каскад нужно
+     * применить именно там, иначе ресурсные стили перетираются статикой.
+     * Приоритет как в parseConfig: тип — база, ресурс перекрывает.
+     *
+     * @param array $staticSection секция из staticBlocksPage
+     * @param int $resourceId id текущего ресурса
+     * @return array
+     */
+    public function applyResourceCascade(array $staticSection, int $resourceId): array
+    {
+        $key = $staticSection['section_name'] ?? '';
+        if (!$key || !$resourceId) {
+            return $staticSection;
+        }
+
+        // Кеш конфигов по ресурсу (тот же мотив, что и в getCascadeFieldsMap).
+        static $sourceCache = [];
+        if (!array_key_exists($resourceId, $sourceCache)) {
+            $sourceCache[$resourceId] = [];
+            if ($resource = $this->modx->getObject('modResource', $resourceId)) {
+                $resourceConfig = $this->reformatConfig(json_decode((string)$resource->getTVValue($this->properties['commonConfigTvName']), true));
+                $typeConfig = [];
+                if ($type = $this->getTypeResource($resource->get('template'))) {
+                    $typeConfig = $this->reformatConfig(json_decode((string)$type->getTVValue($this->properties['commonConfigTvName']), true));
+                }
+                // тип — база, ресурс перекрывает (как $sections в parseConfig)
+                foreach ($resourceConfig as $k => $sec) {
+                    $sourceCache[$resourceId][$k] = array_merge($typeConfig[$k] ?? [], $sec);
+                }
+                foreach ($typeConfig as $k => $sec) {
+                    $sourceCache[$resourceId][$k] = $sourceCache[$resourceId][$k] ?? $sec;
+                }
+            }
+        }
+
+        if (empty($sourceCache[$resourceId][$key])) {
+            return $staticSection;
+        }
+        return $this->applyCascadeOverrides($staticSection, $sourceCache[$resourceId][$key], $this->getCascadeFieldsMap());
     }
 
     /**
