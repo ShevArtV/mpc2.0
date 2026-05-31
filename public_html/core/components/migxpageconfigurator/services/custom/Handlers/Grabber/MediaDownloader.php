@@ -132,11 +132,11 @@ class MediaDownloader
      */
     public function downloadFile(string $attrValue, string $type = 'others', string $language = ''): string
     {
-        $extension = $this->checkDownloadExtension($attrValue)
-            ?: $this->detectExtensionByContentType($attrValue);
-        if (!$extension) {
-            return $attrValue;
-        }
+        // Расширение из URL (без сети). HTTP-HEAD (detectExtensionByContentType)
+        // НЕ дёргаем сразу: для внешних URL без расширения (loremflickr и т.п.)
+        // это сетевой запрос на КАЖДОЕ медиа при КАЖДОМ грабе, даже если файл уже
+        // скачан. Сначала пробуем найти уже скачанный файл локально.
+        $extension = $this->checkDownloadExtension($attrValue);
 
         $source = $this->getMediaSource();
         if (!$source) {
@@ -168,14 +168,31 @@ class MediaDownloader
         $fileName = isset($this->modx->event->returnedValues) && !empty($this->modx->event->returnedValues['fileName'])
             ? $this->modx->event->returnedValues['fileName'] : $fileName;
 
-        $fileName = $this->sanitizeFileName($fileName) . '.' . $extension;
-        $objectPath = $dir . $fileName;
+        $base    = $this->sanitizeFileName($fileName);
+        $baseAbs = rtrim((string)$source->getBasePath(), '/') . '/' . ltrim($dir, '/');
 
-        // Уже есть (filesystem) — отдать URL без повторной загрузки.
-        $abs = rtrim((string)$source->getBasePath(), '/') . '/' . ltrim($objectPath, '/');
-        if (is_file($abs)) {
-            return $source->getObjectUrl($objectPath) ?: $attrValue;
+        // Уже скачан? Проверяем по basename — с известным расширением (из URL) или
+        // перебирая разрешённые (для URL без расширения), БЕЗ сетевого HEAD.
+        $exts = $extension !== ''
+            ? [$extension]
+            : array_filter(array_map('trim', (array)($this->properties['downloadExtensions'] ?? [])));
+        foreach ($exts as $ext) {
+            if ($ext !== '' && is_file($baseAbs . $base . '.' . $ext)) {
+                return $source->getObjectUrl($dir . $base . '.' . $ext) ?: $attrValue;
+            }
         }
+
+        // Локально нет → теперь (и только теперь) определяем расширение по типу
+        // содержимого (HTTP-HEAD), если в URL его не было, и скачиваем.
+        if ($extension === '') {
+            $extension = $this->detectExtensionByContentType($attrValue);
+        }
+        if (!$extension) {
+            return $attrValue;
+        }
+
+        $fileName   = $base . '.' . $extension;
+        $objectPath = $dir . $fileName;
 
         $content = $this->fetch($attrValue);
         if ($content === '') {

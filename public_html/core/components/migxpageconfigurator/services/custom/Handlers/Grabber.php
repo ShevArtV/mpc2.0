@@ -165,6 +165,20 @@ class Grabber extends Base
         );
     }
 
+    /**
+     * Явно нацелить грабер на ресурс — носитель mpc_config (текущая страница).
+     * Нужно для grab-from-HTML (визуальный редактор): edit-mode HTML не несёт
+     * authoring-маркер `<!--##…##-->`, поэтому handleTemplate не переключит
+     * ресурс, и его надо задать руками. Прокидываем в подхэндлеры, как это
+     * делает handle() в ветке смены типа.
+     */
+    public function setTargetResource(\modResource $resource): void
+    {
+        $this->properties['resource'] = $resource;
+        $this->lexiconManager->updateProperties(['resource' => $resource]);
+        $this->sectionProcessor->properties['resource'] = $resource;
+    }
+
     // -----------------------------------------------------------------------
     // Публичные прокси-методы (обратная совместимость)
     // -----------------------------------------------------------------------

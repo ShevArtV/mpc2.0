@@ -3,12 +3,11 @@
  * Фронт-коннектор mpcVisualEditor.
  * Бутстрапит MODX (web-контекст) и делегирует запрос в MpcVEServices\Connector.
  *
- * ВАЖНО (проверить на сайте): аутентификация mgr-пользователя на web-контексте
- * для проверки прав. Возможно потребуется initialize('mgr') либо общая сессия
- * между контекстами. Помечено для M7.
+ * Сессию НЕ стартуем вручную: session_handler_class=modSessionHandler (БД), и
+ * MODX регистрирует свой хендлер в initialize()->_initSession() ПЕРЕД startSession.
+ * Ручной session_start() до этого запускал файловую сессию (пустую) → юзер аноним.
+ * initialize('web') поднимает ту же БД-сессию, что и страница → mgr-юзер виден.
  */
-
-@session_start();
 
 require_once dirname(dirname(dirname(__DIR__))) . '/config.core.php';
 require_once MODX_CORE_PATH . 'model/modx/modx.class.php';

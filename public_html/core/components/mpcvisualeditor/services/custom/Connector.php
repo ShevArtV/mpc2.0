@@ -35,11 +35,19 @@ class Connector
 
         $action = (string)($request['action'] ?? '');
         switch ($action) {
+            case 'fields/types':
+                // Карта field→тип редактора из mpc_base (вариант B).
+                return (new Handlers\FieldTypesHandler($this->modx, $this->mpcve))->handle($request);
+            case 'page/save':
+                // ВРЕМЕННО ОТКЛЮЧЕНО: ре-граб всего отрендеренного DOM деструктивен
+                // (рендер = склейка тип+ресурс + caттер-трансформы lazyload/fake-img),
+                // он перезаписывал конфиг ресурса мусором. Переходим на пер-полевое
+                // сохранение. До его готовности — экшен ничего не пишет.
+                return $this->error('Сохранение временно отключено (переход на пер-полевое).');
             case 'field/save':
+                // Легаси точечной записи (rfield/tv/config) — оставлено для совместимости.
                 return (new Handlers\FieldSaveHandler($this->modx, $this->mpcve))->handle($request);
-            // TODO M7 (далее):
-            // case 'row/save':    return (new Handlers\RowSaveHandler($this->modx, $this->mpcve))->handle($request);
-            // case 'image/upload':return (new Handlers\ImageUploadHandler($this->modx, $this->mpcve))->handle($request);
+            // TODO: case 'image/upload' — загрузка через источник mpcMedia.
             default:
                 return $this->error('Unknown or not-yet-implemented action: ' . $action);
         }

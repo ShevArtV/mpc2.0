@@ -20,6 +20,12 @@
     font-weight: 600;
 }
 
+.mpcve-toolbar__hint {
+    color: #9aa3b2;
+    font-size: 12px;
+    margin-right: auto;
+}
+
 .mpcve-toolbar button {
     cursor: pointer;
     padding: 5px 12px;
@@ -35,24 +41,71 @@
     cursor: default;
 }
 
+.mpcve-toolbar button.mpcve-btn--on {
+    background: #16a34a;
+}
+
 body.mpcve-active {
     padding-top: 44px;
 }
 
-/* Подсветка редактируемых полей */
+/* Подсветка редактируемых полей + аффорданс по типу */
 .mpcve-editable {
-    outline: 1px dashed rgba(59, 130, 246, .6);
+    position: relative;
+    cursor: pointer;
+    outline: 1px dashed rgba(59, 130, 246, .55);
     outline-offset: 2px;
     transition: outline-color .15s ease;
 }
 
 .mpcve-editable:hover {
-    outline-color: #3b82f6;
-    cursor: text;
+    outline: 2px solid #3b82f6;
 }
 
-.mpcve-editable--media:hover {
-    cursor: pointer;
+/* бейдж-подсказка типа редактора в углу поля при ховере */
+.mpcve-editable:hover::after {
+    content: "\270E"; /* ✎ текст по умолчанию */
+    position: absolute;
+    top: -11px;
+    left: -11px;
+    z-index: 99998;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    font: 12px/1 -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    color: #fff;
+    background: #3b82f6;
+    border-radius: 50%;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, .3);
+    pointer-events: none;
+}
+
+.mpcve-editable[data-mpcve-type="image"]:hover::after { content: "\1F5BC"; } /* 🖼 */
+.mpcve-editable[data-mpcve-type="media"]:hover::after { content: "\25B6"; }  /* ▶ */
+.mpcve-editable[data-mpcve-type="rows"]:hover::after  { content: "\2630"; }  /* ☰ */
+
+/* активное редактирование */
+.mpcve-editing {
+    outline: 2px solid #16a34a !important;
+    background: rgba(22, 163, 74, .06);
+    cursor: text;
+    caret-color: #16a34a;
+}
+
+.mpcve-editing,
+.mpcve-editing * {
+    caret-color: #16a34a;
+}
+
+.mpcve-editing ::selection,
+.mpcve-editing::selection {
+    background: rgba(22, 163, 74, .28);
+}
+
+.mpcve-editing:hover::after {
+    display: none !important;
 }
 
 .mpcve-toast {

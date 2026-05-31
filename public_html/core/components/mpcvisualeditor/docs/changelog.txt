@@ -14,3 +14,12 @@
   - экшен коннектора `field/save` → `Handlers\FieldSaveHandler` → `Mpcve::writeField` → mpc `FieldWriter` (M4);
   - принимает address (JSON) + value, resourceId из адреса/запроса; типы rfield/tv сохраняются, type=field вернёт «not implemented» до M2;
   - фронт-редакторы, вызывающие `field/save` (TextEditor и пр.), — M8. RowSave/ImageUpload-хендлеры — далее.
+- [M8, срез] Рабочее редактирование текста + диспетчер по типу поля:
+  - тулбар доступен авторизованному ВСЕГДА (плагин inject-only, не подменяет контент); тумблер режима (cookie `mpcve_editing`) с перезагрузкой — тулбар не пропадает;
+  - редактор диспатчится по ТИПУ поля: экшен `fields/types` (`FieldTypesHandler`) отдаёт карту `field→тип` из живого `mpc_base` (text/richtext/image/media/rows); text/richtext реализованы, image/media/rows — заглушки;
+  - text-редактор inline (`contenteditable`, Enter/уход — коммит, Esc — отмена, выделение всего поля), аффорданс по типу (рамка/бейдж);
+  - сохранение ПЕР-ПОЛЕВОЕ: коммит → `field/save` → `FieldWriter` (static→sbp/global, иначе ресурс; вложенные поля строк списка — `parentField`+`idx`). Whole-DOM `page/save` оказался деструктивным (рендер = склейка тип+ресурс + lazyload/fake-img) — отключён.
+  - плагин `OnWebPagePrerender` переведён в inject-only: маркеры берутся из ШТАТНОГО рендера (mpc keep-markers), lazyload/expand-скрипты сохраняются; edit-mode больше не расходится с прод-рендером.
+  - фикс прав на сохранение: убран ручной `session_start()` в коннекторе (ломал mgr-сессию на web-контексте при `session_handler_class=modSessionHandler`/БД) — `initialize('web')` поднимает ту же сессию.
+- Зависимость: mpc **2.4.11+** (keep-markers в каттере для edit-mode, точечная запись полей).
+- Ограничения (далее): редакторы image/media/rows; поля 2-го уровня вложенности (`data-mpc-field-2`, список-в-списке — `ConfigFieldWriter` пишет один уровень); списки с `limit/offset` (возможный сдвиг `idx`).

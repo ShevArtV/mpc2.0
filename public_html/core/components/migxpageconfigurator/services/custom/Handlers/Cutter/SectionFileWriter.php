@@ -246,13 +246,12 @@ class SectionFileWriter
             $htmlMarked = $this->placeholderProcessor->wrapInCondition($condition, $htmlMarked, $firstSymbol);
         }
 
-        file_put_contents($pathToFile, $properties['html']);
-
-        // _edit-вариант (маркеры целы) — только если включён edit-mode.
-        if (!empty($this->properties['editMode'])) {
-            $editPath = preg_replace('/(\.[^.\/]+)$/', '_edit$1', $pathToFile) ?: ($pathToFile . '_edit');
-            file_put_contents($editPath, $htmlMarked);
-        }
+        // Основной чанк: при mpc_edit_mode (editMode) НЕ режем data-mpc-* маркеры —
+        // edit-mode рендерится штатным путём (как прод) + маркеры, без отдельных
+        // _edit/_unstatic_edit вариантов (реальному пользователю атрибуты не мешают).
+        // На прод-деплое mpc_edit_mode=0 → перенарезка даёт чистые файлы.
+        // _unstatic генерится из ЭТОГО же файла (createSectionFiles) → тоже с маркерами.
+        file_put_contents($pathToFile, !empty($this->properties['editMode']) ? $htmlMarked : $properties['html']);
     }
 
     /**

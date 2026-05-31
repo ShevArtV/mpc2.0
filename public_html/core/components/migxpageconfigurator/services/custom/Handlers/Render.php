@@ -56,9 +56,6 @@ class Render extends Base
      */
     private const CONTENT_TAB_INDEX = 1;
 
-    /** @var bool edit-mode рендер (mpcVE) — берёт _edit-чанки, собирает в память */
-    private bool $editMode = false;
-
     /**
      * @param array $resourceData
      * @return bool
@@ -67,28 +64,6 @@ class Render extends Base
     {
         $resourceData = $this->prepareResourceData($resourceData);
         return !empty($resourceData['sections']) && $this->putToFile($resourceData);
-    }
-
-    /**
-     * Edit-mode рендер для mpcVE: собирает страницу В ПАМЯТИ из _edit-чанков
-     * (с сохранёнными data-mpc-* маркерами), без записи в parsed/. Возвращает
-     * готовый HTML — фронт-редактор по маркерам находит поля и их адреса.
-     * Прод-рендер (handle/putToFile) не затрагивается.
-     */
-    public function renderEditMode(array $resourceData): string
-    {
-        $this->editMode = true;
-        $resourceData = $this->prepareResourceData($resourceData);
-        if (empty($resourceData['sections'])) {
-            return '';
-        }
-        if ($this->wrapperTpl) {
-            $html = $this->pdo->parseChunk($this->wrapperTpl, $resourceData);
-            $html = str_replace('##', '{', $html);
-        } else {
-            $html = implode("\n", $resourceData['sections']);
-        }
-        return $html;
     }
 
     /**
@@ -374,18 +349,14 @@ class Render extends Base
             $sectionsDir = $this->properties['pdotoolsElementsPath'] . $this->properties['pathToSections'];
             $unstaticFilePath = $sectionsDir . $chunkBaseName . '_unstatic' . $this->properties['extension'];
 
-            // Если секция была статичной (есть _unstatic), но в данном ресурсе она нестатичная — берём _unstatic чанк
+            // Выбор варианта чанка по статичности (как в проде, и в edit-mode так же):
+            // не-статичная секция → _unstatic, иначе → base. Отдельных _edit-чанков
+            // больше нет — при mpc_edit_mode каттер не режет data-mpc-* в самих
+            // base/_unstatic чанках, поэтому edit-mode = штатный рендер + маркеры.
             if (!$section['is_static'] && file_exists($unstaticFilePath)) {
                 $chunkSuffix = $chunkBaseName . '_unstatic';
             } else {
                 $chunkSuffix = $chunkBaseName;
-            }
-            // edit-mode: берём _edit-чанк (data-mpc-* маркеры сохранены), если он есть
-            if ($this->editMode) {
-                $editFilePath = $sectionsDir . $chunkBaseName . '_edit' . $this->properties['extension'];
-                if (file_exists($editFilePath)) {
-                    $chunkSuffix = $chunkBaseName . '_edit';
-                }
             }
             $chunk = $this->properties['sectionChunkPrefix'] . $chunkSuffix . $this->properties['extension']; // получаем путь к чанку
 
@@ -395,17 +366,13 @@ class Render extends Base
             }
             $tmp = str_replace('##', '{', $tmp); // чтобы на фронте работал парсер pdoTools
 
-            // Только прод-рендер: в edit-mode (mpcVE) событие не дёргаем — плагин
-            // мог бы переписать HTML секции и сломать data-mpc-маркеры редактора.
-            if (!$this->editMode) {
-                $this->modx->invokeEvent('mpcOnGetSectionHtml', [
-                    'section' => $section,
-                    'html' => $tmp,
-                    'Render' => $this,
-                ]);
-                $tmp = isset($this->modx->event->returnedValues) && !empty($this->modx->event->returnedValues['html'])
-                    ? $this->modx->event->returnedValues['html'] : $tmp;
-            }
+            $this->modx->invokeEvent('mpcOnGetSectionHtml', [
+                'section' => $section,
+                'html' => $tmp,
+                'Render' => $this,
+            ]);
+            $tmp = isset($this->modx->event->returnedValues) && !empty($this->modx->event->returnedValues['html'])
+                ? $this->modx->event->returnedValues['html'] : $tmp;
 
             $sectionsHtml[] = $tmp;
             $i++;
