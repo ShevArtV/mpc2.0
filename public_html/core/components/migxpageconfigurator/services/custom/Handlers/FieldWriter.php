@@ -36,6 +36,14 @@ class FieldWriter
     /** ID ресурса со статичными блоками (база для template/global уровней). */
     private int $staticBlocksPageId;
 
+    /** Включены ли лексиконы (тогда поля хранят ключи, текст — в lexicon-файле). */
+    private bool $useLexicons;
+
+    /** Настройки для LexiconWriter (culture/пути/теги). */
+    private array $lexProps;
+
+    private ?LexiconWriter $lexWriterInstance = null;
+
     public function __construct(\modX $modx, array $properties = [])
     {
         $this->modx = $modx;
@@ -53,6 +61,20 @@ class FieldWriter
             ?? $this->modx->getOption('mpc_common_config_name', null, 'mpc_config'));
         $this->staticBlocksPageId = (int)($properties['staticBlocksPageId']
             ?? $this->modx->getOption('mpc_static_block_page_id', null, 1));
+
+        $this->useLexicons = (bool)($properties['useLexicons']
+            ?? $this->modx->getOption('mpc_use_lexicons', null, false));
+        $culture = !empty($_COOKIE['mpc_lang'])
+            ? (string)$_COOKIE['mpc_lang']
+            : (string)$this->modx->getOption('cultureKey', null, 'en');
+        $this->lexProps = [
+            'culture'              => $culture,
+            'corePath'             => (string)$this->modx->getOption('core_path', null, ''),
+            'lexiconPath'          => (string)$this->modx->getOption('mpc_lexicon_path', null, 'components/migxpageconfigurator/lexicon/'),
+            'lexiconFilenameField' => (string)$this->modx->getOption('mpc_lexicon_filename_field', null, 'id'),
+            'allowedTags'          => explode(',', (string)$this->modx->getOption('mpc_allowed_tags', null, '')),
+            'allowModxTags'        => (bool)$this->modx->getOption('mpc_allow_modx_tags', null, false),
+        ];
     }
 
     /**
@@ -92,6 +114,24 @@ class FieldWriter
         if (!$resource) {
             return $this->result(false, 'resource not found: ' . $rid);
         }
+
+        // Лексиконный режим: rfield переводится через ключ mpc_resource_<field>
+        // в файле лексикона ресурса (per-resource перевод). Пишем туда ТОЛЬКО
+        // если у целевого ресурса этот ключ уже есть (т.е. ресурс mpc-управляемый/
+        // лексиконизированный). Иначе (обычная статья из сниппета, ключа нет) —
+        // пишем в колонку. Колонку при лексиконе не трогаем — рендер берёт перевод.
+        if ($this->useLexicons) {
+            $writer = $this->lexiconWriter();
+            $ident  = $writer->identifier($rid);
+            if ($writer->has($ident, 'mpc_resource_' . $field)) {
+                if ($writer->set($ident, 'mpc_resource_' . $field, is_scalar($value) ? (string)$value : '')) {
+                    $this->afterSave($resource, ['type' => 'rfield', 'fieldName' => $field, 'lexicon' => true]);
+                    return $this->result(true, 'saved', ['type' => 'rfield', 'resourceId' => $rid, 'fieldName' => $field, 'lexicon' => true]);
+                }
+                return $this->result(false, 'failed to write lexicon entry');
+            }
+        }
+
         $resource->set($field, $value);
         if (!$resource->save()) {
             return $this->result(false, 'failed to save resource ' . $rid);
@@ -123,11 +163,12 @@ class FieldWriter
      *   type     (alias template) — донор: ребёнок staticBlocksPage с тем же шаблоном;
      *   global                    — staticBlocksPage (mpc_static_block_page_id).
      *
-     * ВНИМАНИЕ (лексиконы, проверить на сайте): для лексиконных полей в
-     * mpc_config лежит КЛЮЧ, а текст — в lexicon-файле ресурса. Перезапись
-     * значения тут затёрла бы ключ. Поэтому если caller помечает адрес
-     * `lexiconized=true` — возвращаем not-implemented (запись текста лексикона
-     * через LexiconManager доделаем вместе). Нелексиконные поля пишутся прямо.
+     * Лексиконы: в лексиконном режиме поле mpc_config хранит КЛЮЧ, а текст — в
+     * lexicon-файле. Поэтому если текущее значение поля (или под-поля медиа-
+     * записи) — ключ лексикона, пишем НОВОЕ значение в лексикон, а ключ в
+     * конфиге сохраняем (см. applyLexicon/mergeRecordWithLexicon). Не-лексиконные
+     * значения пишутся прямо в конфиг. Деградирует само: лексиконы выключены /
+     * поле не лексиконилось → ключей нет → всё литералом.
      *
      * ВНИМАНИЕ (инвалидация, проверить): правка на template/global уровне
      * влияет на все ресурсы шаблона/сайта — нужна более широкая инвалидация
@@ -135,10 +176,6 @@ class FieldWriter
      */
     private function writeConfigField(array $address, $value): array
     {
-        if (!empty($address['lexiconized'])) {
-            return $this->result(false, 'lexicon-backed config field: write to lexicon file not implemented yet (verify on site)');
-        }
-
         $level = (string)($address['level'] ?? 'resource');
         $resource = $this->resolveLevelResource($level, (int)($address['resourceId'] ?? 0));
         if (!$resource) {
@@ -150,7 +187,32 @@ class FieldWriter
             return $this->result(false, 'empty mpc_config for level "' . $level . '"');
         }
 
-        $res = (new ConfigFieldWriter())->setValue($configJson, $address, $value);
+        $cfw = new ConfigFieldWriter();
+
+        // Лексикон-aware: значение-ключ → пишем в лексикон, конфиг не трогаем;
+        // медиа-запись → мерж по под-полям (ключи остаются, лексикон обновляется).
+        if ($this->useLexicons) {
+            $writer  = $this->lexiconWriter();
+            $ident   = $writer->identifier((int)$resource->get('id'));
+            $current = $cfw->getValue($configJson, $address)['data']['value'] ?? null;
+
+            if ($this->isRecordValue($value)) {
+                $value = $this->mergeRecordWithLexicon($writer, $ident, $current, $value);
+            } elseif (is_string($current) && $current !== '' && !$this->isRecordValue($current)
+                && $writer->has($ident, $current)) {
+                if (!$writer->set($ident, $current, is_scalar($value) ? (string)$value : '')) {
+                    return $this->result(false, 'failed to write lexicon entry');
+                }
+                $this->afterSave($resource, [
+                    'type' => 'field', 'level' => $level, 'lexicon' => true,
+                    'section' => (string)($address['section'] ?? ''),
+                    'fieldName' => (string)($address['fieldName'] ?? ''),
+                ]);
+                return $this->result(true, 'saved', ['type' => 'field', 'level' => $level, 'lexicon' => true]);
+            }
+        }
+
+        $res = $cfw->setValue($configJson, $address, $value);
         if (!$res['success']) {
             return $res;
         }
@@ -195,6 +257,60 @@ class FieldWriter
             default:
                 return $resourceId > 0 ? $this->modx->getObject('modResource', $resourceId) : null;
         }
+    }
+
+    private function lexiconWriter(): LexiconWriter
+    {
+        if ($this->lexWriterInstance === null) {
+            $this->lexWriterInstance = new LexiconWriter($this->modx, $this->lexProps);
+        }
+        return $this->lexWriterInstance;
+    }
+
+    /** Значение — migx-запись (массив строк-объектов `[{...}]`)? */
+    public function isRecordValue($v): bool
+    {
+        $d = is_string($v) ? json_decode($v, true) : $v;
+        if (!is_array($d) || $d === []) {
+            return false;
+        }
+        return is_array(reset($d));
+    }
+
+    private function decodeRecord($v): array
+    {
+        $d = is_string($v) ? json_decode($v, true) : $v;
+        return is_array($d) ? $d : [];
+    }
+
+    /**
+     * Мерж медиа-записи с лексиконом: для каждого под-поля строки, если ТЕКУЩЕЕ
+     * значение — ключ лексикона, пишем туда новое значение и сохраняем ключ в
+     * записи; иначе оставляем литерал из новой записи (так width/height и прочие
+     * не-лексиконные под-поля обновляются прямо, а src/alt/title — в лексикон).
+     *
+     * @param object $writer LexiconWriter-совместимый (has/set)
+     */
+    public function mergeRecordWithLexicon($writer, string $ident, $current, $value): string
+    {
+        $curRows = $this->decodeRecord($current);
+        $newRows = $this->decodeRecord($value);
+
+        foreach ($newRows as $i => $newRow) {
+            if (!is_array($newRow)) {
+                continue;
+            }
+            $curRow = (isset($curRows[$i]) && is_array($curRows[$i])) ? $curRows[$i] : [];
+            foreach ($newRow as $sub => $newSub) {
+                $curSub = $curRow[$sub] ?? null;
+                if (is_string($curSub) && $curSub !== '' && $writer->has($ident, $curSub)) {
+                    $writer->set($ident, $curSub, is_scalar($newSub) ? (string)$newSub : '');
+                    $newRows[$i][$sub] = $curSub; // сохраняем ключ в записи
+                }
+            }
+        }
+
+        return json_encode($newRows, JSON_UNESCAPED_UNICODE);
     }
 
     /**

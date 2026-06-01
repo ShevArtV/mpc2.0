@@ -95,20 +95,6 @@ class FieldWriterTest extends TestCase
         $this->assertSame('New', $stored['1']['title']);
     }
 
-    public function testConfigFieldLexiconizedNotImplemented(): void
-    {
-        $resource = new ModxObjectStub('modResource', ['id' => 5, 'tv_mpc_config' => '{}']);
-        $writer = new FieldWriter($this->makeModx($resource));
-
-        $result = $writer->write(
-            ['type' => 'field', 'level' => 'local', 'resourceId' => 5, 'section' => 'hero', 'fieldName' => 'title', 'lexiconized' => true],
-            'x'
-        );
-
-        $this->assertFalse($result['success']);
-        $this->assertStringContainsString('not implemented', $result['message']);
-    }
-
     public function testConfigFieldEmptyConfigRejected(): void
     {
         $resource = new ModxObjectStub('modResource', ['id' => 5]); // нет tv_mpc_config
@@ -135,5 +121,68 @@ class FieldWriterTest extends TestCase
         $result = $writer->write(['type' => 'rfield', 'resourceId' => 999, 'fieldName' => 'content'], 'x');
         $this->assertFalse($result['success']);
         $this->assertStringContainsString('not found', $result['message']);
+    }
+
+    // --- isRecordValue / mergeRecordWithLexicon (pure) ---------------------
+
+    private function bareWriter(): FieldWriter
+    {
+        return (new \ReflectionClass(FieldWriter::class))->newInstanceWithoutConstructor();
+    }
+
+    /** Fake LexiconWriter: has() по списку ключей, set() пишет в журнал. */
+    private function fakeLex(array $keys, array &$log): object
+    {
+        return new class($keys, $log) {
+            private array $keys;
+            private array $log;
+            public function __construct(array $keys, array &$log) { $this->keys = $keys; $this->log = &$log; }
+            public function has(string $ident, string $key): bool { return in_array($key, $this->keys, true); }
+            public function set(string $ident, string $key, string $value): bool { $this->log[$key] = $value; return true; }
+        };
+    }
+
+    public function testIsRecordValue(): void
+    {
+        $w = $this->bareWriter();
+        $this->assertTrue($w->isRecordValue('[{"src":"a"}]'));
+        $this->assertFalse($w->isRecordValue('hero_title'));
+        $this->assertFalse($w->isRecordValue('[1,2,3]'));
+        $this->assertFalse($w->isRecordValue('{"a":1}'));
+        $this->assertFalse($w->isRecordValue(''));
+    }
+
+    /** Лексиконная запись: ключи src/alt сохраняются, лексикон обновляется, width — литерал. */
+    public function testMergeRecordKeepsKeysAndWritesLexicon(): void
+    {
+        $w = $this->bareWriter();
+        $log = [];
+        $lex = $this->fakeLex(['hero_img', 'hero_img_alt'], $log);
+
+        $cur = '[{"MIGX_id":1,"src":"hero_img","alt":"hero_img_alt","width":"100"}]';
+        $new = '[{"MIGX_id":1,"src":"/new.jpg","alt":"Новый alt","width":"200"}]';
+        $out = json_decode($w->mergeRecordWithLexicon($lex, 'res', $cur, $new), true);
+
+        $this->assertSame('hero_img', $out[0]['src']);        // ключ сохранён
+        $this->assertSame('hero_img_alt', $out[0]['alt']);    // ключ сохранён
+        $this->assertSame('200', $out[0]['width']);           // литерал обновлён
+        $this->assertSame('/new.jpg', $log['hero_img']);      // лексикон обновлён
+        $this->assertSame('Новый alt', $log['hero_img_alt']);
+    }
+
+    /** Не-лексиконная запись (ключей нет) → литералы как есть. */
+    public function testMergeRecordWithoutLexiconKeysIsLiteral(): void
+    {
+        $w = $this->bareWriter();
+        $log = [];
+        $lex = $this->fakeLex([], $log);
+
+        $cur = '[{"src":"/old.jpg","alt":"old"}]';
+        $new = '[{"src":"/new.jpg","alt":"new"}]';
+        $out = json_decode($w->mergeRecordWithLexicon($lex, 'res', $cur, $new), true);
+
+        $this->assertSame('/new.jpg', $out[0]['src']);
+        $this->assertSame('new', $out[0]['alt']);
+        $this->assertSame([], $log); // в лексикон ничего не писали
     }
 }
