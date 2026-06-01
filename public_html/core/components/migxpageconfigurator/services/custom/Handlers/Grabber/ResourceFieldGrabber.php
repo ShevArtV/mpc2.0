@@ -29,14 +29,25 @@ class ResourceFieldGrabber
 
     private ?MediaDownloader $mediaDownloader;
 
-    public function __construct(Parser $parser, array $protectedFields = [], ?MediaDownloader $mediaDownloader = null)
-    {
+    private ?LexiconManager $lexiconManager;
+
+    private bool $useLexicons;
+
+    public function __construct(
+        Parser $parser,
+        array $protectedFields = [],
+        ?MediaDownloader $mediaDownloader = null,
+        ?LexiconManager $lexiconManager = null,
+        bool $useLexicons = false
+    ) {
         $this->parser = $parser;
         $this->protected = $protectedFields ?: [
             'id', 'class_key', 'context_key', 'parent', 'uri_override',
             'alias', 'uri', 'template',
         ];
         $this->mediaDownloader = $mediaDownloader;
+        $this->lexiconManager  = $lexiconManager;
+        $this->useLexicons     = $useLexicons;
     }
 
     /**
@@ -50,16 +61,20 @@ class ResourceFieldGrabber
 
         foreach ($this->parser->findByAttribute($html, '[data-mpc-rfield]') as $el) {
             $name = trim((string)$el->getAttribute('data-mpc-rfield'));
-            if ($name === '' || in_array($name, $this->protected, true)) {
+            if ($name === '' || in_array($name, $this->protected, true) || $this->isCrossResource($el)) {
                 continue;
             }
-            $resource->set($name, $this->extractValue($el));
+            $value = $this->extractValue($el);
+            // При лексиконизации в КОЛОНКУ кладём ключ (как config-поля хранят
+            // ключ в mpc_config), значение — в лексикон. Иначе колонка = значение.
+            $key = $this->lexiconize($resource, $name, $value);
+            $resource->set($name, $key !== '' ? $key : $value);
             $written['fields'][$name] = true;
         }
 
         foreach ($this->parser->findByAttribute($html, '[data-mpc-tv]') as $el) {
             $name = trim((string)$el->getAttribute('data-mpc-tv'));
-            if ($name === '') {
+            if ($name === '' || $this->isCrossResource($el)) {
                 continue;
             }
             if (method_exists($resource, 'setTVValue')) {
@@ -69,6 +84,41 @@ class ResourceFieldGrabber
         }
 
         return $written;
+    }
+
+    /**
+     * Поле внутри обёртки data-mpc-res — это разметка ДЛЯ РЕДАКТОРА (значение
+     * принадлежит другому ресурсу, который выводит сниппет). На грабе текущего
+     * ресурса такие поля игнорируем, иначе их значения (напр. {$id}-разметка)
+     * затирали бы поля текущего ресурс-типа.
+     */
+    private function isCrossResource(Element $el): bool
+    {
+        return $el->closest('[data-mpc-res]') !== null;
+    }
+
+    /**
+     * Лексиконизация значения rfield: значение пишем в лексикон под ключом
+     * `mpc_resource_<field>` (per-resource перевод; на диск кладёт createLexicons),
+     * и ВОЗВРАЩАЕМ ключ — его caller кладёт в колонку (как config-поля хранят
+     * ключ в mpc_config). Пусто, если лексиконы выключены (тогда колонка =
+     * значение). Гейт — useLexicons (rfield-имена не исключаются, защищённые
+     * alias/uri/template уже отфильтрованы).
+     *
+     * @return string ключ лексикона или '' (лексикон не пишется)
+     */
+    private function lexiconize($resource, string $field, string $value): string
+    {
+        if (!$this->useLexicons || $this->lexiconManager === null) {
+            return '';
+        }
+        $ident = $this->lexiconManager->getResourceIdentifierById((int)$resource->get('id'));
+        if ($ident === '') {
+            return '';
+        }
+        $key = 'mpc_resource_' . $field;
+        $this->lexiconManager->lexicons[$ident][$key] = $this->lexiconManager->sanitizeValue($value);
+        return $key;
     }
 
     /**

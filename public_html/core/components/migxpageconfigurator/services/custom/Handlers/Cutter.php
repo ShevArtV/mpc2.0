@@ -46,6 +46,11 @@ class Cutter extends Base
      */
     private SectionFileWriter $sectionFileWriter;
 
+    /**
+     * @var LexiconManager
+     */
+    private LexiconManager $lexiconManager;
+
     // ---------------------------------------------------------------
     // Инициализация
     // ---------------------------------------------------------------
@@ -60,7 +65,7 @@ class Cutter extends Base
         $properties = [
             'pathToChunks'      => $this->modx->getOption('mpc_path_to_chunks', null, 'chunks/'),
             'chunkNames'        => [],
-            'pattern'           => '/(\s)*?data-mpc-(nolazy|copy|symbol|if|static|name|item|unwrap|section|snippet|chunk|include|parse|remove|attr|field|ftype|fcap|fdesc|cfield|rfield|tv|contact|ctx|info|lim|off|nothumb|thumb|lexicon|key)(-){0,1}([0-9]*)(=".*?"){0,1}(\s)*?/',
+            'pattern'           => '/(\s)*?data-mpc-(nolazy|copy|symbol|if|static|name|item|unwrap|section|snippet|chunk|include|parse|remove|attr|field|ftype|fcap|fdesc|cfield|rfield|res|tv|contact|ctx|info|lim|off|nothumb|thumb|lexicon|key)(-){0,1}([0-9]*)(=".*?"){0,1}(\s)*?/',
             'wrapperName'       => $this->modx->getOption('mpc_wrapper_name', null, 'wrapper'),
             'thumbFormat'       => $this->modx->getOption('mpc_thumb_format', null, 'png'),
             'fakeImgPath'       => $this->modx->getOption('mpc_fake_img_path', null, 'assets/components/migxpageconfigurator/images/fake-img.png'),
@@ -81,6 +86,7 @@ class Cutter extends Base
         // и excludeLexiconFields (последнее — критично, иначе cutter ставит
         // `| lexicon` для полей, которые grabber пропускает → пусто на сайте).
         $lexiconManager = new LexiconManager($this->modx, $this->properties);
+        $this->lexiconManager = $lexiconManager;
 
         $this->placeholderProcessor = new PlaceholderProcessor(
             $this->modx,
@@ -332,8 +338,10 @@ class Cutter extends Base
     private function handleResourceFields(): void
     {
         // rfield — нативная колонка ресурса; tv — значение TV (через подмассив tvs).
-        $this->replaceResourceMarkers('[data-mpc-rfield]', 'data-mpc-rfield', '$resource.');
-        $this->replaceResourceMarkers('[data-mpc-tv]', 'data-mpc-tv', '$resource.tvs.');
+        // rfield лексиконится (перевод per-resource через ключ mpc_resource_<field>),
+        // tv — нет.
+        $this->replaceResourceMarkers('[data-mpc-rfield]', 'data-mpc-rfield', '$resource.', true);
+        $this->replaceResourceMarkers('[data-mpc-tv]', 'data-mpc-tv', '$resource.tvs.', false);
     }
 
     /**
@@ -343,7 +351,7 @@ class Cutter extends Base
      *
      * @return void
      */
-    private function replaceResourceMarkers(string $selector, string $attr, string $exprPrefix): void
+    private function replaceResourceMarkers(string $selector, string $attr, string $exprPrefix, bool $lexiconize = false): void
     {
         if (!$items = $this->getItems($this->html, $selector)) {
             return;
@@ -355,8 +363,22 @@ class Cutter extends Base
                 continue;
             }
 
-            $expr        = $exprPrefix . $name;        // напр. $resource.pagetitle / $resource.tvs.myTV
-            $pls         = '{' . $expr . '}';
+            // Кросс-ресурс: data-mpc-res на самом элементе ИЛИ предке (поле
+            // выводится сниппетом для ДРУГОГО ресурса). Это разметка ДЛЯ
+            // РЕДАКТОРА — render-выражение пишет автор (он знает, как грузить
+            // лексиконы чужого ресурса: reslexicons + | lexicon). Каттер контент
+            // НЕ трогает, только маркеры остаются. (DiDom closest не включает
+            // self → проверяем ещё и сам элемент.)
+            if ($item->hasAttribute('data-mpc-res') || $item->closest('[data-mpc-res]') !== null) {
+                continue;
+            }
+
+            $expr = $exprPrefix . $name;           // $resource.pagetitle / $resource.tvs.myTV
+            // Лексикон-форма (rfield, useLexicons): перевод по ключу
+            // mpc_resource_<field>; иначе — прямое чтение колонки/TV.
+            $pls = ($lexiconize && !empty($this->properties['useLexicons']))
+                ? "{'mpc_resource_" . $name . "' | lexicon}"
+                : '{' . $expr . '}';
             $itemHtml    = $this->parser->getHTMLString($item);
             $itemHtmlNew = '';
 

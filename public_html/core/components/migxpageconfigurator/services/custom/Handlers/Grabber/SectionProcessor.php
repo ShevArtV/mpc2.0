@@ -124,7 +124,13 @@ class SectionProcessor
         if ($this->properties['updContent']) {
             // Медиа из rfield/tv складываем в подпапку "resource" источника.
             $this->mediaDownloader->setCurrentSectionName('resource');
-            (new ResourceFieldGrabber($this->parser, $this->getProtectedResourceFields(), $this->mediaDownloader))->grab($html, $grabResource);
+            (new ResourceFieldGrabber(
+                $this->parser,
+                $this->getProtectedResourceFields(),
+                $this->mediaDownloader,
+                $this->lexiconManager,
+                !empty($this->properties['useLexicons'])
+            ))->grab($html, $grabResource);
             $grabResource->save();
         }
 

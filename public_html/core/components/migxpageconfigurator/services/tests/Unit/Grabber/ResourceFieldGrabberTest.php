@@ -102,4 +102,59 @@ class ResourceFieldGrabberTest extends TestCase
         $this->assertEmpty($written['fields']);
         $this->assertEmpty($written['tvs']);
     }
+
+    private function lexManager(): \MpcServices\Handlers\Grabber\LexiconManager
+    {
+        return new \MpcServices\Handlers\Grabber\LexiconManager(new \MpcTests\Stubs\ModxStub(), [
+            'useLexicons'          => true,
+            'lexiconFilenameField' => 'id',
+            'allowedTags'          => [''],
+            'allowModxTags'        => false,
+        ]);
+    }
+
+    /** rfield лексиконится в ключ mpc_resource_<field> файла ресурса + колонка. */
+    public function testLexiconizesRfieldWhenEnabled(): void
+    {
+        $lm = $this->lexManager();
+        $grabber = new ResourceFieldGrabber(new Parser(), [], null, $lm, true);
+        $res = new ModxObjectStub('modResource', ['id' => 7]);
+
+        $grabber->grab('<h1 data-mpc-rfield="pagetitle">Заголовок</h1>', $res);
+
+        $this->assertSame('mpc_resource_pagetitle', $res->get('pagetitle'));         // колонка = КЛЮЧ
+        $this->assertSame('Заголовок', $lm->lexicons[7]['mpc_resource_pagetitle']);  // лексикон = значение
+    }
+
+    /** Поля внутри обёртки data-mpc-res (разметка редактора) на грабе игнорируются. */
+    public function testIgnoresFieldsInsideResWrapper(): void
+    {
+        $html = '<div data-mpc-res="{$id}">'
+            . '<h3 data-mpc-rfield="pagetitle">{$pagetitle}</h3>'
+            . '<span data-mpc-tv="subtitle">{$subtitle}</span>'
+            . '</div>'
+            . '<h1 data-mpc-rfield="longtitle">Свой заголовок</h1>'; // вне обёртки — грабится
+        $res = new ModxObjectStub('modResource', ['id' => 5]);
+
+        $written = $this->grabber()->grab($html, $res);
+
+        $this->assertArrayNotHasKey('pagetitle', $written['fields'], 'rfield внутри data-mpc-res пропущен');
+        $this->assertArrayNotHasKey('subtitle', $written['tvs'], 'tv внутри data-mpc-res пропущен');
+        $this->assertNull($res->get('pagetitle'));
+        $this->assertArrayHasKey('longtitle', $written['fields'], 'поле вне обёртки грабится');
+        $this->assertSame('Свой заголовок', $res->get('longtitle'));
+    }
+
+    /** При useLexicons=false лексикон не пишется (только колонка). */
+    public function testNoLexiconWhenDisabled(): void
+    {
+        $lm = $this->lexManager();
+        $grabber = new ResourceFieldGrabber(new Parser(), [], null, $lm, false);
+        $res = new ModxObjectStub('modResource', ['id' => 7]);
+
+        $grabber->grab('<h1 data-mpc-rfield="pagetitle">X</h1>', $res);
+
+        $this->assertSame('X', $res->get('pagetitle'));
+        $this->assertSame([], $lm->lexicons);
+    }
 }
