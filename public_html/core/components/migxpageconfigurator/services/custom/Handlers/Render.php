@@ -354,6 +354,7 @@ class Render extends Base
                 $tmp = $sets . $tmp;
             }
             $tmp = $this->convertStaticHashToBrace($tmp); // чтобы на фронте работал парсер pdoTools (не трогая data-mpc-* маркеры)
+            $tmp = $this->quoteSnippetParamValues($tmp);  // голые значения параметров (## eager-резолв) → в кавычки
 
             $this->modx->invokeEvent('mpcOnGetSectionHtml', [
                 'section' => $section,
@@ -448,6 +449,165 @@ class Render extends Base
         );
         $html = str_replace('##', '{', $html);
         return $protected ? strtr($html, $protected) : $html;
+    }
+
+    /**
+     * Оборачивает в кавычки «голые» значения параметров в готовых вызовах
+     * сниппетов (`… | snippet: [ … ]`).
+     *
+     * В static-секции скалярная $-переменная оборачивается в {…} и на
+     * предпарсинге (parseChunk) подставляется СЫРЫМ значением:
+     *   'param' => {$resource.alias}  →  'param' => about-us
+     * — строка без кавычек, которая ломает фронтовый Fenom. Здесь, уже после
+     * предпарсинга, находим такие значения и квотируем, в т.ч. ВНУТРИ массивов;
+     * при этом сами массивы/выражения ($…)/числа/булево/null/уже квотированное
+     * НЕ трогаем (выражения вроде $resource.alias в отложенных массивах должны
+     * вычислиться на финальном рендере, а не превратиться в строку).
+     *
+     * @param string $html
+     * @return string
+     */
+    private function quoteSnippetParamValues(string $html): string
+    {
+        $marker = 'snippet:';
+        $len    = strlen($html);
+        $result = '';
+        $offset = 0;
+
+        while (($pos = strpos($html, $marker, $offset)) !== false) {
+            // пропускаем пробелы между 'snippet:' и '['
+            $b = $pos + strlen($marker);
+            while ($b < $len && ctype_space($html[$b])) {
+                $b++;
+            }
+            if ($b >= $len || $html[$b] !== '[') {
+                // не вызов с массивом параметров — копируем как есть, идём дальше
+                $result .= substr($html, $offset, $b - $offset);
+                $offset = $b;
+                continue;
+            }
+            $end = $this->matchBracket($html, $b);
+            if ($end === -1) {
+                break; // нет парной ] — оставляем хвост нетронутым
+            }
+            $result .= substr($html, $offset, $b - $offset)
+                . $this->quoteBareValues(substr($html, $b, $end - $b + 1));
+            $offset = $end + 1;
+        }
+
+        return $result . substr($html, $offset);
+    }
+
+    /**
+     * Возвращает позицию парной ']' для '[' в позиции $start, учитывая
+     * вложенность и строковые литералы. -1, если пары нет.
+     */
+    private function matchBracket(string $s, int $start): int
+    {
+        $len   = strlen($s);
+        $depth = 0;
+        for ($i = $start; $i < $len; $i++) {
+            $ch = $s[$i];
+            if ($ch === "'" || $ch === '"') {
+                $i = $this->skipString($s, $i);
+                continue;
+            }
+            if ($ch === '[') {
+                $depth++;
+            } elseif ($ch === ']') {
+                if (--$depth === 0) {
+                    return $i;
+                }
+            }
+        }
+        return -1;
+    }
+
+    /**
+     * Нормализует значения внутри блока параметров `[ … ]`: каждое значение
+     * после '=>', не являющееся выражением ($…/[…/{…/@…/кавычки/число/булево/
+     * null), оборачивается в одинарные кавычки. Вложенные массивы проходятся
+     * тем же сканером (их собственные значения тоже квотируются), но сам '['
+     * не квотируется.
+     */
+    private function quoteBareValues(string $s): string
+    {
+        $len = strlen($s);
+        $out = '';
+        $i   = 0;
+
+        while ($i < $len) {
+            $ch = $s[$i];
+
+            // строковый литерал — копируем целиком
+            if ($ch === "'" || $ch === '"') {
+                $j = $this->skipString($s, $i);
+                $out .= substr($s, $i, $j - $i + 1);
+                $i = $j + 1;
+                continue;
+            }
+
+            // оператор '=>' — за ним идёт значение
+            if ($ch === '=' && $i + 1 < $len && $s[$i + 1] === '>') {
+                $out .= '=>';
+                $i += 2;
+                while ($i < $len && ctype_space($s[$i])) {
+                    $out .= $s[$i];
+                    $i++;
+                }
+                if ($i >= $len) {
+                    break;
+                }
+                $c = $s[$i];
+                // выражение/массив/Fenom/чанк/уже-квотированное — не трогаем;
+                // массив/выражение продолжит сканироваться обычным ходом, так
+                // что вложенные значения тоже нормализуются
+                if ($c === "'" || $c === '"' || $c === '[' || $c === '{' || $c === '$' || $c === '@') {
+                    continue;
+                }
+                // «сырое» значение до конца уровня (',' или ']')
+                $j = $i;
+                while ($j < $len && $s[$j] !== ',' && $s[$j] !== ']') {
+                    $j++;
+                }
+                $raw   = substr($s, $i, $j - $i);
+                $core  = rtrim($raw);
+                $trail = substr($raw, strlen($core));
+                if ($core === '' || is_numeric($core)
+                    || $core === 'true' || $core === 'false' || $core === 'null') {
+                    $out .= $raw;                          // число/булево/null/пусто — как есть
+                } else {
+                    $out .= "'" . $core . "'" . $trail;    // голая строка — в кавычки
+                }
+                $i = $j;
+                continue;
+            }
+
+            $out .= $ch;
+            $i++;
+        }
+
+        return $out;
+    }
+
+    /**
+     * Возвращает позицию закрывающей кавычки строкового литерала, начатого в
+     * позиции $start (учитывает экранирование обратным слэшем).
+     */
+    private function skipString(string $s, int $start): int
+    {
+        $q   = $s[$start];
+        $len = strlen($s);
+        for ($i = $start + 1; $i < $len; $i++) {
+            if ($s[$i] === '\\' && $i + 1 < $len) {
+                $i++;
+                continue;
+            }
+            if ($s[$i] === $q) {
+                return $i;
+            }
+        }
+        return $len - 1;
     }
 
     /**
@@ -620,6 +780,7 @@ class Render extends Base
         if ($this->wrapperTpl) {
             $html = $this->pdo->parseChunk($this->wrapperTpl, $resourceData);
             $html = $this->convertStaticHashToBrace($html);
+            $html = $this->quoteSnippetParamValues($html);
         } else {
             $html = $resourceData['sections'] ? implode('\n', $resourceData['sections']) : $resourceData['content'];
         }

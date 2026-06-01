@@ -39,6 +39,16 @@ class RenderTest extends TestCase
         return $method->invoke($instance, $section);
     }
 
+    private function quoteParams(string $html): string
+    {
+        $ref      = new ReflectionClass(Render::class);
+        $instance = $ref->newInstanceWithoutConstructor();
+        $method   = $ref->getMethod('quoteSnippetParamValues');
+        $method->setAccessible(true);
+
+        return $method->invoke($instance, $html);
+    }
+
     /** Прод-разметка без маркеров: ##-плейсхолдеры → {-теги. */
     public function testConvertsHashPlaceholdersWithoutMarkers(): void
     {
@@ -122,5 +132,63 @@ class RenderTest extends TestCase
         // pdotoolsElementsPath указывает в несуществующую папку → _unstatic нет.
         $binding = $this->chunkBinding($section, ['pdotoolsElementsPath' => '/no/such/dir/']);
         $this->assertSame('@FILE sections/hero.tpl', $binding);
+    }
+
+    // --- quoteSnippetParamValues ------------------------------------------
+
+    /** Голое скалярное значение (eager-резолв ## в static) → в кавычки. */
+    public function testQuotesBareScalarParam(): void
+    {
+        $in  = "{'pdoResources' | snippet: ['parents' => about-us]}";
+        $out = "{'pdoResources' | snippet: ['parents' => 'about-us']}";
+        $this->assertSame($out, $this->quoteParams($in));
+    }
+
+    /** Числа/булево/null/выражения/уже-квотированное — не трогаем. */
+    public function testLeavesNonBareValuesUntouched(): void
+    {
+        $in = "{'s' | snippet: ['limit' => 5, 'flag' => true, 'n' => null, "
+            . "'e' => \$resource.alias, 'tpl' => '@FILE chunks/x.tpl']}";
+        $this->assertSame($in, $this->quoteParams($in));
+    }
+
+    /** Голые значения ВНУТРИ массива квотируются, сам массив — нет. */
+    public function testQuotesBareValuesInsideArray(): void
+    {
+        $in  = "{'s' | snippet: ['where' => ['alias' => about-us, 'published' => 1]]}";
+        $out = "{'s' | snippet: ['where' => ['alias' => 'about-us', 'published' => 1]]}";
+        $this->assertSame($out, $this->quoteParams($in));
+    }
+
+    /** Выражение $… в отложенном массиве остаётся выражением (не квотим). */
+    public function testKeepsExpressionInsideArray(): void
+    {
+        $in = "{'s' | snippet: ['where' => ['alias' => \$resource.alias]]}";
+        $this->assertSame($in, $this->quoteParams($in));
+    }
+
+    /** Смешанный вызов: скаляр + массив + число + выражение. */
+    public function testMixedSnippetCall(): void
+    {
+        $in  = "{'s' | snippet: ['p' => about-us, 'limit' => 5, "
+            . "'where' => ['alias' => about-us, 'id' => \$_modx->resource.id]]}";
+        $out = "{'s' | snippet: ['p' => 'about-us', 'limit' => 5, "
+            . "'where' => ['alias' => 'about-us', 'id' => \$_modx->resource.id]]}";
+        $this->assertSame($out, $this->quoteParams($in));
+    }
+
+    /** Вне вызовов сниппета '=>' в разметке не трогается. */
+    public function testIgnoresArrowsOutsideSnippetCalls(): void
+    {
+        $in = '<div data-x="a => b">text => more</div>';
+        $this->assertSame($in, $this->quoteParams($in));
+    }
+
+    /** Несколько вызовов в одной строке обрабатываются независимо. */
+    public function testHandlesMultipleSnippetCalls(): void
+    {
+        $in  = "{'a' | snippet: ['x' => foo]} and {'b' | snippet: ['y' => bar]}";
+        $out = "{'a' | snippet: ['x' => 'foo']} and {'b' | snippet: ['y' => 'bar']}";
+        $this->assertSame($out, $this->quoteParams($in));
     }
 }
