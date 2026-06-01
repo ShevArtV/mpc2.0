@@ -44,7 +44,6 @@ class Render extends Base
         if (file_exists($excludeFieldsPath) && $excludeFields = file_get_contents($excludeFieldsPath)) {
             $this->properties['excludeFields'] = json_decode($excludeFields, 1);
         }
-        $this->properties['sectionChunkPrefix'] = '@FILE ' . $this->properties['pathToSections'];
         $this->pdo = $this->modx->getService('pdoTools') ?? $this->modx;
         $this->pdo->config['elementsPath'] = str_replace('\\', '/', $this->pdo->config['elementsPath']);
     }
@@ -344,27 +343,17 @@ class Render extends Base
             }
             $sets .= '{/if}' . PHP_EOL;
             $section['resource'] = $resourceData; // передаем на страницу все поля ресурса
-            $chunkName = $section['MIGX_formname']; // получаем имя чанка
-            $chunkBaseName = strtolower($chunkName);
-            $sectionsDir = $this->properties['pdotoolsElementsPath'] . $this->properties['pathToSections'];
-            $unstaticFilePath = $sectionsDir . $chunkBaseName . '_unstatic' . $this->properties['extension'];
-
-            // Выбор варианта чанка по статичности (как в проде, и в edit-mode так же):
-            // не-статичная секция → _unstatic, иначе → base. Отдельных _edit-чанков
-            // больше нет — при mpc_edit_mode каттер не режет data-mpc-* в самих
-            // base/_unstatic чанках, поэтому edit-mode = штатный рендер + маркеры.
-            if (!$section['is_static'] && file_exists($unstaticFilePath)) {
-                $chunkSuffix = $chunkBaseName . '_unstatic';
-            } else {
-                $chunkSuffix = $chunkBaseName;
-            }
-            $chunk = $this->properties['sectionChunkPrefix'] . $chunkSuffix . $this->properties['extension']; // получаем путь к чанку
+            // Привязка чанка: file_name секции (путь от папки элементов pdoTools)
+            // приоритетнее деривации из MIGX_formname; _unstatic-вариант для
+            // не-статичной секции выбирается внутри. Edit-mode рендерится тем же
+            // путём (при mpc_edit_mode каттер не режет data-mpc-* в base/_unstatic).
+            $chunk = $this->getSectionChunkBinding($section);
 
             $tmp = $this->pdo->parseChunk($chunk, $section); // парсим чанк
             if ($section['is_static']) {
                 $tmp = $sets . $tmp;
             }
-            $tmp = str_replace('##', '{', $tmp); // чтобы на фронте работал парсер pdoTools
+            $tmp = $this->convertStaticHashToBrace($tmp); // чтобы на фронте работал парсер pdoTools (не трогая data-mpc-* маркеры)
 
             $this->modx->invokeEvent('mpcOnGetSectionHtml', [
                 'section' => $section,
@@ -378,6 +367,87 @@ class Render extends Base
             $i++;
         }
         return $sectionsHtml;
+    }
+
+    /**
+     * Возвращает @FILE-привязку чанка секции для parseChunk.
+     *
+     * Если в данных секции задан file_name — берём его как путь к файлу-чанку
+     * ОТНОСИТЕЛЬНО папки элементов pdoTools (`pdotools_elements_path` — корень
+     * для @FILE). Так секцию можно нацелить на произвольный чанк, не завязываясь
+     * на MIGX_formname. Грабер/легаси могли сохранить file_name полным путём —
+     * срезаем абсолютный префикс папки элементов, если он присутствует. Без
+     * file_name — прежняя деривация имени из MIGX_formname.
+     *
+     * Для НЕ-статичной секции предпочитаем _unstatic-вариант (как и раньше),
+     * если соответствующий файл существует.
+     *
+     * @param array $section
+     * @return string
+     */
+    private function getSectionChunkBinding(array $section): string
+    {
+        $elementsPath = $this->properties['pdotoolsElementsPath'];
+        $ext          = $this->properties['extension'];
+
+        $fileName = trim((string)($section['file_name'] ?? ''));
+        if ($fileName !== '') {
+            $relPath = str_replace('\\', '/', $fileName);
+            if ($elementsPath !== '' && strpos($relPath, $elementsPath) === 0) {
+                $relPath = substr($relPath, strlen($elementsPath));
+            }
+            $relPath = ltrim($relPath, '/');
+        } else {
+            $relPath = $this->properties['pathToSections']
+                . strtolower((string)$section['MIGX_formname']) . $ext;
+        }
+
+        // Не-статичная секция → _unstatic-вариант, если он есть рядом с базовым.
+        if (empty($section['is_static'])) {
+            $base        = (substr($relPath, -strlen($ext)) === $ext)
+                ? substr($relPath, 0, -strlen($ext))
+                : $relPath;
+            $unstaticRel = $base . '_unstatic' . $ext;
+            if (file_exists($elementsPath . $unstaticRel)) {
+                $relPath = $unstaticRel;
+            }
+        }
+
+        return '@FILE ' . $relPath;
+    }
+
+    /**
+     * Конвертирует ##-плейсхолдеры статичных секций в {-теги для фронтового
+     * Fenom/pdoTools, НЕ трогая значения data-mpc-* маркеров (edit-mode).
+     *
+     * При mpc_edit_mode каттер не режет data-mpc-* из чанков, поэтому в HTML
+     * остаётся, в частности, data-mpc-symbol. Его значением может быть литерал
+     * '##' (статичная секция) или '{' (динамичная). Без защиты глобальный
+     * str_replace('##','{') превратил бы '##' в '{', а '{' без пробела ломает
+     * фронтовый парсер Fenom ('{"...'). Кроме того визуальный редактор (mpcVE)
+     * читает data-mpc-symbol через getAttribute и должен получить ИСХОДНОЕ
+     * значение, а не обработанное. Поэтому внутри data-mpc-* атрибутов '##'
+     * остаётся как есть (на фронте безопасен и равен исходному), а литерал '{'
+     * кодируется в HTML-сущность '&#123;' — Fenom её не парсит, а браузер
+     * декодирует обратно в '{' для редактора.
+     *
+     * @param string $html
+     * @return string
+     */
+    private function convertStaticHashToBrace(string $html): string
+    {
+        $protected = [];
+        $html = preg_replace_callback(
+            '/\sdata-mpc-[a-z0-9-]*="[^"]*"/i',
+            static function ($m) use (&$protected) {
+                $token = "\x02MPCATTR" . count($protected) . "\x03";
+                $protected[$token] = str_replace('{', '&#123;', $m[0]);
+                return $token;
+            },
+            $html
+        );
+        $html = str_replace('##', '{', $html);
+        return $protected ? strtr($html, $protected) : $html;
     }
 
     /**
@@ -549,7 +619,7 @@ class Render extends Base
         $pathToFile = $this->properties['pdotoolsElementsPath'] . $this->properties['pathToDist'] . $resourceData['id'] . $this->properties['extension'];
         if ($this->wrapperTpl) {
             $html = $this->pdo->parseChunk($this->wrapperTpl, $resourceData);
-            $html = str_replace('##', '{', $html);
+            $html = $this->convertStaticHashToBrace($html);
         } else {
             $html = $resourceData['sections'] ? implode('\n', $resourceData['sections']) : $resourceData['content'];
         }

@@ -108,7 +108,7 @@ class SnippetCallBuilderTest extends TestCase
         $this->assertStringContainsString("'limit' => '5'", $result);
     }
 
-    public function testArrayValueIsJsonEncoded(): void
+    public function testArraySerializedAsFenomLiteral(): void
     {
         $presets = [
             'mysnippet' => [
@@ -122,8 +122,89 @@ class SnippetCallBuilderTest extends TestCase
         $builder = $this->makeBuilder($presets);
         $result  = $builder->getSnippetCall('mySnippet|mypreset', '{');
 
-        // Массивы JSON-кодируются, { заменяется на { (пробел) для совместимости с Fenom
-        $this->assertStringContainsString('{ "key":"value"}', $result);
+        // Массив → Fenom array-литерал; строковый лист — в кавычках
+        $this->assertStringContainsString("'params' => ['key' => 'value']", $result);
+    }
+
+    /** Вложенное условие с переменной доезжает живым ($resource.alias без кавычек). */
+    public function testNestedConditionKeepsLiveExpression(): void
+    {
+        $presets = [
+            'pdoresources' => [
+                'default' => [
+                    'where'  => ['alias' => '$resource.alias'],
+                    'sortby' => ['menuindex' => 'ASC'],
+                    'extends' => null,
+                ]
+            ]
+        ];
+
+        $builder = $this->makeBuilder($presets);
+        $result  = $builder->getSnippetCall('!pdoResources|default', '{');
+
+        $this->assertStringContainsString("'where' => ['alias' => \$resource.alias]", $result);
+        $this->assertStringContainsString("'sortby' => ['menuindex' => 'ASC']", $result);
+    }
+
+    /** Сложное условие: числа/list/выражения сериализуются корректно. */
+    public function testComplexConditionMixedTypes(): void
+    {
+        $presets = [
+            'pdoresources' => [
+                'default' => [
+                    'where'  => [
+                        'id:in'     => '[1,2,3]',
+                        'published' => 1,
+                        'alias:LIKE' => '$resource.alias',
+                    ],
+                    'extends' => null,
+                ]
+            ]
+        ];
+
+        $builder = $this->makeBuilder($presets);
+        $result  = $builder->getSnippetCall('!pdoResources|default', '{');
+
+        $this->assertStringContainsString(
+            "'where' => ['id:in' => [1,2,3], 'published' => 1, 'alias:LIKE' => \$resource.alias]",
+            $result
+        );
+    }
+
+    /** ## внутри массива (eager-плейсхолдер статики) по-прежнему → {. */
+    public function testHashPlaceholderInArrayConvertedToBrace(): void
+    {
+        $presets = [
+            'mysnippet' => [
+                'mypreset' => [
+                    'where'  => ['field' => '##title}'],
+                    'extends' => null,
+                ]
+            ]
+        ];
+
+        $builder = $this->makeBuilder($presets);
+        $result  = $builder->getSnippetCall('mySnippet|mypreset', '{');
+
+        $this->assertStringContainsString("'where' => ['field' => '{title}']", $result);
+    }
+
+    /** #/path внутри вложенного массива разворачивается в @FILE-чанк. */
+    public function testChunkPathPrefixInsideArray(): void
+    {
+        $presets = [
+            'mysnippet' => [
+                'mypreset' => [
+                    'tpls'    => ['item' => '#/item.tpl'],
+                    'extends' => null,
+                ]
+            ]
+        ];
+
+        $builder = $this->makeBuilder($presets, 'chunks/');
+        $result  = $builder->getSnippetCall('mySnippet|mypreset', '{');
+
+        $this->assertStringContainsString("'tpls' => ['item' => '@FILE chunks/item.tpl']", $result);
     }
 
     // ---------------------------------------------------------------

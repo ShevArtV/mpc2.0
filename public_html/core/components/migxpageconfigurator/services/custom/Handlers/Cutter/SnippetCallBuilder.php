@@ -54,9 +54,12 @@ class SnippetCallBuilder
                     continue;
                 }
                 if (is_array($v)) {
-                    $v = json_encode($v);
-                    $v = str_replace('{', '{ ', $v);
-                    $v = str_replace('##', '{', $v);
+                    // Рекурсивный Fenom array-литерал ([...]) вместо json: доносит
+                    // до рендера вложенные условия с ЖИВЫМИ выражениями, например
+                    // 'where' => ['alias' => $resource.alias]. Прежний json+хаки
+                    // отдавали это строкой-литералом, и переменная не вычислялась.
+                    // ## внутри массива по-прежнему → { (eager-плейсхолдеры статики).
+                    $v = str_replace('##', '{', $this->arrayToFenom($v));
                 }
                 $v = (string)$v;
                 if (strpos($v, '#/') === 0) {
@@ -101,6 +104,46 @@ class SnippetCallBuilder
         }
 
         return PHP_EOL . "$firstSymbol'$snippetName' | snippet: []}" . PHP_EOL;
+    }
+
+    /**
+     * Рекурсивно сериализует PHP-массив пресета в Fenom array-литерал ([...]),
+     * сохраняя Fenom-выражения живыми. Каждый лист обрабатывается так же, как
+     * скалярный параметр (scalarToFenom): выражение ($/[/") отдаётся как есть,
+     * литерал — в одинарных кавычках, число — как есть. Позволяет доносить до
+     * рендера вложенные условия вида ['alias' => $resource.alias] на любой глубине.
+     */
+    private function arrayToFenom(array $arr): string
+    {
+        $isList = array_keys($arr) === range(0, count($arr) - 1);
+        $parts  = [];
+        foreach ($arr as $k => $v) {
+            $rendered = is_array($v) ? $this->arrayToFenom($v) : $this->scalarToFenom($v);
+            $parts[]  = $isList ? $rendered : "'$k' => $rendered";
+        }
+        return '[' . implode(', ', $parts) . ']';
+    }
+
+    /**
+     * Сериализует скалярное значение листа массива: число — как есть; #/path —
+     * в @FILE-чанк (литерал в кавычках); выражение ($/[/") — как есть; прочее —
+     * строковый литерал в кавычках. Та же эвристика «выражение vs литерал», что
+     * и для скалярных параметров верхнего уровня в getSnippetCall.
+     */
+    private function scalarToFenom($v): string
+    {
+        if (is_int($v) || is_float($v)) {
+            return (string)$v;
+        }
+        $v = (string)$v;
+        if (strpos($v, '#/') === 0) {
+            $v = str_replace('#/', '@FILE ' . $this->properties['pathToChunks'], $v);
+            return "'" . $v . "'";
+        }
+        if (strpos($v, '$') === 0 || strpos($v, '[') === 0 || strpos($v, '"') === 0) {
+            return $v;
+        }
+        return "'" . $v . "'";
     }
 
     /**

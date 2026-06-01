@@ -78,7 +78,11 @@ class SectionProcessor
             $i++;
             $sectionName = trim((string)$section->getAttribute('data-mpc-section'));
             $fileName = $sectionName . $this->properties['extension'];
-            $fileNameVis = $this->properties['pdotoolsElementsPath'] . $this->properties['pathToSections'] . $fileName;
+            // Путь к чанку секции храним ОТНОСИТЕЛЬНО папки элементов pdoTools
+            // (`pdotools_elements_path` — корень для @FILE): file_name напрямую
+            // годится в parseChunk (см. Render::getSectionChunkBinding) и не
+            // протухает при переезде сайта/смене core_path.
+            $fileNameVis = $this->properties['pathToSections'] . $fileName;
 
             $properties = [
                 'defaultFormTabs' => $defaultFormTabs,
