@@ -105,6 +105,16 @@
         addr.level = (sectionEl && sectionEl.hasAttribute('data-mpc-static')) ? 'global' : 'resource';
         addr.resourceId = cfg.resourceId || 0;
 
+        // Кросс-ресурс: обёртка data-mpc-res="<id>" (поле другого ресурса,
+        // выведенного сниппетом) → пишем в ТОТ ресурс, а не в текущую страницу.
+        var resEl = el.closest('[data-mpc-res]');
+        if (resEl) {
+            var rid = parseInt(resEl.getAttribute('data-mpc-res'), 10);
+            if (rid > 0) {
+                addr.resourceId = rid;
+            }
+        }
+
         // Вложенное поле строки списка: data-mpc-field-N → parentField + idx,
         // чтобы запись попала в нужную строку (ConfigFieldWriter: rows[idx][field]).
         var nestAttr = null;
@@ -149,7 +159,31 @@
         return !!bgUrl(el);
     }
 
+    // Тип редактора по значению data-mpc-ftype (имя типа-прототипа mpc_base).
+    function ftypeToEditor(ftype) {
+        if (!ftype) { return ''; }
+        if (ftype === 'richtext') { return 'richtext'; }
+        if (ftype === 'img' || ftype === 'picture' || ftype === 'bg_img') { return 'image'; }
+        if (ftype === 'video' || ftype === 'audio') { return 'media'; }
+        if (ftype.indexOf('list') === 0) { return 'rows'; }
+        return 'text'; // text/textarea/number/checkbox — инлайн-текст
+    }
+
+    function isListEl(el) {
+        return !!(el.querySelector && el.querySelector('[data-mpc-item]'));
+    }
+
     function editorTypeFor(el, addr) {
+        // Тип, заявленный автором через data-mpc-ftype (в edit-mode маркеры
+        // сохраняются), — самый точный сигнал, важнее карты mpc_base.
+        var byFtype = ftypeToEditor(el.getAttribute('data-mpc-ftype'));
+        if (byFtype) {
+            return byFtype;
+        }
+        // Структурный список без ftype (динамический) → редактор строк.
+        if (isListEl(el)) {
+            return 'rows';
+        }
         var mapped = (addr.fieldName && typesMap[addr.fieldName]) || '';
         // Явный не-картиночный тип из mpc_base (richtext/media/rows) — приоритет.
         if (mapped && mapped !== 'text' && mapped !== 'image') {
@@ -266,13 +300,30 @@
         }
     }
 
+    // Картинка-ЗАПИСЬ (migx-поле img) vs простой путь (фон/bg_img). У записи
+    // значение в конфиге — [{MIGX_id,src,alt,title,width,height}], у пути — строка.
+    function isRecordImage(el) {
+        var ftype = el.getAttribute('data-mpc-ftype') || '';
+        return el.tagName.toLowerCase() === 'img' && ftype !== 'bg_img' && !hasBg(el);
+    }
+
     function openImageEditor(el) {
         if (document.querySelector('.mpcve-modal')) {
             return;
         }
-        var cur = currentImageSrc(el);
+        var asRecord = isRecordImage(el);
+        var cur      = currentImageSrc(el);
+        var curAlt   = el.getAttribute('alt') || '';
+        var curTitle = el.getAttribute('title') || '';
+        var curW     = el.getAttribute('width') || '';
+        var curH     = el.getAttribute('height') || '';
+
         var overlay = document.createElement('div');
         overlay.className = 'mpcve-modal';
+        var attrFields = asRecord
+            ? '<label class="mpcve-modal__field">alt<input type="text" data-f="alt"></label>' +
+              '<label class="mpcve-modal__field">title<input type="text" data-f="title"></label>'
+            : '';
         overlay.innerHTML =
             '<div class="mpcve-modal__card">' +
                 '<div class="mpcve-modal__head">Изображение</div>' +
@@ -281,18 +332,31 @@
                     '<span>Перетащите файл сюда или <b>выберите</b></span>' +
                     '<input type="file" accept="image/*" hidden>' +
                 '</label>' +
+                attrFields +
                 '<div class="mpcve-modal__actions">' +
                     '<button type="button" class="mpcve-btn" data-act="cancel">Отмена</button>' +
-                    '<button type="button" class="mpcve-btn mpcve-btn--primary" data-act="save" disabled>Загрузить и сохранить</button>' +
+                    '<button type="button" class="mpcve-btn mpcve-btn--primary" data-act="save">Сохранить</button>' +
                 '</div>' +
             '</div>';
         document.body.appendChild(overlay);
 
-        var preview = overlay.querySelector('.mpcve-modal__preview');
-        var input   = overlay.querySelector('input[type=file]');
-        var drop    = overlay.querySelector('.mpcve-modal__drop');
-        var saveBtn = overlay.querySelector('[data-act=save]');
-        var chosen  = null;
+        var preview    = overlay.querySelector('.mpcve-modal__preview');
+        var input      = overlay.querySelector('input[type=file]');
+        var drop       = overlay.querySelector('.mpcve-modal__drop');
+        var saveBtn    = overlay.querySelector('[data-act=save]');
+        var altInput   = overlay.querySelector('[data-f=alt]');
+        var titleInput = overlay.querySelector('[data-f=title]');
+        if (altInput)   { altInput.value = curAlt; }
+        if (titleInput) { titleInput.value = curTitle; }
+
+        var chosen = null;
+        var newW = '', newH = '';
+
+        // В режиме пути (фон) без файла сохранять нечего; у записи можно править атрибуты.
+        if (!asRecord) {
+            saveBtn.disabled = true;
+            saveBtn.textContent = 'Загрузить и сохранить';
+        }
 
         renderPreview(cur, false);
 
@@ -319,7 +383,15 @@
             }
             chosen = file;
             var reader = new FileReader();
-            reader.onload = function (ev) { renderPreview(ev.target.result, true); };
+            reader.onload = function (ev) {
+                renderPreview(ev.target.result, true);
+                var probe = new Image();
+                probe.onload = function () {
+                    newW = String(probe.naturalWidth || '');
+                    newH = String(probe.naturalHeight || '');
+                };
+                probe.src = ev.target.result;
+            };
             reader.readAsDataURL(file);
             saveBtn.disabled = false;
         }
@@ -335,37 +407,66 @@
             if (e.dataTransfer && e.dataTransfer.files[0]) { pick(e.dataTransfer.files[0]); }
         });
 
-        function busy(on) {
+        function busy(on, label) {
             saveBtn.disabled = on;
-            saveBtn.textContent = on ? 'Загрузка…' : 'Загрузить и сохранить';
+            if (label) { saveBtn.textContent = label; }
+        }
+
+        // Записываем поле: для записи — полная migx-запись (src+атрибуты),
+        // иначе — путь-строка. ConfigFieldWriter хранит value как есть.
+        function persist(src, addr) {
+            var value;
+            if (asRecord) {
+                value = JSON.stringify([{
+                    MIGX_id: 1,
+                    src: src,
+                    alt: altInput ? altInput.value : curAlt,
+                    title: titleInput ? titleInput.value : curTitle,
+                    width: (chosen && newW) ? newW : curW,
+                    height: (chosen && newH) ? newH : curH
+                }]);
+            } else {
+                value = src;
+            }
+            api.post('field/save', { address: addr, value: value }).then(function (r2) {
+                if (r2 && r2.success) {
+                    setImageSrc(el, src);
+                    if (asRecord) {
+                        if (altInput) { el.setAttribute('alt', altInput.value); }
+                        if (titleInput && titleInput.value) { el.setAttribute('title', titleInput.value); }
+                    }
+                    toast('Сохранено');
+                    close();
+                } else {
+                    toast((r2 && r2.message) || 'Ошибка сохранения', true);
+                    busy(false, 'Сохранить');
+                }
+            }).catch(function () { toast('Сетевая ошибка', true); busy(false, 'Сохранить'); });
         }
 
         saveBtn.addEventListener('click', function () {
-            if (!chosen) { return; }
             var addr = fieldAddress(el);
             if (!addr) {
                 toast('У элемента нет data-mpc-адреса — некуда сохранять', true);
                 return;
             }
-            busy(true);
-            api.upload('image/upload', chosen).then(function (res) {
-                if (!res || !res.success || !res.data || !res.data.url) {
-                    toast((res && res.message) || 'Ошибка загрузки', true);
-                    busy(false);
-                    return;
-                }
-                var url = res.data.url;
-                api.post('field/save', { address: addr, value: url }).then(function (r2) {
-                    if (r2 && r2.success) {
-                        setImageSrc(el, url);
-                        toast('Сохранено');
-                        close();
-                    } else {
-                        toast((r2 && r2.message) || 'Ошибка сохранения', true);
-                        busy(false);
+            if (!asRecord && !chosen) {
+                return;
+            }
+            busy(true, 'Сохранение…');
+            if (chosen) {
+                api.upload('image/upload', chosen).then(function (res) {
+                    if (!res || !res.success || !res.data || !res.data.url) {
+                        toast((res && res.message) || 'Ошибка загрузки', true);
+                        busy(false, 'Сохранить');
+                        return;
                     }
-                }).catch(function () { toast('Сетевая ошибка', true); busy(false); });
-            }).catch(function () { toast('Сетевая ошибка', true); busy(false); });
+                    persist(res.data.url, addr);
+                }).catch(function () { toast('Сетевая ошибка', true); busy(false, 'Сохранить'); });
+            } else {
+                // запись без нового файла — сохраняем текущий src + изменённые атрибуты
+                persist(cur, addr);
+            }
         });
     }
 
