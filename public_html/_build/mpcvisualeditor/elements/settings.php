@@ -19,4 +19,10 @@ return [
         'value' => 'mpcve_edit',
         'area'  => 'main',
     ],
+    // Лимит размера загружаемого изображения (байт), 0 — без лимита
+    'mpcve_max_upload' => [
+        'xtype' => 'numberfield',
+        'value' => 10485760,
+        'area'  => 'upload',
+    ],
 ];

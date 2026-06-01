@@ -47,7 +47,10 @@ class Connector
             case 'field/save':
                 // Легаси точечной записи (rfield/tv/config) — оставлено для совместимости.
                 return (new Handlers\FieldSaveHandler($this->modx, $this->mpcve))->handle($request);
-            // TODO: case 'image/upload' — загрузка через источник mpcMedia.
+            case 'image/upload':
+                // Загрузка картинки в media source mpc → возврат URL (фронт пишет
+                // его в поле через field/save). См. ImageUploadHandler.
+                return (new Handlers\ImageUploadHandler($this->modx, $this->mpcve))->handle($request);
             default:
                 return $this->error('Unknown or not-yet-implemented action: ' . $action);
         }

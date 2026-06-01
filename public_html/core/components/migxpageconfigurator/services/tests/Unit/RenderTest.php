@@ -191,4 +191,27 @@ class RenderTest extends TestCase
         $out = "{'a' | snippet: ['x' => 'foo']} and {'b' | snippet: ['y' => 'bar']}";
         $this->assertSame($out, $this->quoteParams($in));
     }
+
+    /** Выражение в скобках с внутренними кавычками (mpcThumb input) — не трогаем. */
+    public function testKeepsParenthesizedExpression(): void
+    {
+        $in = "{'mpcThumb' | snippet: [ 'input' => ('hero_bg_img' | lexicon), 'options' => '&w=100']}";
+        $this->assertSame($in, $this->quoteParams($in));
+    }
+
+    /** Скобочное выражение + голое слово рядом: скобки не трогаем, слово квотим. */
+    public function testMixesParenExpressionAndBareWord(): void
+    {
+        $in  = "{'s' | snippet: ['input' => ('a' | lexicon), 'alias' => about-us]}";
+        $out = "{'s' | snippet: ['input' => ('a' | lexicon), 'alias' => 'about-us']}";
+        $this->assertSame($out, $this->quoteParams($in));
+    }
+
+    /** Значение-выражение с операторами (без скобок) не квотируется. */
+    public function testKeepsOperatorExpression(): void
+    {
+        $in = "{'s' | snippet: ['x' => \$a ?: \$b, 'y' => foo]}";
+        $out = "{'s' | snippet: ['x' => \$a ?: \$b, 'y' => 'foo']}";
+        $this->assertSame($out, $this->quoteParams($in));
+    }
 }

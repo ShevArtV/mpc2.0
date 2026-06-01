@@ -21,7 +21,7 @@
     var TYPE_HINT = {
         text: 'Текст — клик, чтобы редактировать',
         richtext: 'Текст с форматированием — клик',
-        image: 'Изображение — клик (редактор в разработке)',
+        image: 'Изображение — клик, чтобы заменить',
         media: 'Медиа — клик (редактор в разработке)',
         rows: 'Список — клик (редактор в разработке)'
     };
@@ -45,6 +45,21 @@
             body.append('action', action);
             Object.keys(payload || {}).forEach(function (k) {
                 var v = payload[k];
+                body.append(k, typeof v === 'object' ? JSON.stringify(v) : v);
+            });
+            return fetch(cfg.connectorUrl, {
+                method: 'POST',
+                credentials: 'same-origin',
+                body: body
+            }).then(function (r) { return r.json(); });
+        },
+        // Загрузка файла (multipart): file под ключом 'file' + доп. поля.
+        upload: function (action, file, extra) {
+            var body = new FormData();
+            body.append('action', action);
+            body.append('file', file);
+            Object.keys(extra || {}).forEach(function (k) {
+                var v = extra[k];
                 body.append(k, typeof v === 'object' ? JSON.stringify(v) : v);
             });
             return fetch(cfg.connectorUrl, {
@@ -123,13 +138,30 @@
         return t === 'img' || t === 'picture' || t === 'video' || t === 'audio';
     }
 
+    // URL фоновой картинки из INLINE style (background-image / background-шорткат
+    // CSSOM раскладывает на longhand). Пусто, если фона нет.
+    function bgUrl(el) {
+        var raw = (el.style && el.style.backgroundImage) || '';
+        var m = raw.match(/url\((['"]?)(.*?)\1\)/i);
+        return m ? m[2] : '';
+    }
+    function hasBg(el) {
+        return !!bgUrl(el);
+    }
+
     function editorTypeFor(el, addr) {
-        if (addr.fieldName && typesMap[addr.fieldName]) {
-            return typesMap[addr.fieldName];
+        var mapped = (addr.fieldName && typesMap[addr.fieldName]) || '';
+        // Явный не-картиночный тип из mpc_base (richtext/media/rows) — приоритет.
+        if (mapped && mapped !== 'text' && mapped !== 'image') {
+            return mapped;
         }
         if (isMedia(el)) {
             var t = el.tagName.toLowerCase();
             return (t === 'img' || t === 'picture') ? 'image' : 'media';
+        }
+        // Картинка по типу поля ИЛИ фон через inline style (data-mpc-field + style).
+        if (mapped === 'image' || hasBg(el)) {
+            return 'image';
         }
         return 'text';
     }
@@ -155,7 +187,8 @@
     // --- реестр редакторов по типу -----------------------------------------
     var editors = {
         text: { open: openTextEditor },
-        richtext: { open: openTextEditor }
+        richtext: { open: openTextEditor },
+        image: { open: openImageEditor }
     };
 
     function openTextEditor(el) {
@@ -200,6 +233,140 @@
         }
         el.addEventListener('keydown', onKey);
         el.addEventListener('blur', onBlur);
+    }
+
+    // --- редактор изображений (загрузка файла) -----------------------------
+    function currentImageSrc(el) {
+        if (el.tagName.toLowerCase() === 'img') {
+            return el.currentSrc || el.src || '';
+        }
+        var bg = bgUrl(el);
+        if (bg) {
+            return bg;
+        }
+        var img = el.querySelector ? el.querySelector('img') : null;
+        return img ? (img.currentSrc || img.src || '') : '';
+    }
+
+    function setImageSrc(el, url) {
+        if (el.tagName.toLowerCase() === 'img') {
+            el.removeAttribute('srcset');
+            el.src = url;
+            return;
+        }
+        // Фон: пишем обратно в inline style того же элемента.
+        if (bgUrl(el)) {
+            el.style.backgroundImage = 'url("' + url + '")';
+            return;
+        }
+        var img = el.querySelector ? el.querySelector('img') : null;
+        if (img) {
+            img.removeAttribute('srcset');
+            img.src = url;
+        }
+    }
+
+    function openImageEditor(el) {
+        if (document.querySelector('.mpcve-modal')) {
+            return;
+        }
+        var cur = currentImageSrc(el);
+        var overlay = document.createElement('div');
+        overlay.className = 'mpcve-modal';
+        overlay.innerHTML =
+            '<div class="mpcve-modal__card">' +
+                '<div class="mpcve-modal__head">Изображение</div>' +
+                '<div class="mpcve-modal__preview"></div>' +
+                '<label class="mpcve-modal__drop">' +
+                    '<span>Перетащите файл сюда или <b>выберите</b></span>' +
+                    '<input type="file" accept="image/*" hidden>' +
+                '</label>' +
+                '<div class="mpcve-modal__actions">' +
+                    '<button type="button" class="mpcve-btn" data-act="cancel">Отмена</button>' +
+                    '<button type="button" class="mpcve-btn mpcve-btn--primary" data-act="save" disabled>Загрузить и сохранить</button>' +
+                '</div>' +
+            '</div>';
+        document.body.appendChild(overlay);
+
+        var preview = overlay.querySelector('.mpcve-modal__preview');
+        var input   = overlay.querySelector('input[type=file]');
+        var drop    = overlay.querySelector('.mpcve-modal__drop');
+        var saveBtn = overlay.querySelector('[data-act=save]');
+        var chosen  = null;
+
+        renderPreview(cur, false);
+
+        function renderPreview(src, isNew) {
+            preview.innerHTML = src
+                ? '<img alt="">' + (isNew ? '<span class="mpcve-modal__badge">новое</span>' : '')
+                : '<span class="mpcve-modal__empty">нет изображения</span>';
+            if (src) { preview.querySelector('img').src = src; }
+        }
+
+        function close() {
+            overlay.remove();
+            document.removeEventListener('keydown', onKey);
+        }
+        function onKey(e) { if (e.key === 'Escape') { close(); } }
+        document.addEventListener('keydown', onKey);
+        overlay.addEventListener('click', function (e) { if (e.target === overlay) { close(); } });
+        overlay.querySelector('[data-act=cancel]').addEventListener('click', close);
+
+        function pick(file) {
+            if (!file || file.type.indexOf('image/') !== 0) {
+                toast('Это не изображение', true);
+                return;
+            }
+            chosen = file;
+            var reader = new FileReader();
+            reader.onload = function (ev) { renderPreview(ev.target.result, true); };
+            reader.readAsDataURL(file);
+            saveBtn.disabled = false;
+        }
+
+        input.addEventListener('change', function () { pick(input.files[0]); });
+        ['dragover', 'dragenter'].forEach(function (ev) {
+            drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.add('mpcve-modal__drop--over'); });
+        });
+        ['dragleave', 'drop'].forEach(function (ev) {
+            drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.remove('mpcve-modal__drop--over'); });
+        });
+        drop.addEventListener('drop', function (e) {
+            if (e.dataTransfer && e.dataTransfer.files[0]) { pick(e.dataTransfer.files[0]); }
+        });
+
+        function busy(on) {
+            saveBtn.disabled = on;
+            saveBtn.textContent = on ? 'Загрузка…' : 'Загрузить и сохранить';
+        }
+
+        saveBtn.addEventListener('click', function () {
+            if (!chosen) { return; }
+            var addr = fieldAddress(el);
+            if (!addr) {
+                toast('У элемента нет data-mpc-адреса — некуда сохранять', true);
+                return;
+            }
+            busy(true);
+            api.upload('image/upload', chosen).then(function (res) {
+                if (!res || !res.success || !res.data || !res.data.url) {
+                    toast((res && res.message) || 'Ошибка загрузки', true);
+                    busy(false);
+                    return;
+                }
+                var url = res.data.url;
+                api.post('field/save', { address: addr, value: url }).then(function (r2) {
+                    if (r2 && r2.success) {
+                        setImageSrc(el, url);
+                        toast('Сохранено');
+                        close();
+                    } else {
+                        toast((r2 && r2.message) || 'Ошибка сохранения', true);
+                        busy(false);
+                    }
+                }).catch(function () { toast('Сетевая ошибка', true); busy(false); });
+            }).catch(function () { toast('Сетевая ошибка', true); busy(false); });
+        });
     }
 
     // --- разметка / снятие разметки полей ----------------------------------

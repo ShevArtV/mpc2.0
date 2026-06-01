@@ -4,7 +4,7 @@ use MpcServices\Processors\MigxConfig;
 
 define('MODX_API_MODE', true);
 if (!defined('MODX_CORE_PATH')) {
-    define('MODX_CORE_PATH', str_replace('/', '\\', dirname(__FILE__, 4)) . '/');
+    define('MODX_CORE_PATH', dirname(__FILE__, 4) . '/');
 }
 if (!defined('MODX_CONFIG_KEY')) {
     define('MODX_CONFIG_KEY', 'config');
@@ -23,6 +23,39 @@ $processor = new MigxConfig($modx);
 $method = $argv[2];
 
 switch($method){
+    case 'sync':
+        // Применяет сид elements/configs/migx_configs.json к БД через
+        // MigxConfigMerger (как резолвер 2migxconfigs при апгрейде): новые поля
+        // из сида добавляются, кастомные из БД сохраняются. Для применения правок
+        // сида на dev/сервере без переустановки пакета.
+        $file = dirname(__DIR__) . '/elements/configs/migx_configs.json';
+        $configs = is_file($file) ? json_decode(file_get_contents($file), true) : [];
+        if (!$configs) {
+            echo "no configs in seed\n";
+            break;
+        }
+        $modx->addPackage('migx', dirname(__DIR__, 2) . '/migx/model/');
+        $merger = class_exists('MpcServices\\Helpers\\MigxConfigMerger')
+            ? new \MpcServices\Helpers\MigxConfigMerger()
+            : null;
+        $synced = 0;
+        foreach ($configs as $config) {
+            $existing = $modx->getObject('migxConfig', ['name' => $config['name']]);
+            $row = $config;
+            unset($row['id']);
+            if ($existing && $merger !== null) {
+                $row = $merger->merge($row, $existing->toArray());
+            }
+            if (!$existing) {
+                $existing = $modx->newObject('migxConfig');
+            }
+            $existing->fromArray($row, '', true);
+            if ($existing->save()) {
+                $synced++;
+            }
+        }
+        echo "synced {$synced} configs\n";
+        break;
     case 'copy':
         $names = [
             'mpc_list_triple_videos' => 'mpc_list_triple_pictures',
