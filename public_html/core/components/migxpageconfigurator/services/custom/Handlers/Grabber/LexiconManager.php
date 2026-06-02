@@ -146,9 +146,13 @@ class LexiconManager
             $q = $this->modx->newQuery('modResource');
             $q->select($this->properties['lexiconFilenameField']);
             $q->where(['id' => $rid]);
+            // prepare() возвращает false, если SQL не подготовился (напр.
+            // mpc_lexicon_filename_field указывает на несуществующую колонку
+            // modResource / TV). Тогда $q->stmt === false и execute() фаталит —
+            // поэтому проверяем подготовку и деградируем на числовой id.
             $q->prepare();
-            if ($q->stmt->execute()) {
-                $rid = $q->stmt->fetchColumn();
+            if (is_object($q->stmt) && $q->stmt->execute()) {
+                $rid = (string)$q->stmt->fetchColumn();
                 $rid = trim($rid);
                 $rid = strtolower($rid);
                 $rid = str_replace([' ', "\n", "\r"], '-', $rid);
@@ -160,6 +164,12 @@ class LexiconManager
                         $rid = 'root';
                     }
                 }
+            } else {
+                $this->modx->log(\modX::LOG_LEVEL_ERROR, sprintf(
+                    '[mpc] LexiconManager: не удалось подготовить запрос идентификатора лексикона по полю "%s" (проверьте mpc_lexicon_filename_field — должна быть колонка modResource). Фолбэк на числовой id %d.',
+                    $this->properties['lexiconFilenameField'],
+                    $rid
+                ));
             }
         }
 

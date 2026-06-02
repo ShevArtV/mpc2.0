@@ -625,6 +625,40 @@ class LexiconManagerTest extends TestCase
         $this->assertEquals('services_consulting_team', $m->getResourceIdentifierById(5));
     }
 
+    /**
+     * prepare() оставил stmt=false (SQL не подготовился — напр. невалидная
+     * mpc_lexicon_filename_field). Метод НЕ фаталит на execute(), деградирует
+     * на числовой id. Регресс на «Call to a member function execute() on bool».
+     */
+    public function testGetResourceIdentifierByIdFallsBackWhenPrepareFails(): void
+    {
+        $modx = new class extends \MpcTests\Stubs\ModxStub {
+            public function newQuery(string $class): object {
+                return new class {
+                    public $stmt = false; // PDO::prepare вернул false
+                    public function select(string $f): void {}
+                    public function where(array $c): void {}
+                    public function prepare(): void {}
+                };
+            }
+        };
+        $m = new LexiconManager($modx, [
+            'useLexicons'                     => true,
+            'excludeLexiconFields'            => [],
+            'allowModxTags'                   => false,
+            'allowedTags'                     => '',
+            'lexiconFilenameField'            => 'uri',
+            'staticBlocksPageLexiconFilename' => 'static',
+            'contactsPageLexiconFilename'     => 'contacts',
+            'basePathToLexiconFile'           => $this->tmpDir . '/',
+            'corePath'                        => '',
+            'resourceLexiconKeysPath'         => 'nonexistent_rlang.php',
+            'resource'                        => new \stdClass(),
+        ]);
+
+        $this->assertSame('7', $m->getResourceIdentifierById(7)); // фолбэк на id, без фатала
+    }
+
     // ---------------------------------------------------------------
     // excludeLexiconFields — числовые [...]-токены (списки/диапазоны/nth)
     // shouldLexiconize('text', <ключ>, '') → false если ключ исключён.

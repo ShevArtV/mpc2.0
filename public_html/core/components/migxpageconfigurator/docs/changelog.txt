@@ -1,3 +1,10 @@
+2.5.5-rc
+==============
+Фикс фатала при перенарезке с лексиконами и нестандартным именем lexicon-файла.
+
+- `LexiconManager::getResourceIdentifierById`: `$q->prepare()` мог вернуть false (SQL не подготовился — напр. `mpc_lexicon_filename_field` указывает на несуществующую колонку modResource), а код сразу звал `$q->stmt->execute()` → «Call to a member function execute() on bool» (фатал на mgr_tpl/перенарезке). Теперь проверяем `is_object($q->stmt)` перед execute; при неудаче — фолбэк на числовой id + `LOG_LEVEL_ERROR` с подсказкой проверить настройку. Тест: `LexiconManagerTest::testGetResourceIdentifierByIdFallsBackWhenPrepareFails`. Латентный баг (не из 2.5.x), всплыл при включённых лексиконах с `lexiconFilenameField != id`.
+- Версия пакета `2.5.4` → `2.5.5`.
+
 2.5.4-rc
 ==============
 Публичный read-API конфига для редактора (mpcVE): правка СКРЫТЫХ полей.
