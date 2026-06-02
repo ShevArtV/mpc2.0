@@ -448,3 +448,60 @@ body:not(.mpcve-on) .mpcve-hidden-trigger {
 .mpcve-rows__btn--del:hover {
     background: #fef2f2;
 }
+
+/* --- редактор picture (главная + источники) -------------------------- */
+.mpcve-pic__main,
+.mpcve-pic__slot {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.mpcve-pic__thumb {
+    flex: 0 0 96px;
+    height: 64px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #f1f5f9;
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.mpcve-pic__thumb img {
+    max-width: 100%;
+    max-height: 64px;
+    display: block;
+}
+
+.mpcve-pic__pick {
+    cursor: pointer;
+    padding: 6px 12px;
+    border: 1px dashed #cbd5e1;
+    border-radius: 6px;
+    color: #2563eb;
+    font-size: 13px;
+}
+
+.mpcve-pic__src {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid #e2e8f0;
+}
+
+.mpcve-pic__slot {
+    flex: 1 1 auto;
+}
+
+.mpcve-pic__media {
+    flex: 1 1 auto;
+    min-width: 120px;
+    padding: 6px 9px;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    font: inherit;
+    box-sizing: border-box;
+}

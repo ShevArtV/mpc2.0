@@ -1,3 +1,10 @@
+2.5.17-rc
+==============
+Write-API: глубокий лексикон-мерж media-записи с sources (picture/video/audio).
+
+- `FieldWriter::writeConfigField`: record-значение с вложенным `img` (JSON-строка) и/или массивом `sources` → `mergeMediaRecord` (а не плоский `mergeRecordWithLexicon`). Рекурсивно обрабатывает лексиконизируемые листья: `img.src/alt/title`, `sources[k].srcset/src`, верхнеуровневые `src/poster` (video/audio). Существующий ключ → пишем значение в лексикон и сохраняем ключ; НОВЫЙ source/лист → генерим ключ единой `getLexiconKey` (`{prefix}_{field}_source[_idx]`, `_poster`, …). Если новое значение РАВНО ключу — фронт прислал ключ (лист не меняли) → лексикон не трогаем (защита от затирания неизменённых источников отрендеренным thumb-URL). Хелперы: `isMediaWithSources`, `mergeMediaRecord`, `mergeImgKeys`, `resolveLeafKey`. Тест `testMergeMediaRecordPictureSources`.
+- Версия пакета `2.5.16` → `2.5.17`.
+
 2.5.16-rc
 ==============
 Write-API: новая media-запись (картинка добавленной строки) получает лексикон-ключи.

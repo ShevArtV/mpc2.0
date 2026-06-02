@@ -214,14 +214,20 @@ class FieldWriter
             $current = $cfw->getValue($configJson, $address)['data']['value'] ?? null;
 
             if ($this->isRecordValue($value)) {
-                // Медиа-запись: если у текущей записи уже есть лексикон-ключи —
-                // мерж (обновляем лексикон, ключи остаются). Если запись НОВАЯ
-                // (ключей нет, напр. картинка только что добавленной строки) —
-                // генерим ключи для src/alt/title, иначе чанк src="{…|lexicon}"
-                // вернёт '' для литерала.
-                if ($this->recordHasLexiconKeys($writer, $ident, $current)) {
+                if ($this->isMediaWithSources($value)) {
+                    // picture/video/audio: запись с вложенным img (JSON-строка) и
+                    // массивом sources → глубокий мерж лексикона (существующий ключ
+                    // обновляем, новый srcset/src/alt/poster — генерим).
+                    $value = $this->mergeMediaRecord(
+                        $writer, $ident, $current, $value,
+                        $this->sectionPrefix($configJson, (string)($address['section'] ?? '')),
+                        (string)($address['fieldName'] ?? '')
+                    );
+                } elseif ($this->recordHasLexiconKeys($writer, $ident, $current)) {
+                    // плоская img-запись с ключами → мерж по под-полям.
                     $value = $this->mergeRecordWithLexicon($writer, $ident, $current, $value);
                 } else {
+                    // новая плоская img-запись → генерим ключи src/alt/title.
                     $value = $this->newRecordWithLexiconKeys($writer, $ident, $configJson, $address, $value);
                 }
             } elseif (is_string($current) && $current !== '' && !$this->isRecordValue($current)
@@ -363,6 +369,114 @@ class FieldWriter
             }
         }
         return json_encode($rows, JSON_UNESCAPED_UNICODE);
+    }
+
+    /** Запись — это media с вложенным img/sources (picture/video/audio)? */
+    private function isMediaWithSources($value): bool
+    {
+        $rows = $this->decodeRecord($value);
+        $row  = $rows[0] ?? null;
+        return is_array($row) && (isset($row['sources']) || isset($row['img']));
+    }
+
+    /**
+     * Глубокий лексикон-мерж media-записи (picture/video/audio): вложенный `img`
+     * (JSON-строка картинки) и массив `sources`. Лексиконизируемые листья
+     * (src/srcset/alt/title/poster): существующий ключ → обновляем значение в
+     * лексиконе и сохраняем ключ; новый → генерим ключ единой getLexiconKey.
+     * Прочее (preview/type/media/width…) — литералом.
+     */
+    private function mergeMediaRecord(LexiconWriter $writer, string $ident, $current, $value, string $prefix, string $field): string
+    {
+        $cur = $this->decodeRecord($current);
+        $new = $this->decodeRecord($value);
+
+        foreach ($new as $i => $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            $curRow = (isset($cur[$i]) && is_array($cur[$i])) ? $cur[$i] : [];
+
+            // вложенная картинка img (JSON-строка записи): src/alt/title
+            if (isset($row['img'])) {
+                $new[$i]['img'] = $this->mergeImgKeys($writer, $ident, $curRow['img'] ?? '', $row['img'], $prefix, $field);
+            }
+            // массив sources: srcset (picture) / src (video/audio)
+            if (isset($row['sources']) && is_array($row['sources'])) {
+                $curSources = (isset($curRow['sources']) && is_array($curRow['sources'])) ? $curRow['sources'] : [];
+                foreach ($row['sources'] as $k => $src) {
+                    if (!is_array($src)) {
+                        continue;
+                    }
+                    foreach (['srcset', 'src'] as $leaf) {
+                        if (isset($src[$leaf]) && is_string($src[$leaf]) && $src[$leaf] !== '') {
+                            $key = $this->resolveLeafKey($writer, $ident, $curSources[$k][$leaf] ?? null, $prefix, $field . '_source', $k);
+                            if ($key !== '') {
+                                // значение == ключ → фронт прислал ключ (источник
+                                // не меняли) → лексикон НЕ трогаем, только ключ в конфиг.
+                                if ($src[$leaf] !== $key) {
+                                    $writer->set($ident, $key, $src[$leaf]);
+                                }
+                                $new[$i]['sources'][$k][$leaf] = $key;
+                            }
+                        }
+                    }
+                }
+            }
+            // верхнеуровневые листья video/audio: src / poster
+            foreach (['src' => '_source', 'poster' => '_poster'] as $leaf => $suffix) {
+                if (isset($row[$leaf]) && is_string($row[$leaf]) && $row[$leaf] !== '' && !$this->isRecordValue($row[$leaf])) {
+                    $key = $this->resolveLeafKey($writer, $ident, $curRow[$leaf] ?? null, $prefix, $field . $suffix, '');
+                    if ($key !== '') {
+                        if ($row[$leaf] !== $key) {
+                            $writer->set($ident, $key, $row[$leaf]);
+                        }
+                        $new[$i][$leaf] = $key;
+                    }
+                }
+            }
+        }
+
+        return json_encode($new, JSON_UNESCAPED_UNICODE);
+    }
+
+    /** Мерж ключей вложенной картинки img (src/alt/title). */
+    private function mergeImgKeys(LexiconWriter $writer, string $ident, $curImg, $newImg, string $prefix, string $field): string
+    {
+        $cur = $this->decodeRecord($curImg);
+        $new = $this->decodeRecord($newImg);
+        foreach ($new as $i => $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            $curRow = (isset($cur[$i]) && is_array($cur[$i])) ? $cur[$i] : [];
+            foreach (['src' => '', 'alt' => '_alt', 'title' => '_title'] as $leaf => $suffix) {
+                if (isset($row[$leaf]) && is_string($row[$leaf]) && $row[$leaf] !== '') {
+                    $key = $this->resolveLeafKey($writer, $ident, $curRow[$leaf] ?? null, $prefix, $field . $suffix, '');
+                    if ($key !== '') {
+                        if ($row[$leaf] !== $key) {
+                            $writer->set($ident, $key, $row[$leaf]);
+                        }
+                        $new[$i][$leaf] = $key;
+                    }
+                }
+            }
+        }
+        return json_encode($new, JSON_UNESCAPED_UNICODE);
+    }
+
+    /** Ключ листа: существующий (если он лексикон-ключ) либо новый через getLexiconKey ('' если нет prefix). */
+    private function resolveLeafKey(LexiconWriter $writer, string $ident, $currentLeaf, string $prefix, string $fieldName, $idx): string
+    {
+        if (is_string($currentLeaf) && $currentLeaf !== '' && $writer->has($ident, $currentLeaf)) {
+            return $currentLeaf;
+        }
+        if ($prefix === '') {
+            return '';
+        }
+        return \MpcServices\Handlers\Grabber\LexiconManager::getLexiconKey([
+            'prefix' => $prefix, 'fieldName' => $fieldName, 'idx' => $idx,
+        ]);
     }
 
     /**

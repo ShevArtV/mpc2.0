@@ -231,6 +231,40 @@ class FieldWriterTest extends TestCase
         $this->assertSame('500', $img[0]['width']);
     }
 
+    /** picture: глубокий merge — существующий source обновляется, новый получает ключ. */
+    public function testMergeMediaRecordPictureSources(): void
+    {
+        $cover = json_encode([[
+            'MIGX_id' => 1, 'preview' => '/old.jpg',
+            'img' => json_encode([['MIGX_id' => 1, 'src' => 'media_cover', 'alt' => 'media_cover_alt', 'title' => '', 'width' => '600', 'height' => '500']], JSON_UNESCAPED_UNICODE),
+            'sources' => [['MIGX_id' => 1, 'type' => null, 'media' => '(min-width: 992px)', 'srcset' => 'media_cover_source']],
+        ]], JSON_UNESCAPED_UNICODE);
+        $config = json_encode(['1' => ['section_name' => 'media', 'MIGX_formname' => 'mpc_media', 'lexicon_prefix' => 'media', 'cover' => $cover]], JSON_UNESCAPED_UNICODE);
+        $resource = new ModxObjectStub('modResource', ['id' => 5, 'context_key' => 'web', 'tv_mpc_config' => $config]);
+        $writer = new FieldWriter($this->makeModx($resource));
+        $log = [];
+        $this->injectLex($writer, ['media_cover', 'media_cover_alt', 'media_cover_source'], $log);
+
+        $newRecord = json_encode([[
+            'MIGX_id' => 1, 'preview' => '/new.jpg',
+            'img' => json_encode([['MIGX_id' => 1, 'src' => '/new-main.jpg', 'alt' => 'Новый alt', 'title' => '', 'width' => '600', 'height' => '500']], JSON_UNESCAPED_UNICODE),
+            'sources' => [
+                ['MIGX_id' => 1, 'media' => '(min-width: 992px)', 'srcset' => '/new-src1.webp'],
+                ['MIGX_id' => 2, 'media' => '(min-width: 600px)', 'srcset' => '/new-src2.webp'], // новый source
+            ],
+        ]], JSON_UNESCAPED_UNICODE);
+        $res = $writer->write(['type' => 'field', 'level' => 'resource', 'resourceId' => 5, 'section' => 'media', 'fieldName' => 'cover'], $newRecord);
+
+        $this->assertTrue($res['success'], $res['message']);
+        $this->assertSame('/new-main.jpg', $log['media_cover']);        // img.src по существующему ключу
+        $this->assertSame('Новый alt', $log['media_cover_alt']);        // img.alt по существующему ключу
+        $this->assertSame('/new-src1.webp', $log['media_cover_source']);// source[0] по существующему ключу
+        $this->assertSame('/new-src2.webp', $log['media_cover_source_1']); // source[1] — новый ключ idx=1
+        $cover2 = json_decode(json_decode($resource->getTVValue('mpc_config'), true)['1']['cover'], true);
+        $this->assertSame('media_cover_source', $cover2[0]['sources'][0]['srcset']);
+        $this->assertSame('media_cover_source_1', $cover2[0]['sources'][1]['srcset']);
+    }
+
     public function testConfigFieldEmptyConfigRejected(): void
     {
         $resource = new ModxObjectStub('modResource', ['id' => 5]); // нет tv_mpc_config
