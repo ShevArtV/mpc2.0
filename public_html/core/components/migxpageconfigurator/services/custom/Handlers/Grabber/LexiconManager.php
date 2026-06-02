@@ -287,13 +287,19 @@ class LexiconManager
         foreach ($allLexicons as $rid => $lexicons) {
             $pathToLexiconFile = $basePathToLexiconFile . $rid . '.inc.php';
             if (!$overwrite && file_exists($pathToLexiconFile)) {
-                // Без updContent: существующие переводы в файле НЕ трогаем —
-                // дописываем только новые ключи (для новых полей). Значения
-                // переводов админа сохраняются (existing побеждает в мерже).
+                // Без updContent: сохраняем ЗНАЧЕНИЯ существующих переводов, но
+                // ТОЛЬКО для ключей, которые ещё есть в текущей нарезке (поле
+                // живо). Ключи удалённых полей НЕ переносим — иначе orphan-перевод
+                // оставался бы в файле и маскировал новое значение при повторном
+                // добавлении поля. Новые поля берут значение из шаблона.
                 $_lang = [];
                 include $pathToLexiconFile;
                 if (is_array($_lang)) {
-                    $lexicons = array_merge($lexicons, $_lang);
+                    foreach ($lexicons as $k => $v) {
+                        if (array_key_exists($k, $_lang)) {
+                            $lexicons[$k] = $_lang[$k];
+                        }
+                    }
                 }
             } elseif (file_exists($pathToLexiconFile) && !empty($_rlang)) {
                 include $pathToLexiconFile;

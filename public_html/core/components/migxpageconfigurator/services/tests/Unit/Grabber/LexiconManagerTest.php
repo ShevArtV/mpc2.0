@@ -787,20 +787,25 @@ class LexiconManagerTest extends TestCase
     // createLexicons() — мерж без overwrite (без updContent)
     // ---------------------------------------------------------------
 
-    /** Без overwrite: существующие переводы в файле НЕ перезаписываются, новые ключи дописываются. */
-    public function testCreateLexiconsPreservesExistingWithoutOverwrite(): void
+    /**
+     * Без overwrite: значение живого поля сохраняется (не перезаписывается
+     * шаблоном); новый ключ берёт значение из шаблона; ключ удалённого поля
+     * (нет в текущей нарезке) ВЫПАДАЕТ — иначе orphan маскировал бы новое значение.
+     */
+    public function testCreateLexiconsPreservesLiveDropsOrphanWithoutOverwrite(): void
     {
         $lm = $this->makeManager();
         $file = $this->tmpDir . '/7.inc.php';
-        file_put_contents($file, "<?php\n\$_lang['k_shared'] = 'admin перевод';\n\$_lang['k_old'] = 'только в файле';\n");
+        file_put_contents($file, "<?php\n\$_lang['k_shared'] = 'admin перевод';\n\$_lang['k_old'] = 'удалённое поле';\n");
 
+        // в нарезке: k_shared (живо, другое значение) + k_new (новое); k_old удалён
         $lm->createLexicons([7 => ['k_shared' => 'из шаблона', 'k_new' => 'новое поле']], false);
 
         $_lang = [];
         include $file;
-        $this->assertSame('admin перевод', $_lang['k_shared']); // значение НЕ перезаписано
-        $this->assertSame('только в файле', $_lang['k_old']);   // старый ключ сохранён
-        $this->assertSame('новое поле', $_lang['k_new']);       // новый ключ добавлен
+        $this->assertSame('admin перевод', $_lang['k_shared']);    // живое → значение сохранено
+        $this->assertSame('новое поле', $_lang['k_new']);          // новое → из шаблона
+        $this->assertArrayNotHasKey('k_old', $_lang);              // удалённое поле → orphan выпал
     }
 
     /** С overwrite=true: значение из шаблона перезаписывает существующее. */
