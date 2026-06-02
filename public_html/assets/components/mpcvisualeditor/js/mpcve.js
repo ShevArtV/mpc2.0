@@ -477,8 +477,17 @@
     // есть, кнопку «⊕ N» в углу — клик открывает панель ЭТОГО блока. Запись —
     // прежним field/save (адрес с parentField/idx для под-полей строк списков).
     var configData = null; // { resourceId, resource:{}, global:{} } из config/get
+    // Структурные ключи секции — НЕ показываем как редактируемые. inline_styles /
+    // class_names (вкладка «Стили секции») — редактируемы через панель, поэтому
+    // их тут НЕТ; css_file_path остаётся скрытым (по требованию).
     var STRUCTURAL = ['section_name', 'MIGX_formname', 'position', 'is_static',
-        'file_name', 'limit', 'inline_styles', 'class_names', 'css_file_path'];
+        'file_name', 'limit', 'css_file_path'];
+    // Понятные подписи известных служебных/стилевых полей.
+    var FIELD_LABELS = {
+        inline_styles: 'Inline-стили',
+        class_names: 'CSS-классы',
+        resources: 'Ресурсы (resources)'
+    };
 
     function loadConfig() {
         return api.post('config/get', { resourceId: cfg.resourceId || 0 }).then(function (r) {
@@ -565,7 +574,7 @@
             out.push({
                 level: sc.level, section: sc.section,
                 fieldName: name, value: value == null ? '' : String(value),
-                type: fieldType(name, value), label: name
+                type: fieldType(name, value), label: FIELD_LABELS[name] || name
             });
         });
         return out;
@@ -616,7 +625,7 @@
                 level: info.level, section: info.section,
                 parentField: info.parentField, idx: info.idx,
                 fieldName: sub, value: sv == null ? '' : String(sv),
-                type: typesMap[sub] || 'text', label: sub
+                type: typesMap[sub] || 'text', label: FIELD_LABELS[sub] || sub
             });
         });
         return { info: info, fields: out };
