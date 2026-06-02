@@ -477,17 +477,24 @@
     // есть, кнопку «⊕ N» в углу — клик открывает панель ЭТОГО блока. Запись —
     // прежним field/save (адрес с parentField/idx для под-полей строк списков).
     var configData = null; // { resourceId, resource:{}, global:{} } из config/get
-    // Структурные ключи секции — НЕ показываем как редактируемые. inline_styles /
-    // class_names (вкладка «Стили секции») — редактируемы через панель, поэтому
-    // их тут НЕТ; css_file_path остаётся скрытым (по требованию).
-    var STRUCTURAL = ['section_name', 'MIGX_formname', 'position', 'is_static',
-        'file_name', 'limit', 'css_file_path'];
-    // Понятные подписи известных служебных/стилевых полей.
+    // Редактируемые поля СЕКЦИИ = вкладка «Стили секции», кроме css_file_path.
+    var SECTION_STYLE_FIELDS = ['inline_styles', 'class_names'];
+    // Структурные ключи (для скрытых под-полей СТРОК списков) — не редактируем.
+    var STRUCTURAL = ['section_name', 'MIGX_formname', 'MIGX_id', 'id', 'position',
+        'is_static', 'file_name', 'limit', 'lexicon_prefix', 'css_file_path',
+        'inline_styles', 'class_names'];
+    // Понятные подписи известных полей (приоритетнее captions из конфигуратора).
     var FIELD_LABELS = {
         inline_styles: 'Inline-стили',
         class_names: 'CSS-классы',
         resources: 'Ресурсы (resources)'
     };
+    var labelsMap = {}; // имя поля → caption из конфигуратора (fields/types)
+
+    // Подпись поля: ручная → caption конфигуратора → ключ (как fallback).
+    function fieldLabel(name) {
+        return FIELD_LABELS[name] || labelsMap[name] || name;
+    }
 
     function loadConfig() {
         return api.post('config/get', { resourceId: cfg.resourceId || 0 }).then(function (r) {
@@ -531,53 +538,26 @@
         })) ? d : null;
     }
 
-    function fieldType(name, value) {
-        if (typesMap[name]) { return typesMap[name]; }
-        var rec = parseRecord(value);
-        if (rec) {
-            return (rec.length === 1 && ('src' in rec[0] || 'srcset' in rec[0] || 'img' in rec[0]))
-                ? 'image' : 'rows';
-        }
-        return 'text';
-    }
-
     function isScalar(v) {
         return v == null || typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean';
     }
 
-    function isScalarEditor(t) {
-        return t === 'text' || t === 'textarea' || t === 'richtext';
-    }
-
-    // Имена top-полей секции, имеющих DOM-маркер (НЕ внутри строки списка).
-    function visibleTopFields(sectionEl) {
-        var seen = {};
-        sectionEl.querySelectorAll(SELECTOR).forEach(function (el) {
-            var addr = fieldAddress(el);
-            if (addr && addr.type === 'field' && addr.parentField == null) {
-                seen[addr.fieldName] = true;
-            }
-        });
-        return seen;
-    }
-
-    // Скрытые СКАЛЯРНЫЕ top-поля секции (не структурные/медиа/записи, нет в DOM).
-    function sectionTopHidden(sectionEl) {
+    // Редактируемые поля СЕКЦИИ = вкладка «Стили секции» (кроме css_file_path).
+    // Фиксированный набор, заполняем из конфига (или пусто — чтобы можно было
+    // ЗАДАТЬ ещё не существующее значение). Диф конфиг−DOM для секций не годится:
+    // контент идёт через rfield/tv, а в конфиге — только служебные ключи
+    // (MIGX_id/id/lexicon_prefix…), которые не редактируются.
+    function sectionStyleHidden(sectionEl) {
         var sc = sectionConfig(sectionEl);
         if (!sc) { return []; }
-        var vis = visibleTopFields(sectionEl);
-        var out = [];
-        Object.keys(sc.obj).forEach(function (name) {
-            if (STRUCTURAL.indexOf(name) !== -1 || vis[name]) { return; }
+        return SECTION_STYLE_FIELDS.map(function (name) {
             var value = sc.obj[name];
-            if (!isScalarEditor(fieldType(name, value)) || parseRecord(value)) { return; }
-            out.push({
+            return {
                 level: sc.level, section: sc.section,
                 fieldName: name, value: value == null ? '' : String(value),
-                type: fieldType(name, value), label: FIELD_LABELS[name] || name
-            });
+                type: typesMap[name] || 'text', label: fieldLabel(name)
+            };
         });
-        return out;
     }
 
     // Инфо строки списка по её DOM-элементу (level-1 item): section/level/obj/parentField/idx.
@@ -625,14 +605,14 @@
                 level: info.level, section: info.section,
                 parentField: info.parentField, idx: info.idx,
                 fieldName: sub, value: sv == null ? '' : String(sv),
-                type: typesMap[sub] || 'text', label: FIELD_LABELS[sub] || sub
+                type: typesMap[sub] || 'text', label: fieldLabel(sub)
             });
         });
         return { info: info, fields: out };
     }
 
     // --- триггеры у блоков + панель ----------------------------------------
-    function attachTrigger(blockEl, title, descriptors) {
+    function attachTrigger(blockEl, title, descriptors, btnText) {
         // Якорим кнопку абсолютно в углу блока; если блок position:static —
         // временно делаем relative (откатываем в removeHiddenTriggers).
         if (window.getComputedStyle(blockEl).position === 'static') {
@@ -642,8 +622,8 @@
         var btn = document.createElement('button');
         btn.type = 'button';
         btn.className = 'mpcve-hidden-trigger';
-        btn.textContent = '⊕ ' + descriptors.length;
-        btn.title = title + ' — скрытые поля';
+        btn.textContent = btnText || ('⊕ ' + descriptors.length);
+        btn.title = title;
         btn.addEventListener('click', function (e) {
             e.preventDefault();
             e.stopPropagation();
@@ -662,16 +642,16 @@
         var items = document.querySelectorAll('[data-mpc-item]');
         var triggers = 0;
         sections.forEach(function (sectionEl) {
-            var fields = sectionTopHidden(sectionEl);
+            var fields = sectionStyleHidden(sectionEl);
             if (fields.length) {
-                attachTrigger(sectionEl, 'Секция «' + sectionEl.getAttribute('data-mpc-section') + '»', fields);
+                attachTrigger(sectionEl, 'Стили секции «' + sectionEl.getAttribute('data-mpc-section') + '»', fields, 'Стили');
                 triggers++;
             }
         });
         items.forEach(function (itemEl) {
             var h = itemHidden(itemEl);
             if (h && h.fields.length) {
-                attachTrigger(itemEl, h.info.parentField + ' #' + (h.info.idx + 1), h.fields);
+                attachTrigger(itemEl, 'Скрытые поля строки ' + h.info.parentField + ' #' + (h.info.idx + 1), h.fields);
                 triggers++;
             }
         });
@@ -857,8 +837,9 @@
         bindClicks();
         Promise.all([
             api.post('fields/types', {}).then(function (res) {
-                if (res && res.success && res.data && res.data.fields) {
-                    typesMap = res.data.fields;
+                if (res && res.success && res.data) {
+                    if (res.data.fields) { typesMap = res.data.fields; }
+                    if (res.data.labels) { labelsMap = res.data.labels; }
                 }
             }).catch(function () {}),
             // Конфиг нужен только в режиме правки (тумблер перезагружает страницу).

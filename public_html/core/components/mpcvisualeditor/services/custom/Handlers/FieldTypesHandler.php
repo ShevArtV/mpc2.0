@@ -29,6 +29,7 @@ class FieldTypesHandler
         $this->modx->addPackage('migx', $core . 'components/migx/model/');
 
         $map = [];
+        $labels = [];
         if ($cfg = $this->modx->getObject('migxConfig', ['name' => $base])) {
             $tabs = json_decode((string)$cfg->get('formtabs'), true);
             if (is_array($tabs)) {
@@ -42,12 +43,17 @@ class FieldTypesHandler
                             (string)($f['inputTVtype'] ?? ''),
                             (string)($f['configs'] ?? '')
                         );
+                        // caption поля для подписи в редакторе (вместо ключа).
+                        $caption = trim((string)($f['caption'] ?? ''));
+                        if ($caption !== '') {
+                            $labels[$name] = $caption;
+                        }
                     }
                 }
             }
         }
 
-        return ['success' => true, 'message' => '', 'data' => ['fields' => $map]];
+        return ['success' => true, 'message' => '', 'data' => ['fields' => $map, 'labels' => $labels]];
     }
 
     /**
