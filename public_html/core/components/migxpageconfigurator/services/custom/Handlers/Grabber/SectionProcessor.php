@@ -582,7 +582,10 @@ class SectionProcessor
         $fieldsValues = isset($this->modx->event->returnedValues) && !empty($this->modx->event->returnedValues['fieldsValues'])
             ? $this->modx->event->returnedValues['fieldsValues'] : $fieldsValues;
 
-        if (!$properties['isCopy'] && $isStatic) {
+        // Граб ЗНАЧЕНИЙ статик-секции в конфиг статик-блоков — только при
+        // updContent (симметрично resource-уровню: без updContent перенарезка
+        // обновляет схему/вёрстку, но НЕ перезаписывает контент админки).
+        if (!$properties['isCopy'] && $isStatic && !empty($this->properties['updContent'])) {
             $this->updateStaticSectionValues($fieldsValues, $properties['sectionName']);
         }
 
