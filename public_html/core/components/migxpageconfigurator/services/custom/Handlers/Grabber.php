@@ -233,8 +233,9 @@ class Grabber extends Base
         return $this->lexiconManager->getResourceIdentifierById($rid);
     }
 
-    public function createLexicons(array $allLexicons): void
+    public function createLexicons(array $allLexicons, ?bool $overwrite = null): void
     {
-        $this->lexiconManager->createLexicons($allLexicons);
+        // По умолчанию уважаем updContent: без `1` существующие переводы не перезаписываем.
+        $this->lexiconManager->createLexicons($allLexicons, $overwrite ?? $this->updContent);
     }
 }

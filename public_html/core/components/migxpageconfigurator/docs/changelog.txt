@@ -1,3 +1,12 @@
+2.5.10-rc
+==============
+Фикс: значения лексиконов в файле не перезаписываются без updContent (дополняет 2.5.9).
+
+- `LexiconManager::createLexicons($allLexicons, bool $overwrite = true)`: без `updContent` существующие переводы в lexicon-файле НЕ трогаются — дописываются только новые ключи (новых полей); значения админа сохраняются (`array_merge($lexicons, $existing)` — existing побеждает). С `updContent` — прежнее поведение (шаблон перезаписывает, whitelist resource_lexicon_keys сохраняется). Раньше `array_merge($tmp, $lexicons)` всегда давал template-значениям перезаписать файл → переводы затирались при `mgr_tpl` без `1`.
+- Вызовы: `SectionProcessor` передаёт `updContent`; `Grabber::createLexicons` по умолчанию уважает `$this->updContent`. Контакты (`ContactUpdater`) уже гейтятся (`handleContacts` выходит при `!updContent`) — без изменений.
+- Тесты: `testCreateLexiconsPreservesExistingWithoutOverwrite`, `testCreateLexiconsOverwritesWithFlag`.
+- Версия пакета `2.5.9` → `2.5.10`.
+
 2.5.9-rc
 ==============
 Перенарезка без updContent = умный МЕРЖ конфига (а не «не трогать»). Уточняет 2.5.6.

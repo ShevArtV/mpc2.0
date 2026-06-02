@@ -782,4 +782,38 @@ class LexiconManagerTest extends TestCase
         $this->assertFalse($m->shouldLexiconize('text', 'MIGX_id', ''));
         $this->assertTrue($m->shouldLexiconize('text', 'title', ''));
     }
+
+    // ---------------------------------------------------------------
+    // createLexicons() — мерж без overwrite (без updContent)
+    // ---------------------------------------------------------------
+
+    /** Без overwrite: существующие переводы в файле НЕ перезаписываются, новые ключи дописываются. */
+    public function testCreateLexiconsPreservesExistingWithoutOverwrite(): void
+    {
+        $lm = $this->makeManager();
+        $file = $this->tmpDir . '/7.inc.php';
+        file_put_contents($file, "<?php\n\$_lang['k_shared'] = 'admin перевод';\n\$_lang['k_old'] = 'только в файле';\n");
+
+        $lm->createLexicons([7 => ['k_shared' => 'из шаблона', 'k_new' => 'новое поле']], false);
+
+        $_lang = [];
+        include $file;
+        $this->assertSame('admin перевод', $_lang['k_shared']); // значение НЕ перезаписано
+        $this->assertSame('только в файле', $_lang['k_old']);   // старый ключ сохранён
+        $this->assertSame('новое поле', $_lang['k_new']);       // новый ключ добавлен
+    }
+
+    /** С overwrite=true: значение из шаблона перезаписывает существующее. */
+    public function testCreateLexiconsOverwritesWithFlag(): void
+    {
+        $lm = $this->makeManager();
+        $file = $this->tmpDir . '/8.inc.php';
+        file_put_contents($file, "<?php\n\$_lang['k_shared'] = 'admin перевод';\n");
+
+        $lm->createLexicons([8 => ['k_shared' => 'из шаблона']], true);
+
+        $_lang = [];
+        include $file;
+        $this->assertSame('из шаблона', $_lang['k_shared']); // overwrite → шаблон
+    }
 }

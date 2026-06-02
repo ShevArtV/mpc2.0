@@ -185,7 +185,12 @@ class SectionProcessor
         }
 
         if (!$this->properties['fromPlugin']) {
-            $this->lexiconManager->createLexicons($this->lexiconManager->lexicons);
+            // overwrite=updContent: без `1` существующие переводы сохраняем (мерж),
+            // с `1` — шаблон перезаписывает (как контент секций).
+            $this->lexiconManager->createLexicons(
+                $this->lexiconManager->lexicons,
+                !empty($this->properties['updContent'])
+            );
         }
 
         $this->response->success(__METHOD__, 'Section processing is complete.');

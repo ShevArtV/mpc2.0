@@ -274,7 +274,7 @@ class LexiconManager
         return $lexiconKey;
     }
 
-    public function createLexicons(array $allLexicons): void
+    public function createLexicons(array $allLexicons, bool $overwrite = true): void
     {
         $basePathToLexiconFile   = $this->properties['basePathToLexiconFile'];
         $resourceLexiconKeysPath = $this->properties['corePath'] . $this->properties['resourceLexiconKeysPath'];
@@ -286,7 +286,16 @@ class LexiconManager
 
         foreach ($allLexicons as $rid => $lexicons) {
             $pathToLexiconFile = $basePathToLexiconFile . $rid . '.inc.php';
-            if (file_exists($pathToLexiconFile) && !empty($_rlang)) {
+            if (!$overwrite && file_exists($pathToLexiconFile)) {
+                // Без updContent: существующие переводы в файле НЕ трогаем —
+                // дописываем только новые ключи (для новых полей). Значения
+                // переводов админа сохраняются (existing побеждает в мерже).
+                $_lang = [];
+                include $pathToLexiconFile;
+                if (is_array($_lang)) {
+                    $lexicons = array_merge($lexicons, $_lang);
+                }
+            } elseif (file_exists($pathToLexiconFile) && !empty($_rlang)) {
                 include $pathToLexiconFile;
                 $tmp = array_intersect_key($_lang, $_rlang);
                 if (empty($tmp)) {
