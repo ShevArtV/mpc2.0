@@ -14,6 +14,11 @@ class SectionProcessor
     /** Индекс контентного таба в formtabs mpc_base (0=настройки, 1=контент, 2=стили). */
     private const CONTENT_TAB_INDEX = 1;
 
+    /** Служебные ключи секции — всегда берутся свежими из шаблона при перенарезке. */
+    private const STRUCTURAL_SECTION_KEYS = [
+        'MIGX_id', 'MIGX_formname', 'id', 'section_name', 'lexicon_prefix', 'file_name', 'is_static',
+    ];
+
     public array $properties;
 
     /** Имена mpc_auto_*-конфигов, созданных при нарезке текущей секции (для GC). */
@@ -87,6 +92,13 @@ class SectionProcessor
         $i = 0;
         $sectionValues = [];
 
+        // Существующий конфиг ресурса — для умного мержа при перенарезке: правки
+        // админа сохраняем, новые поля добавляем, ушедшие удаляем (см.
+        // mergeSectionFields). Индекс по имени секции.
+        $existingResourceSections = $this->indexConfigBySection(
+            json_decode((string)$this->properties['resource']->getTVValue($this->properties['commonConfigTvName']), true) ?: []
+        );
+
         foreach ($sections as $section) {
             $this->mediaDownloader->setCurrentSectionName('');
             $i++;
@@ -114,7 +126,10 @@ class SectionProcessor
             }
 
             $values = $this->grabSection($section, $properties, $i);
-            $sectionValues[$i] = $values;
+            $existing = $existingResourceSections[$values['MIGX_formname'] ?? ''] ?? [];
+            $sectionValues[$i] = $this->mergeSectionFields(
+                $values, $existing, $this->reservedFieldNames, !empty($this->properties['updContent'])
+            );
         }
 
         // Имя файла секции — служебка типа страницы. Для mpcType пишем в
@@ -145,7 +160,10 @@ class SectionProcessor
             $grabResource->save();
         }
 
-        if ($this->properties['updContent'] && !empty($sectionValues)) {
+        // Пишем ВСЕГДА (не только при updContent): без updContent это умный мерж
+        // (правки сохранены, ушедшие поля/секции убраны, новые добавлены), с
+        // updContent — перезапись контентом шаблона. Решает mergeSectionFields.
+        if (!empty($sectionValues)) {
             $this->properties['resource']->setTVValue(
                 $this->properties['commonConfigTvName'],
                 json_encode($sectionValues, JSON_UNESCAPED_UNICODE)
@@ -209,6 +227,66 @@ class SectionProcessor
      * задан — берём прототип как есть (прежнее поведение). caption/description
      * переопределяются data-mpc-fcap/data-mpc-fdesc. См. makeFieldDef.
      */
+    /**
+     * Мерж значений секции при перенарезке (PURE, юнит-тестируемо).
+     *
+     * @param array $grabbed   значения из ШАБЛОНА (текущее состояние полей)
+     * @param array $existing  значения из ТЕКУЩЕГО конфига (правки админа)
+     * @param array $reserved  имена admin-полей настроек/стилей (collectReservedFieldNames)
+     * @param bool  $overwrite updContent: true → шаблон перезаписывает контент
+     *
+     * Без overwrite: служебные ключи — свежие из шаблона; контент-поле, что уже
+     * есть в конфиге → СОХРАНЯЕМ старое значение; новое поле → его контент из
+     * шаблона; поле, ушедшее из шаблона → выпадает (удаляется), КРОМЕ admin-полей
+     * настроек/стилей (их шаблон не задаёт — сохраняем).
+     * С overwrite: шаблон побеждает, но admin-поля настроек/стилей вне шаблона
+     * тоже сохраняются (иначе сбрасывались бы hide_section/position и т.п.).
+     */
+    public function mergeSectionFields(array $grabbed, array $existing, array $reserved, bool $overwrite): array
+    {
+        if ($overwrite) {
+            $result = $grabbed;
+            foreach ($existing as $k => $v) {
+                if (isset($reserved[$k]) && !array_key_exists($k, $grabbed)) {
+                    $result[$k] = $v;
+                }
+            }
+            return $result;
+        }
+
+        $result = [];
+        foreach ($grabbed as $k => $v) {
+            if (in_array($k, self::STRUCTURAL_SECTION_KEYS, true)) {
+                $result[$k] = $v;                       // служебное → свежее
+            } elseif (array_key_exists($k, $existing)) {
+                $result[$k] = $existing[$k];            // сохраняем старое значение
+            } else {
+                $result[$k] = $v;                       // новое поле → его контент
+            }
+        }
+        foreach ($existing as $k => $v) {
+            if (isset($reserved[$k]) && !array_key_exists($k, $result)) {
+                $result[$k] = $v;                       // admin-настройки/стили вне шаблона
+            }
+        }
+        return $result;
+    }
+
+    /** Индексирует массив секций конфига по имени (MIGX_formname → секция). */
+    private function indexConfigBySection(array $config): array
+    {
+        $map = [];
+        foreach ($config as $sec) {
+            if (is_array($sec)) {
+                $key = (string)($sec['MIGX_formname'] ?? ($sec['section_name'] ?? ''));
+                if ($key !== '') {
+                    $map[$key] = $sec;
+                }
+            }
+        }
+        return $map;
+    }
+
     /**
      * Имена полей из НЕ-контентных табов mpc_base (настройки + стили). Эти поля
      * уже есть у каждой секции, одноимённые data-mpc-field в контент-таб не идут.
@@ -622,10 +700,9 @@ class SectionProcessor
         $fieldsValues = isset($this->modx->event->returnedValues) && !empty($this->modx->event->returnedValues['fieldsValues'])
             ? $this->modx->event->returnedValues['fieldsValues'] : $fieldsValues;
 
-        // Граб ЗНАЧЕНИЙ статик-секции в конфиг статик-блоков — только при
-        // updContent (симметрично resource-уровню: без updContent перенарезка
-        // обновляет схему/вёрстку, но НЕ перезаписывает контент админки).
-        if (!$properties['isCopy'] && $isStatic && !empty($this->properties['updContent'])) {
+        // Значения статик-секции мержим в конфиг статик-блоков (умный мерж внутри
+        // updateStaticSectionValues: без updContent правки сохраняются, с — перезапись).
+        if (!$properties['isCopy'] && $isStatic) {
             $this->updateStaticSectionValues($fieldsValues, $properties['sectionName']);
         }
 
@@ -641,7 +718,11 @@ class SectionProcessor
             foreach ($this->properties['sbpSectionValues'] as $k => $sectionValue) {
                 if ($sectionValue['MIGX_formname'] === $sectionName) {
                     if (!$this->properties['fromPlugin']) {
-                        $this->properties['sbpSectionValues'][$k] = $sectionFieldsValues;
+                        // Умный мерж со старым значением секции (а не голая замена):
+                        // правки сохраняются, ушедшие поля убираются, новые пишутся.
+                        $this->properties['sbpSectionValues'][$k] = $this->mergeSectionFields(
+                            $sectionFieldsValues, $sectionValue, $this->reservedFieldNames, !empty($this->properties['updContent'])
+                        );
                     }
                     $upd = true;
                 }

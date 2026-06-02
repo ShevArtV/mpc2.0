@@ -155,6 +155,48 @@ class SectionProcessorTest extends TestCase
         $this->assertArrayHasKey('css_file_path', $reserved);
     }
 
+    /** Мерж без overwrite: старое сохранено, новое добавлено, ушедшее удалено, служебное свежее. */
+    public function testMergePreservesExistingAddsNewDropsGone(): void
+    {
+        $reserved = ['inline_styles' => true, 'position' => true];
+        $grabbed = [
+            'MIGX_id' => 2, 'MIGX_formname' => 'hero', 'section_name' => 'Hero NEW',
+            'title' => 'template title',    // есть в existing → сохранить старое
+            'subtitle' => 'new field val',  // нет в existing → новое поле + контент
+            'inline_styles' => '--x: red',  // reserved+grabbed → сохранить старое
+        ];
+        $existing = [
+            'MIGX_id' => 1, 'MIGX_formname' => 'hero', 'section_name' => 'Hero OLD',
+            'title' => 'admin edited',      // сохранить
+            'oldfield' => 'gone',           // нет в grabbed, не reserved → удалить
+            'inline_styles' => '--x: green',// reserved → сохранить
+            'position' => '3',              // reserved вне шаблона → сохранить
+        ];
+
+        $m = $this->processor()->mergeSectionFields($grabbed, $existing, $reserved, false);
+
+        $this->assertSame('Hero NEW', $m['section_name']);    // служебное → свежее
+        $this->assertSame(2, $m['MIGX_id']);
+        $this->assertSame('admin edited', $m['title']);       // старое сохранено
+        $this->assertSame('new field val', $m['subtitle']);   // новое поле
+        $this->assertArrayNotHasKey('oldfield', $m);          // ушедшее удалено
+        $this->assertSame('--x: green', $m['inline_styles']); // reserved сохранён
+        $this->assertSame('3', $m['position']);               // reserved вне шаблона сохранён
+    }
+
+    /** Мерж с overwrite: шаблон побеждает, admin-настройка вне шаблона сохраняется. */
+    public function testMergeOverwriteTemplateWins(): void
+    {
+        $reserved = ['position' => true];
+        $grabbed = ['MIGX_formname' => 'hero', 'title' => 'template'];
+        $existing = ['MIGX_formname' => 'hero', 'title' => 'admin', 'position' => '5'];
+
+        $m = $this->processor()->mergeSectionFields($grabbed, $existing, $reserved, true);
+
+        $this->assertSame('template', $m['title']); // overwrite → шаблон
+        $this->assertSame('5', $m['position']);     // admin-настройка вне шаблона сохранена
+    }
+
     // --- S1.5: динамические списки (чистые хелперы) -----------------------
 
     /** Имя авто-конфига списка детерминированно слугифицируется. */
