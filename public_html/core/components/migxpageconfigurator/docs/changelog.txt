@@ -1,3 +1,10 @@
+2.5.8-rc
+==============
+Фикс: поля настроек/стилей mpc_base (inline_styles/class_names/…) не дублируются в контент-таб.
+
+- `SectionProcessor::getSectionFields`: `data-mpc-field` с именем, которое уже есть в mpc_base в НЕ-контентном табе (настройки/стили: `inline_styles`, `class_names`, `css_file_path`, `props`, `hide_section`, `position`…), больше НЕ добавляется в контент-таб секции — иначе появлялся дубль определения. Значение поля по-прежнему грабится (ContentParser), определение остаётся одно — в своём табе mpc_base. Реализация: `collectReservedFieldNames` (имена нон-контентных табов) + skip в getSectionFields. Тест `testCollectReservedFieldNames`. Дополняет фикс 2.5.7 (там проверялся только контент-таб).
+- Версия пакета `2.5.7` → `2.5.8`.
+
 2.5.7-rc
 ==============
 Фикс: имя поля из mpc_base приоритетнее ftype (без дубликата определения).

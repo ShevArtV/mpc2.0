@@ -137,6 +137,24 @@ class SectionProcessorTest extends TestCase
         $this->assertSame('Изображение', $d['caption']); // как в mpc_base, без суффикса «(img)»
     }
 
+    /** Зарезервированные имена = поля настроек+стилей mpc_base, контент-таб исключён. */
+    public function testCollectReservedFieldNames(): void
+    {
+        $tabs = [
+            0 => ['fields' => [['field' => 'section_name'], ['field' => 'position']]],
+            1 => ['fields' => [['field' => 'title'], ['field' => 'content']]], // контент-таб
+            2 => ['fields' => [['field' => 'inline_styles'], ['field' => 'class_names'], ['field' => 'css_file_path']]],
+        ];
+        $reserved = $this->priv('collectReservedFieldNames', [$tabs]);
+
+        $this->assertArrayNotHasKey('title', $reserved);   // контент-таб не резервируется
+        $this->assertArrayNotHasKey('content', $reserved);
+        $this->assertArrayHasKey('section_name', $reserved);
+        $this->assertArrayHasKey('inline_styles', $reserved);
+        $this->assertArrayHasKey('class_names', $reserved);
+        $this->assertArrayHasKey('css_file_path', $reserved);
+    }
+
     // --- S1.5: динамические списки (чистые хелперы) -----------------------
 
     /** Имя авто-конфига списка детерминированно слугифицируется. */

@@ -11,10 +11,20 @@ use MpcServices\Helpers\Response;
  */
 class SectionProcessor
 {
+    /** Индекс контентного таба в formtabs mpc_base (0=настройки, 1=контент, 2=стили). */
+    private const CONTENT_TAB_INDEX = 1;
+
     public array $properties;
 
     /** Имена mpc_auto_*-конфигов, созданных при нарезке текущей секции (для GC). */
     private array $createdAutoConfigs = [];
+
+    /**
+     * Имена полей mpc_base из НЕ-контентных табов (настройки/стили): уже
+     * определены для каждой секции, поэтому одноимённые data-mpc-field НЕ
+     * добавляем в контент-таб (иначе дубль — inline_styles/class_names и т.п.).
+     */
+    private array $reservedFieldNames = [];
 
     private \modX $modx;
     private Parser $parser;
@@ -64,6 +74,7 @@ class SectionProcessor
         }
 
         $defaultFormTabs = json_decode($result['data']['object']['formtabs'], true);
+        $this->reservedFieldNames = $this->collectReservedFieldNames(is_array($defaultFormTabs) ? $defaultFormTabs : []);
         $result = $this->getObject('migxConfig', ['name' => $this->properties['commonConfigTvName']]);
         if (!$result['success']) {
             return;
@@ -198,6 +209,26 @@ class SectionProcessor
      * задан — берём прототип как есть (прежнее поведение). caption/description
      * переопределяются data-mpc-fcap/data-mpc-fdesc. См. makeFieldDef.
      */
+    /**
+     * Имена полей из НЕ-контентных табов mpc_base (настройки + стили). Эти поля
+     * уже есть у каждой секции, одноимённые data-mpc-field в контент-таб не идут.
+     */
+    private function collectReservedFieldNames(array $formTabs): array
+    {
+        $reserved = [];
+        foreach ($formTabs as $idx => $tab) {
+            if ((int)$idx === self::CONTENT_TAB_INDEX) {
+                continue; // контент-таб → штатный путь (clone/synthesize)
+            }
+            foreach ($tab['fields'] ?? [] as $f) {
+                if (!empty($f['field'])) {
+                    $reserved[$f['field']] = true;
+                }
+            }
+        }
+        return $reserved;
+    }
+
     private function getSectionFields(Element $section, array $defaultFields, string $sectionName): array
     {
         $entries = $this->parser->findByAttribute($this->parser->getHTMLString($section), '[data-mpc-field]');
@@ -216,6 +247,13 @@ class SectionProcessor
                 continue;
             }
             $seen[$name] = true;
+
+            // Поле уже определено в mpc_base (таб настроек/стилей) — НЕ дублируем
+            // его в контент-таб секции. Значение всё равно грабится (ContentParser),
+            // определение остаётся одно — в своём табе mpc_base.
+            if (isset($this->reservedFieldNames[$name])) {
+                continue;
+            }
 
             $attrs = $this->fieldAttrs($entry);
 
