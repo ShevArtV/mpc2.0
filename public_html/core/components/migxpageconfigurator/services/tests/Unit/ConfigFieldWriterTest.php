@@ -157,4 +157,63 @@ class ConfigFieldWriterTest extends TestCase
         $this->assertSame('Карточка 2', $rows[0]['title']); // порядок переставлен
         $this->assertSame('Карточка 1', $rows[1]['title']); // значение уехало вместе со строкой
     }
+
+    // --- path: вложенные списки (произвольная глубина) -------------------
+
+    private function nestedConfig(): string
+    {
+        return json_encode([
+            '1' => [
+                'section_name'  => 'cat',
+                'MIGX_formname' => 'mpc_cat',
+                'title'         => 'Топ-заголовок',
+                'catalog'       => json_encode([
+                    ['MIGX_id' => 1, 'title' => 'Группа', 'items' => json_encode([
+                        ['MIGX_id' => 1, 'title' => 'Старый товар'],
+                    ], JSON_UNESCAPED_UNICODE)],
+                ], JSON_UNESCAPED_UNICODE),
+            ],
+        ], JSON_UNESCAPED_UNICODE);
+    }
+
+    public function testSetValueByNestedPath(): void
+    {
+        $w = new ConfigFieldWriter();
+        $address = [
+            'section'   => 'cat',
+            'fieldName' => 'title',
+            'path'      => [['field' => 'catalog', 'idx' => 0], ['field' => 'items', 'idx' => 0]],
+        ];
+        $res = $w->setValue($this->nestedConfig(), $address, 'Новый товар');
+        $this->assertTrue($res['success'], $res['message']);
+
+        $decoded = json_decode($res['data']['json'], true);
+        $catalog = json_decode($decoded['1']['catalog'], true);
+        $items   = json_decode($catalog[0]['items'], true);
+        $this->assertSame('Новый товар', $items[0]['title']);   // вложенное поле записано
+        $this->assertSame('Группа', $catalog[0]['title']);      // родительская строка цела
+        $this->assertSame('Топ-заголовок', $decoded['1']['title']); // top-level title НЕ затронут
+    }
+
+    public function testGetValueByNestedPath(): void
+    {
+        $w = new ConfigFieldWriter();
+        $address = [
+            'section'   => 'cat',
+            'fieldName' => 'title',
+            'path'      => [['field' => 'catalog', 'idx' => 0], ['field' => 'items', 'idx' => 0]],
+        ];
+        $this->assertSame('Старый товар', $w->getValue($this->nestedConfig(), $address)['data']['value']);
+    }
+
+    public function testSetValueByNestedPathBadIdxFails(): void
+    {
+        $w = new ConfigFieldWriter();
+        $address = [
+            'section'   => 'cat',
+            'fieldName' => 'title',
+            'path'      => [['field' => 'catalog', 'idx' => 0], ['field' => 'items', 'idx' => 9]],
+        ];
+        $this->assertFalse($w->setValue($this->nestedConfig(), $address, 'x')['success']);
+    }
 }

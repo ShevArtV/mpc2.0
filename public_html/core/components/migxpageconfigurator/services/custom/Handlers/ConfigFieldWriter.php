@@ -42,17 +42,15 @@ class ConfigFieldWriter
             return $this->err('section not found: ' . $section);
         }
 
-        $parentField = (string)($address['parentField'] ?? '');
-        $idx         = $address['idx'] ?? null;
-
-        if ($parentField !== '' && $idx !== null && $idx !== '') {
-            $rows = $this->decodeRows($config[$key][$parentField] ?? '');
-            $i = (int)$idx;
-            if (!isset($rows[$i])) {
-                return $this->err("row not found: {$parentField}[{$i}]");
+        $path = $this->pathFromAddress($address);
+        if ($path) {
+            $ok = $this->mutateAtPath($config[$key], $path, 0, static function (array &$row) use ($fieldName, $value) {
+                $row[$fieldName] = $value;
+                return true;
+            });
+            if (!$ok) {
+                return $this->err('row not found in path for field ' . $fieldName);
             }
-            $rows[$i][$fieldName] = $value;
-            $config[$key][$parentField] = json_encode($rows, JSON_UNESCAPED_UNICODE);
         } else {
             $config[$key][$fieldName] = $value;
         }
@@ -81,18 +79,68 @@ class ConfigFieldWriter
             return $this->err('section not found: ' . $section);
         }
 
-        $parentField = (string)($address['parentField'] ?? '');
-        $idx         = $address['idx'] ?? null;
-
-        if ($parentField !== '' && $idx !== null && $idx !== '') {
-            $rows = $this->decodeRows($config[$key][$parentField] ?? '');
-            $i = (int)$idx;
-            $value = $rows[$i][$fieldName] ?? null;
+        $path = $this->pathFromAddress($address);
+        if ($path) {
+            $value = null;
+            $this->mutateAtPath($config[$key], $path, 0, static function (array &$row) use ($fieldName, &$value) {
+                $value = $row[$fieldName] ?? null;
+                return false; // чтение: не мутируем, json не пересобираем
+            });
         } else {
             $value = $config[$key][$fieldName] ?? null;
         }
 
         return ['success' => true, 'message' => 'ok', 'data' => ['value' => $value]];
+    }
+
+    /**
+     * Путь к строке как массив сегментов [['field'=>list, 'idx'=>i], ...] —
+     * из address.path (вложенность любой глубины) либо из parentField+idx (1 ур.).
+     */
+    private function pathFromAddress(array $address): array
+    {
+        if (!empty($address['path']) && is_array($address['path'])) {
+            $path = [];
+            foreach ($address['path'] as $seg) {
+                if (is_array($seg) && isset($seg['field']) && $seg['field'] !== '' && isset($seg['idx'])) {
+                    $path[] = ['field' => (string)$seg['field'], 'idx' => (int)$seg['idx']];
+                }
+            }
+            return $path;
+        }
+        $pf  = (string)($address['parentField'] ?? '');
+        $idx = $address['idx'] ?? null;
+        if ($pf !== '' && $idx !== null && $idx !== '') {
+            return [['field' => $pf, 'idx' => (int)$idx]];
+        }
+        return [];
+    }
+
+    /**
+     * Навигация по пути вложенных строк с декодом JSON-строк на каждом уровне.
+     * На листе вызывает $leaf(&$row) (может мутировать строку). Возвращает успех
+     * (false, если путь не резолвится). Для чтения $leaf просто читает строку;
+     * пере-кодирование JSON безвредно (данные те же).
+     */
+    private function mutateAtPath(array &$container, array $path, int $depth, callable $leaf): bool
+    {
+        $seg   = $path[$depth];
+        $field = $seg['field'];
+        $i     = $seg['idx'];
+
+        $rows = $this->decodeRows($container[$field] ?? '');
+        if (!isset($rows[$i]) || !is_array($rows[$i])) {
+            return false;
+        }
+
+        if ($depth === count($path) - 1) {
+            $leaf($rows[$i]);
+        } elseif (!$this->mutateAtPath($rows[$i], $path, $depth + 1, $leaf)) {
+            return false;
+        }
+
+        $container[$field] = json_encode($rows, JSON_UNESCAPED_UNICODE);
+        return true;
     }
 
     /**

@@ -115,8 +115,9 @@
             }
         }
 
-        // Вложенное поле строки списка: data-mpc-field-N → parentField + idx,
-        // чтобы запись попала в нужную строку (ConfigFieldWriter: rows[idx][field]).
+        // Вложенное поле строки списка: data-mpc-field-N. Собираем ПОЛНЫЙ путь
+        // [{field,idx}, …] от секции к строке (вложенность любой глубины), т.к.
+        // поле уровня 2 лежит на 2 уровня глубже: cfg[sec][L1][i][L2][j][field].
         var nestAttr = null;
         for (var i = 0; i < el.attributes.length; i++) {
             if (/^data-mpc-field-\d+$/.test(el.attributes[i].name)) {
@@ -126,21 +127,40 @@
         }
         if (nestAttr) {
             var lvl = parseInt(nestAttr.replace('data-mpc-field-', ''), 10);
-            var parentAttr = lvl > 1 ? 'data-mpc-field-' + (lvl - 1) : 'data-mpc-field';
-            var itemAttr = lvl > 1 ? 'data-mpc-item-' + lvl : 'data-mpc-item';
-            var parentEl = el.closest('[' + parentAttr + ']');
-            var itemEl = el.closest('[' + itemAttr + ']');
-            if (parentEl && itemEl) {
-                addr.parentField = parentEl.getAttribute(parentAttr);
-                var idx = 0, sib = itemEl.previousElementSibling;
-                while (sib) {
-                    if (sib.hasAttribute(itemAttr)) { idx++; }
-                    sib = sib.previousElementSibling;
-                }
-                addr.idx = idx;
+            var path = buildRowPath(el, lvl);
+            if (path && path.length) {
+                addr.path = path;
+                // back-compat: ближайший (самый глубокий) уровень → parentField/idx
+                var deepest = path[path.length - 1];
+                addr.parentField = deepest.field;
+                addr.idx = deepest.idx;
             }
         }
         return addr;
+    }
+
+    // Путь [{field,idx}, …] от секции к строке для поля уровня lvl (data-mpc-field-lvl).
+    // Уровень N: ряд = data-mpc-item-(N-1) (data-mpc-item для N=1), контейнер
+    // списка = data-mpc-field-(N-1) (data-mpc-field для N=1).
+    function buildRowPath(el, lvl) {
+        var path = [];
+        var base = el;
+        for (var L = lvl; L >= 1; L--) {
+            var itemAttr = L > 1 ? 'data-mpc-item-' + (L - 1) : 'data-mpc-item';
+            var listAttr = L > 1 ? 'data-mpc-field-' + (L - 1) : 'data-mpc-field';
+            var itemEl = base.closest('[' + itemAttr + ']');
+            if (!itemEl) { return null; }
+            var listEl = itemEl.closest('[' + listAttr + ']');
+            if (!listEl || listEl === itemEl) { return null; }
+            var idx = 0, sib = itemEl.previousElementSibling;
+            while (sib) {
+                if (sib.hasAttribute(itemAttr)) { idx++; }
+                sib = sib.previousElementSibling;
+            }
+            path.unshift({ field: listEl.getAttribute(listAttr), idx: idx });
+            base = listEl;
+        }
+        return path;
     }
 
     function isMedia(el) {
@@ -493,8 +513,26 @@
     }
 
     function rowPreview(itemEl) {
+        var img = (itemEl.tagName && itemEl.tagName.toLowerCase() === 'img')
+            ? itemEl
+            : (itemEl.querySelector ? itemEl.querySelector('img') : null);
+        if (img) {
+            return img.getAttribute('alt') || (img.getAttribute('src') || '').split('/').pop() || '(медиа)';
+        }
         var t = (itemEl.textContent || '').replace(/\s+/g, ' ').trim();
         return t.length > 50 ? (t.slice(0, 50) + '…') : (t || '(пусто)');
+    }
+
+    // Ряды списка: структурный (data-mpc-item внутри контейнера) ИЛИ медиа-список
+    // (повторяющиеся одноимённые соседи img/picture/video/audio — у них нет item).
+    function listRows(el, field) {
+        var items = Array.prototype.slice.call(el.querySelectorAll('[data-mpc-item]'));
+        if (!items.length && isMedia(el) && el.parentElement) {
+            items = Array.prototype.slice.call(el.parentElement.children).filter(function (c) {
+                return c.getAttribute && c.getAttribute('data-mpc-field') === field;
+            });
+        }
+        return items;
     }
 
     function openRowsEditor(listEl) {
@@ -511,8 +549,7 @@
             return;
         }
 
-        var items = [];
-        listEl.querySelectorAll('[data-mpc-item]').forEach(function (it) { items.push(it); });
+        var items = listRows(listEl, addr.parentField);
 
         var rowsHtml = items.length
             ? items.map(function (it, idx) {
