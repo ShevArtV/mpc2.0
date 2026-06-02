@@ -268,3 +268,81 @@ body.mpcve-active {
     opacity: .5;
     cursor: default;
 }
+
+/* --- панель скрытых полей секций ------------------------------------- */
+.mpcve-toolbar button.mpcve-hidden-btn {
+    background: #475569;
+}
+
+.mpcve-toolbar button.mpcve-hidden-btn:hover {
+    background: #334155;
+}
+
+.mpcve-modal__card--wide {
+    width: min(620px, 94vw);
+}
+
+.mpcve-hpanel__group {
+    margin-top: 14px;
+    border-top: 1px solid #e2e8f0;
+    padding-top: 10px;
+}
+
+.mpcve-hpanel__group:first-child {
+    margin-top: 4px;
+    border-top: 0;
+    padding-top: 0;
+}
+
+.mpcve-hpanel__sec {
+    font-weight: 600;
+    color: #0f172a;
+    margin-bottom: 6px;
+}
+
+.mpcve-hpanel__row {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    margin-top: 8px;
+}
+
+.mpcve-hpanel__label {
+    flex: 0 0 34%;
+    font-size: 13px;
+    color: #475569;
+    word-break: break-word;
+    padding-top: 7px;
+}
+
+.mpcve-hpanel__ctrl {
+    flex: 1 1 auto;
+    display: flex;
+    gap: 6px;
+    align-items: flex-start;
+}
+
+.mpcve-hpanel__ctrl input,
+.mpcve-hpanel__ctrl textarea {
+    flex: 1 1 auto;
+    padding: 7px 10px;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    font: inherit;
+    box-sizing: border-box;
+}
+
+.mpcve-hpanel__ctrl textarea {
+    min-height: 64px;
+    resize: vertical;
+}
+
+.mpcve-hpanel__row--saved .mpcve-hpanel__ctrl input,
+.mpcve-hpanel__row--saved .mpcve-hpanel__ctrl textarea {
+    border-color: #16a34a;
+}
+
+.mpcve-hpanel__empty {
+    color: #94a3b8;
+    margin-top: 8px;
+}

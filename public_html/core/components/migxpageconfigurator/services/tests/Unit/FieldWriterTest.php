@@ -134,6 +134,42 @@ class FieldWriterTest extends TestCase
         $this->assertFalse($result['success']);
     }
 
+    public function testReadConfigReturnsDecodedSections(): void
+    {
+        $config = json_encode([
+            '1' => ['section_name' => 'hero', 'MIGX_formname' => 'mpc_hero', 'title' => 'T', 'resources' => '5,6'],
+        ], JSON_UNESCAPED_UNICODE);
+        $resource = new ModxObjectStub('modResource', ['id' => 5, 'tv_mpc_config' => $config]);
+        $writer = new FieldWriter($this->makeModx($resource));
+
+        $res = $writer->readConfig('resource', 5);
+
+        $this->assertTrue($res['success'], $res['message']);
+        $sections = $res['data']['config'];
+        $this->assertSame('hero', $sections['1']['section_name']);
+        $this->assertSame('T', $sections['1']['title']);
+        $this->assertSame('5,6', $sections['1']['resources']); // скрытое поле есть в конфиге, хоть и не в DOM
+    }
+
+    public function testReadConfigEmptyWhenNoTv(): void
+    {
+        $resource = new ModxObjectStub('modResource', ['id' => 5]); // нет tv_mpc_config
+        $writer = new FieldWriter($this->makeModx($resource));
+
+        $res = $writer->readConfig('resource', 5);
+
+        $this->assertTrue($res['success'], $res['message']);
+        $this->assertSame([], $res['data']['config']);
+    }
+
+    public function testReadConfigRejectsMissingResource(): void
+    {
+        $writer = new FieldWriter(new ModxStub()); // getObject → null
+        $res = $writer->readConfig('resource', 999);
+        $this->assertFalse($res['success']);
+        $this->assertStringContainsString('not found', $res['message']);
+    }
+
     public function testUnknownTypeRejected(): void
     {
         $resource = new ModxObjectStub('modResource', ['id' => 5]);

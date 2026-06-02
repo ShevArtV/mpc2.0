@@ -72,4 +72,20 @@ class Mpcve
         $writer = new \MpcServices\Handlers\FieldWriter($this->modx);
         return $writer->write($address, $value);
     }
+
+    /**
+     * Прочитать декодированный mpc_config уровня (read-only) — для панели
+     * скрытых полей редактора. Делегирует в write-API mpc (FieldWriter::readConfig).
+     *
+     * @param string $level  resource|global|type
+     * @param int    $resourceId
+     */
+    public function readConfig(string $level, int $resourceId): array
+    {
+        if (!class_exists('\\MpcServices\\Handlers\\FieldWriter')) {
+            return ['success' => false, 'message' => 'migxpageconfigurator (mpc) 2.4.0+ is required', 'data' => []];
+        }
+        $writer = new \MpcServices\Handlers\FieldWriter($this->modx);
+        return $writer->readConfig($level, $resourceId);
+    }
 }

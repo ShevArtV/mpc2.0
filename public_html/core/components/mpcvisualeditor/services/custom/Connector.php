@@ -38,6 +38,10 @@ class Connector
             case 'fields/types':
                 // Карта field→тип редактора из mpc_base (вариант B).
                 return (new Handlers\FieldTypesHandler($this->modx, $this->mpcve))->handle($request);
+            case 'config/get':
+                // Декодированный mpc_config (resource+global) для панели скрытых
+                // полей: те, что вырезаны data-mpc-remove или вспомогательные.
+                return (new Handlers\ConfigGetHandler($this->modx, $this->mpcve))->handle($request);
             case 'page/save':
                 // ВРЕМЕННО ОТКЛЮЧЕНО: ре-граб всего отрендеренного DOM деструктивен
                 // (рендер = склейка тип+ресурс + caттер-трансформы lazyload/fake-img),

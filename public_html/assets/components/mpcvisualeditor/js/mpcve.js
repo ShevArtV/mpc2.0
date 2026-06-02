@@ -470,6 +470,227 @@
         });
     }
 
+    // --- скрытые поля секций (config-driven панель) ------------------------
+    // Поля, вырезанные из страницы (data-mpc-remove) или вспомогательные, не
+    // имеют DOM-маркера, но лежат в mpc_config. Грузим конфиг (config/get) и
+    // показываем такие поля отдельной панелью; запись — прежним field/save
+    // (адрес с parentField/idx для скрытых под-полей строк списков).
+    var configData = null; // { resourceId, resource:{}, global:{} } из config/get
+    var hiddenBtn = null;
+    var STRUCTURAL = ['section_name', 'MIGX_formname', 'position', 'is_static',
+        'file_name', 'limit', 'inline_styles', 'class_names', 'css_file_path'];
+
+    function loadConfig() {
+        return api.post('config/get', { resourceId: cfg.resourceId || 0 }).then(function (r) {
+            configData = (r && r.success && r.data) ? r.data : null;
+        }).catch(function () { configData = null; });
+    }
+
+    function esc(s) {
+        return String(s == null ? '' : s)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    // Конфиг-объект секции (по data-mpc-section) на нужном уровне: static→global.
+    function sectionConfig(sectionEl) {
+        if (!configData) { return null; }
+        var name = sectionEl.getAttribute('data-mpc-section') || '';
+        if (!name) { return null; }
+        var level = sectionEl.hasAttribute('data-mpc-static') ? 'global' : 'resource';
+        var cfgObj = configData[level] || {};
+        var keys = Object.keys(cfgObj);
+        for (var i = 0; i < keys.length; i++) {
+            var s = cfgObj[keys[i]];
+            if (s && (s.section_name === name || s.MIGX_formname === name)) {
+                return { level: level, section: name, obj: s };
+            }
+        }
+        return null;
+    }
+
+    // Поля с DOM-маркером (type=field) в секции: top-уровень + по строкам списков.
+    function visibleFields(sectionEl) {
+        var top = {}, rows = {};
+        var markers = sectionEl.querySelectorAll(SELECTOR);
+        for (var i = 0; i < markers.length; i++) {
+            var addr = fieldAddress(markers[i]);
+            if (!addr || addr.type !== 'field') { continue; }
+            if (addr.parentField != null && addr.idx != null) {
+                rows[addr.parentField] = rows[addr.parentField] || {};
+                rows[addr.parentField][addr.idx] = rows[addr.parentField][addr.idx] || {};
+                rows[addr.parentField][addr.idx][addr.fieldName] = true;
+            } else {
+                top[addr.fieldName] = true;
+            }
+        }
+        return { top: top, rows: rows };
+    }
+
+    function parseRecord(v) {
+        if (typeof v !== 'string') { return null; }
+        var d;
+        try { d = JSON.parse(v); } catch (e) { return null; }
+        return (Array.isArray(d) && d.length && d.every(function (r) {
+            return r && typeof r === 'object';
+        })) ? d : null;
+    }
+
+    function fieldType(name, value) {
+        if (typesMap[name]) { return typesMap[name]; }
+        var rec = parseRecord(value);
+        if (rec) {
+            return (rec.length === 1 && ('src' in rec[0] || 'srcset' in rec[0] || 'img' in rec[0]))
+                ? 'image' : 'rows';
+        }
+        return 'text';
+    }
+
+    function isScalar(v) {
+        return v == null || typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean';
+    }
+
+    // Дескрипторы скрытых полей секции + скрытых СКАЛЯРНЫХ под-полей строк списков.
+    function sectionHidden(sectionEl) {
+        var sc = sectionConfig(sectionEl);
+        if (!sc) { return []; }
+        var vis = visibleFields(sectionEl);
+        var out = [];
+        Object.keys(sc.obj).forEach(function (name) {
+            if (STRUCTURAL.indexOf(name) !== -1) { return; }
+            var value = sc.obj[name];
+            var t = fieldType(name, value);
+            if (t === 'rows') {
+                var rec = parseRecord(value) || [];
+                rec.forEach(function (row, idx) {
+                    Object.keys(row).forEach(function (sub) {
+                        if (sub === 'MIGX_id' || STRUCTURAL.indexOf(sub) !== -1) { return; }
+                        var sv = row[sub];
+                        if (!isScalar(sv) || parseRecord(sv)) { return; } // вложенные записи — не в v1
+                        if (vis.rows[name] && vis.rows[name][idx] && vis.rows[name][idx][sub]) { return; }
+                        out.push({
+                            level: sc.level, section: sc.section,
+                            parentField: name, idx: idx, fieldName: sub,
+                            value: sv == null ? '' : String(sv),
+                            type: typesMap[sub] || 'text',
+                            label: name + '[' + idx + '] · ' + sub
+                        });
+                    });
+                });
+                return;
+            }
+            if (t === 'image' || t === 'media' || t === 'picture') { return; } // медиа правится на странице
+            if (vis.top[name] || parseRecord(value)) { return; }
+            out.push({
+                level: sc.level, section: sc.section,
+                fieldName: name,
+                value: value == null ? '' : String(value),
+                type: t,
+                label: name
+            });
+        });
+        return out;
+    }
+
+    function collectHidden() {
+        var groups = [];
+        document.querySelectorAll('[data-mpc-section]').forEach(function (sectionEl) {
+            var fields = sectionHidden(sectionEl);
+            if (fields.length) {
+                groups.push({ section: sectionEl.getAttribute('data-mpc-section'), fields: fields });
+            }
+        });
+        return groups;
+    }
+
+    function hiddenCount() {
+        if (!configData) { return 0; }
+        return collectHidden().reduce(function (n, g) { return n + g.fields.length; }, 0);
+    }
+
+    function rowHtml(f, idx) {
+        var multiline = f.type === 'richtext' || f.type === 'textarea' ||
+            f.value.length > 80 || f.value.indexOf('\n') !== -1;
+        var control = multiline
+            ? '<textarea>' + esc(f.value) + '</textarea>'
+            : '<input type="text" value="' + esc(f.value) + '">';
+        return '<div class="mpcve-hpanel__row" data-i="' + idx + '">' +
+            '<div class="mpcve-hpanel__label">' + esc(f.label) + '</div>' +
+            '<div class="mpcve-hpanel__ctrl">' + control +
+            '<button type="button" class="mpcve-btn mpcve-btn--primary" data-act="save">Сохранить</button>' +
+            '</div></div>';
+    }
+
+    function openHiddenPanel() {
+        if (document.querySelector('.mpcve-modal')) { return; }
+        var groups = collectHidden();
+        var flat = [];
+
+        var body = groups.length
+            ? groups.map(function (g) {
+                var rows = g.fields.map(function (f) {
+                    var idx = flat.length; flat.push(f);
+                    return rowHtml(f, idx);
+                }).join('');
+                return '<div class="mpcve-hpanel__group">' +
+                    '<div class="mpcve-hpanel__sec">' + esc(g.section) + '</div>' + rows + '</div>';
+            }).join('')
+            : '<div class="mpcve-hpanel__empty">Скрытых полей не найдено.</div>';
+
+        var overlay = document.createElement('div');
+        overlay.className = 'mpcve-modal';
+        overlay.innerHTML =
+            '<div class="mpcve-modal__card mpcve-modal__card--wide">' +
+                '<div class="mpcve-modal__head">Скрытые поля</div>' +
+                '<div class="mpcve-hpanel">' + body + '</div>' +
+                '<div class="mpcve-modal__actions">' +
+                    '<button type="button" class="mpcve-btn" data-act="close">Закрыть</button>' +
+                '</div>' +
+            '</div>';
+        document.body.appendChild(overlay);
+
+        function close() { overlay.remove(); document.removeEventListener('keydown', onKey); }
+        function onKey(e) { if (e.key === 'Escape') { close(); } }
+        document.addEventListener('keydown', onKey);
+        overlay.addEventListener('click', function (e) { if (e.target === overlay) { close(); } });
+        overlay.querySelector('[data-act=close]').addEventListener('click', close);
+
+        overlay.querySelectorAll('.mpcve-hpanel__row').forEach(function (rowEl) {
+            var f = flat[parseInt(rowEl.getAttribute('data-i'), 10)];
+            var ctrl = rowEl.querySelector('input, textarea');
+            var btn = rowEl.querySelector('[data-act=save]');
+            btn.addEventListener('click', function () {
+                var addr = {
+                    type: 'field', level: f.level, section: f.section,
+                    fieldName: f.fieldName, resourceId: cfg.resourceId || 0
+                };
+                if (f.parentField != null) { addr.parentField = f.parentField; addr.idx = f.idx; }
+                btn.disabled = true; btn.textContent = '…';
+                api.post('field/save', { address: addr, value: ctrl.value }).then(function (r) {
+                    if (r && r.success) {
+                        f.value = ctrl.value;
+                        rowEl.classList.add('mpcve-hpanel__row--saved');
+                        btn.textContent = '✓';
+                        setTimeout(function () { btn.textContent = 'Сохранить'; btn.disabled = false; }, 1200);
+                    } else {
+                        toast((r && r.message) || 'Ошибка сохранения', true);
+                        btn.textContent = 'Сохранить'; btn.disabled = false;
+                    }
+                }).catch(function () {
+                    toast('Сетевая ошибка', true);
+                    btn.textContent = 'Сохранить'; btn.disabled = false;
+                });
+            });
+        });
+    }
+
+    function syncHiddenBtn() {
+        if (!hiddenBtn) { return; }
+        var n = editing ? hiddenCount() : 0;
+        hiddenBtn.hidden = n === 0;
+        if (n > 0) { hiddenBtn.textContent = 'Скрытые поля (' + n + ')'; }
+    }
+
     // --- разметка / снятие разметки полей ----------------------------------
     function markEditable() {
         document.querySelectorAll(SELECTOR).forEach(function (el) {
@@ -504,6 +725,7 @@
             unmarkEditable();
             document.body.classList.remove('mpcve-on');
         }
+        syncHiddenBtn();
     }
 
     // --- UI ----------------------------------------------------------------
@@ -525,9 +747,13 @@
         bar.innerHTML =
             '<span class="mpcve-toolbar__title">mpcVisualEditor</span>' +
             '<span class="mpcve-toolbar__hint">клик по полю — править; Enter или уход — сохранить</span>' +
+            '<button type="button" class="mpcve-hidden-btn" data-mpcve="hidden" hidden></button>' +
             '<button type="button" data-mpcve="toggle"></button>';
         document.body.appendChild(bar);
         document.body.classList.add('mpcve-active');
+
+        hiddenBtn = bar.querySelector('[data-mpcve="hidden"]');
+        hiddenBtn.addEventListener('click', openHiddenPanel);
 
         var btn = bar.querySelector('[data-mpcve="toggle"]');
         function syncBtn() {
@@ -567,14 +793,15 @@
     function init() {
         buildToolbar();
         bindClicks();
-        api.post('fields/types', {}).then(function (res) {
-            if (res && res.success && res.data && res.data.fields) {
-                typesMap = res.data.fields;
-            }
-            applyEditingState();
-        }).catch(function () {
-            applyEditingState();
-        });
+        Promise.all([
+            api.post('fields/types', {}).then(function (res) {
+                if (res && res.success && res.data && res.data.fields) {
+                    typesMap = res.data.fields;
+                }
+            }).catch(function () {}),
+            // Конфиг нужен только в режиме правки (тумблер перезагружает страницу).
+            editing ? loadConfig() : Promise.resolve()
+        ]).then(applyEditingState).catch(applyEditingState);
     }
 
     window.MpcVE = { cfg: cfg, api: api, resolveAddress: resolveAddress, toast: toast };

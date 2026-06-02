@@ -276,6 +276,38 @@ class FieldWriter
         }
     }
 
+    /**
+     * Прочитать декодированный mpc_config указанного уровня (read-only).
+     *
+     * Нужен редактору (mpcVE) для правки СКРЫТЫХ полей: те, что вырезаны из
+     * страницы (`data-mpc-remove`) или вспомогательные — DOM-маркера не имеют,
+     * но значение в конфиге есть. Возвращаем весь конфиг секций уровня, фронт
+     * сам вычитает уже видимые поля. Переиспользует резолв уровня и имя TV —
+     * единый источник правды с записью. Запись идёт прежним путём
+     * (`writeConfigField` через address parentField/idx/fieldName).
+     *
+     * @return array ['success'=>bool,'message'=>string,'data'=>['config'=>array]]
+     */
+    public function readConfig(string $level, int $resourceId): array
+    {
+        $resource = $this->resolveLevelResource($level, $resourceId);
+        if (!$resource) {
+            return $this->result(false, 'target resource for level "' . $level . '" not found');
+        }
+
+        $json = (string)$resource->getTVValue($this->configTvName);
+        if ($json === '') {
+            return $this->result(true, 'empty', ['config' => []]);
+        }
+
+        $config = json_decode($json, true);
+        if (!is_array($config)) {
+            return $this->result(false, 'invalid mpc_config JSON for level "' . $level . '"');
+        }
+
+        return $this->result(true, 'ok', ['config' => $config]);
+    }
+
     private function lexiconWriter(): LexiconWriter
     {
         if ($this->lexWriterInstance === null) {
