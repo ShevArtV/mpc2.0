@@ -226,6 +226,18 @@ class FieldWriter
                     'fieldName' => (string)($address['fieldName'] ?? ''),
                 ]);
                 return $this->result(true, 'saved', ['type' => 'field', 'level' => $level, 'lexicon' => true]);
+            } elseif (is_string($value) && $value !== '' && !$this->isRecordValue($value)
+                && ($current === null || $current === '' || (is_string($current) && !$writer->has($ident, $current)))
+                && $this->fieldUsesLexiconKeys($configJson, $address, $writer, $ident)) {
+                // НОВОЕ лексиконизируемое поле (напр. поле только что добавленной
+                // строки): ключа ещё нет. Генерим ключ как грабер, пишем значение
+                // в лексикон, в конфиг кладём КЛЮЧ — иначе чанк {$field|lexicon}
+                // вернёт '' для литерала. Лексиконизируем только если поле реально
+                // лексиконится (у соседних строк того же списка — ключи).
+                $key = $this->makeLexiconKey($configJson, $address);
+                if ($key !== '' && $writer->set($ident, $key, (string)$value)) {
+                    $value = $key;
+                }
             }
         }
 
@@ -246,6 +258,120 @@ class FieldWriter
         ]);
 
         return $this->result(true, 'saved', ['type' => 'field', 'level' => $level]);
+    }
+
+    /**
+     * Ключ лексикона для НОВОГО поля — формат как у грабера (LexiconManager):
+     *   top-поле:  {prefix}_{field}
+     *   row-поле:  {prefix}_{parentField}_{field}_{idx}
+     *   вложенное: {prefix}_{L1}_{L2}_…_{field}_{lastIdx}
+     * prefix берём из lexicon_prefix секции. '' если префикса нет.
+     */
+    private function makeLexiconKey(string $configJson, array $address): string
+    {
+        $section = (string)($address['section'] ?? '');
+        $field   = (string)($address['fieldName'] ?? '');
+        $config  = json_decode($configJson, true);
+        if (!is_array($config) || $field === '') {
+            return '';
+        }
+        $prefix = '';
+        foreach ($config as $s) {
+            if (is_array($s) && (($s['section_name'] ?? null) === $section || ($s['MIGX_formname'] ?? null) === $section)) {
+                $prefix = (string)($s['lexicon_prefix'] ?? '');
+                break;
+            }
+        }
+        if ($prefix === '') {
+            return '';
+        }
+
+        $path = $this->addressPath($address);
+        if ($path) {
+            $parts = [$prefix];
+            foreach ($path as $seg) {
+                $parts[] = (string)$seg['field'];
+            }
+            $parts[] = $field;
+            $last = $path[count($path) - 1];
+            return implode('_', $parts) . '_' . (int)$last['idx'];
+        }
+        return $prefix . '_' . $field;
+    }
+
+    /**
+     * Лексиконизируется ли поле — смотрим то же поле в ДРУГИХ строках того же
+     * списка: если там лежит лексикон-ключ → да (тогда новое значение тоже под
+     * ключом). Иначе (литералы / нет соседей) → false, пишем литералом.
+     */
+    private function fieldUsesLexiconKeys(string $configJson, array $address, LexiconWriter $writer, string $ident): bool
+    {
+        $path = $this->addressPath($address);
+        if (!$path) {
+            return false; // top-level: не угадываем, пишем литералом
+        }
+        $config = json_decode($configJson, true);
+        if (!is_array($config)) {
+            return false;
+        }
+        $section = (string)($address['section'] ?? '');
+        $field   = (string)($address['fieldName'] ?? '');
+        $container = null;
+        foreach ($config as $s) {
+            if (is_array($s) && (($s['section_name'] ?? null) === $section || ($s['MIGX_formname'] ?? null) === $section)) {
+                $container = $s;
+                break;
+            }
+        }
+        if ($container === null) {
+            return false;
+        }
+
+        // Спускаемся по пути до контейнера строк нашего поля (последний сегмент).
+        for ($d = 0, $n = count($path); $d < $n; $d++) {
+            $seg  = $path[$d];
+            $rows = $container[$seg['field']] ?? null;
+            if (is_string($rows)) {
+                $rows = json_decode($rows, true);
+            }
+            if (!is_array($rows)) {
+                return false;
+            }
+            if ($d === $n - 1) {
+                foreach ($rows as $i => $row) {
+                    if ($i === (int)$seg['idx'] || !is_array($row)) {
+                        continue;
+                    }
+                    $v = $row[$field] ?? null;
+                    if (is_string($v) && $v !== '' && $writer->has($ident, $v)) {
+                        return true;
+                    }
+                }
+                return false;
+            }
+            $container = $rows[(int)$seg['idx']] ?? [];
+        }
+        return false;
+    }
+
+    /** Нормализует адрес в путь [{field,idx},…] (из path либо parentField+idx). */
+    private function addressPath(array $address): array
+    {
+        if (!empty($address['path']) && is_array($address['path'])) {
+            $path = [];
+            foreach ($address['path'] as $seg) {
+                if (is_array($seg) && isset($seg['field'], $seg['idx']) && $seg['field'] !== '') {
+                    $path[] = ['field' => (string)$seg['field'], 'idx' => (int)$seg['idx']];
+                }
+            }
+            return $path;
+        }
+        $pf  = (string)($address['parentField'] ?? '');
+        $idx = $address['idx'] ?? null;
+        if ($pf !== '' && $idx !== null && $idx !== '') {
+            return [['field' => $pf, 'idx' => (int)$idx]];
+        }
+        return [];
     }
 
     /**

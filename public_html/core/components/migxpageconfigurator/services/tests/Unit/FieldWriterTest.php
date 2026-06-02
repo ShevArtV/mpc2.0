@@ -125,6 +125,75 @@ class FieldWriterTest extends TestCase
         $this->assertSame('New', $stored['1']['title']);
     }
 
+    /** Fake LexiconWriter: has() по списку ключей, set() в журнал. */
+    private function injectLex(FieldWriter $writer, array $keysPresent, array &$log): void
+    {
+        $lex = new class($keysPresent, $log) extends \MpcServices\Handlers\LexiconWriter {
+            private array $keys;
+            private array $log;
+            public function __construct(array $keys, array &$log) { $this->keys = $keys; $this->log = &$log; }
+            public function identifier(int $rid): string { return 'res' . $rid; }
+            public function has(string $identifier, string $key): bool { return in_array($key, $this->keys, true); }
+            public function set(string $identifier, string $key, string $value): bool { $this->log[$key] = $value; return true; }
+        };
+        $ref = new \ReflectionObject($writer);
+        $ul = $ref->getProperty('useLexicons');      $ul->setAccessible(true); $ul->setValue($writer, true);
+        $lw = $ref->getProperty('lexWriterInstance'); $lw->setAccessible(true); $lw->setValue($writer, $lex);
+    }
+
+    private function listConfig(): string
+    {
+        return json_encode([
+            '1' => [
+                'section_name'   => 'hero',
+                'MIGX_formname'  => 'mpc_hero',
+                'lexicon_prefix' => 'hero',
+                'cards'          => json_encode([
+                    ['MIGX_id' => 1, 'title' => 'hero_cards_title_0'], // строка с лексикон-ключом
+                    ['MIGX_id' => 2, 'title' => ''],                   // новая пустая строка
+                ], JSON_UNESCAPED_UNICODE),
+            ],
+        ], JSON_UNESCAPED_UNICODE);
+    }
+
+    /** Новое поле лексиконизированного списка → генерится ключ + значение в лексикон, в конфиг ключ. */
+    public function testNewRowFieldGetsLexiconKey(): void
+    {
+        $resource = new ModxObjectStub('modResource', ['id' => 5, 'context_key' => 'web', 'tv_mpc_config' => $this->listConfig()]);
+        $writer = new FieldWriter($this->makeModx($resource));
+        $log = [];
+        $this->injectLex($writer, ['hero_cards_title_0'], $log); // у соседней строки ключ ЕСТЬ
+
+        $res = $writer->write(
+            ['type' => 'field', 'level' => 'resource', 'resourceId' => 5, 'section' => 'hero', 'fieldName' => 'title', 'parentField' => 'cards', 'idx' => 1],
+            'Новый текст'
+        );
+
+        $this->assertTrue($res['success'], $res['message']);
+        $this->assertSame('Новый текст', $log['hero_cards_title_1']); // значение в лексиконе под сгенерированным ключом
+        $cards = json_decode(json_decode($resource->getTVValue('mpc_config'), true)['1']['cards'], true);
+        $this->assertSame('hero_cards_title_1', $cards[1]['title']);  // в конфиг лёг КЛЮЧ
+    }
+
+    /** Если соседи — литералы (поле не лексиконится) → новое значение пишется литералом. */
+    public function testNewRowFieldStaysLiteralWhenNotLexiconized(): void
+    {
+        $resource = new ModxObjectStub('modResource', ['id' => 5, 'context_key' => 'web', 'tv_mpc_config' => $this->listConfig()]);
+        $writer = new FieldWriter($this->makeModx($resource));
+        $log = [];
+        $this->injectLex($writer, [], $log); // ключей нет → has() всегда false
+
+        $res = $writer->write(
+            ['type' => 'field', 'level' => 'resource', 'resourceId' => 5, 'section' => 'hero', 'fieldName' => 'title', 'parentField' => 'cards', 'idx' => 1],
+            'Литерал'
+        );
+
+        $this->assertTrue($res['success'], $res['message']);
+        $this->assertSame([], $log);                                  // в лексикон ничего не писали
+        $cards = json_decode(json_decode($resource->getTVValue('mpc_config'), true)['1']['cards'], true);
+        $this->assertSame('Литерал', $cards[1]['title']);             // литерал в конфиге
+    }
+
     public function testConfigFieldEmptyConfigRejected(): void
     {
         $resource = new ModxObjectStub('modResource', ['id' => 5]); // нет tv_mpc_config
