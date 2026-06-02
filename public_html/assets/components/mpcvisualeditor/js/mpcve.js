@@ -512,12 +512,9 @@
             .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     }
 
-    // Конфиг-объект секции (по data-mpc-section) на нужном уровне: static→global.
-    function sectionConfig(sectionEl) {
-        if (!configData) { return null; }
-        var name = sectionEl.getAttribute('data-mpc-section') || '';
-        if (!name) { return null; }
-        var level = sectionEl.hasAttribute('data-mpc-static') ? 'global' : 'resource';
+    // Найти секцию по имени в конфиге указанного уровня (resource|global).
+    function findSectionInLevel(name, level) {
+        if (!configData || !name) { return null; }
         var cfgObj = configData[level] || {};
         var keys = Object.keys(cfgObj);
         for (var i = 0; i < keys.length; i++) {
@@ -527,6 +524,13 @@
             }
         }
         return null;
+    }
+
+    // Конфиг-объект секции для КОНТЕНТА/строк: static→global, иначе resource.
+    function sectionConfig(sectionEl) {
+        var name = sectionEl.getAttribute('data-mpc-section') || '';
+        var level = sectionEl.hasAttribute('data-mpc-static') ? 'global' : 'resource';
+        return findSectionInLevel(name, level);
     }
 
     function parseRecord(v) {
@@ -547,15 +551,22 @@
     // ЗАДАТЬ ещё не существующее значение). Диф конфиг−DOM для секций не годится:
     // контент идёт через rfield/tv, а в конфиге — только служебные ключи
     // (MIGX_id/id/lexicon_prefix…), которые не редактируются.
+    //
+    // ВАЖНО (каскад): стилевые поля — каскад-поля mpc, на рендере РЕСУРС-уровень
+    // перекрывает global (см. Render::applyResourceCascade). Поэтому правим их на
+    // уровне РЕСУРСА (текущая страница), если секция есть в ресурс-конфиге; иначе
+    // global. Иначе для static-секции правка в global маскируется ресурсным
+    // переопределением — и «не обновляется» на странице.
     function sectionStyleHidden(sectionEl) {
-        var sc = sectionConfig(sectionEl);
+        var name = sectionEl.getAttribute('data-mpc-section') || '';
+        var sc = findSectionInLevel(name, 'resource') || findSectionInLevel(name, 'global');
         if (!sc) { return []; }
-        return SECTION_STYLE_FIELDS.map(function (name) {
-            var value = sc.obj[name];
+        return SECTION_STYLE_FIELDS.map(function (fname) {
+            var value = sc.obj[fname];
             return {
                 level: sc.level, section: sc.section,
-                fieldName: name, value: value == null ? '' : String(value),
-                type: typesMap[name] || 'text', label: fieldLabel(name)
+                fieldName: fname, value: value == null ? '' : String(value),
+                type: typesMap[fname] || 'text', label: fieldLabel(fname)
             };
         });
     }
