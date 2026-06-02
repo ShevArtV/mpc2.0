@@ -86,6 +86,29 @@ body.mpcve-active {
 .mpcve-editable[data-mpcve-type="media"]:hover::after { content: "\25B6"; }  /* ▶ */
 .mpcve-editable[data-mpcve-type="rows"]:hover::after  { content: "\2630"; }  /* ☰ */
 
+/* Пустые редактируемые поля (напр. поля только что добавленной строки)
+   схлопываются в ноль → по ним нельзя кликнуть. В edit-mode даём минимальный
+   размер и подсказку-плейсхолдер, чтобы поле можно было заполнить. */
+body.mpcve-on .mpcve-editable:empty {
+    display: inline-block;
+    min-width: 90px;
+    min-height: 1.3em;
+    vertical-align: middle;
+}
+
+body.mpcve-on .mpcve-editable:empty::before {
+    content: "клик — заполнить";
+    color: #94a3b8;
+    font-size: 11px;
+    font-style: italic;
+    pointer-events: none;
+}
+
+/* во время правки плейсхолдер не показываем (есть каретка) */
+body.mpcve-on .mpcve-editing:empty::before {
+    content: none;
+}
+
 /* активное редактирование */
 .mpcve-editing {
     outline: 2px solid #16a34a !important;
