@@ -441,8 +441,10 @@ class SectionProcessor
         $fcap  = (string)($attrs['fcap'] ?? '');
         $fdesc = (string)($attrs['fdesc'] ?? '');
 
-        // Имя совпало с прототипом и тип явно не задан — берём как есть (как раньше).
-        if ($ftype === '' && isset($byName[$name])) {
+        // Имя уже есть в mpc_base — берём его определение БЕЗУСЛОВНО (даже если
+        // задан ftype): не плодим дубликат одноимённого поля. ftype в этом случае
+        // игнорируется (имя приоритетнее). fcap/fdesc переопределяют подпись/описание.
+        if (isset($byName[$name])) {
             $def = $byName[$name];
             if ($fcap !== '') {
                 $def['caption'] = $fcap;

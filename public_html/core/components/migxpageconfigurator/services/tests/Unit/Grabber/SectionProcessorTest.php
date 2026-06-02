@@ -127,6 +127,16 @@ class SectionProcessorTest extends TestCase
         $this->assertSame('image', $d['inputTVtype']);
     }
 
+    /** Имя ЕСТЬ в mpc_base + задан ДРУГОЙ ftype → mpc_base выигрывает (без дубликата). */
+    public function testNameInBaseBeatsFtype(): void
+    {
+        $d = $this->def('img', ['ftype' => 'text'], 'other');
+        $this->assertSame('img', $d['field']);
+        $this->assertSame('migx', $d['inputTVtype']);    // прототип img из mpc_base, не text
+        $this->assertSame('mpc_img', $d['configs']);     // sub-config сохранён
+        $this->assertSame('Изображение', $d['caption']); // как в mpc_base, без суффикса «(img)»
+    }
+
     // --- S1.5: динамические списки (чистые хелперы) -----------------------
 
     /** Имя авто-конфига списка детерминированно слугифицируется. */
