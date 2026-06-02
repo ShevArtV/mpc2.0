@@ -150,6 +150,23 @@ class FieldWriter
         if (!method_exists($resource, 'setTVValue')) {
             return $this->result(false, 'setTVValue unavailable on resource');
         }
+
+        // Лексиконный режим (зеркало writeResourceField): TV переводится через
+        // ключ mpc_resource_tv_<name> в файле лексикона ресурса. Пишем в лексикон
+        // ТОЛЬКО если ключ у ресурса уже есть (TV лексиконизирован при нарезке);
+        // иначе — прямой setTVValue. Значение TV (колонку) при лексиконе не трогаем.
+        if ($this->useLexicons) {
+            $writer = $this->lexiconWriter();
+            $ident  = $writer->identifier($rid);
+            if ($writer->has($ident, 'mpc_resource_tv_' . $tv)) {
+                if ($writer->set($ident, 'mpc_resource_tv_' . $tv, is_scalar($value) ? (string)$value : '')) {
+                    $this->afterSave($resource, ['type' => 'tv', 'fieldName' => $tv, 'lexicon' => true]);
+                    return $this->result(true, 'saved', ['type' => 'tv', 'resourceId' => $rid, 'fieldName' => $tv, 'lexicon' => true]);
+                }
+                return $this->result(false, 'failed to write lexicon entry');
+            }
+        }
+
         $resource->setTVValue($tv, $value);
         $this->afterSave($resource, ['type' => 'tv', 'fieldName' => $tv]);
         return $this->result(true, 'saved', ['type' => 'tv', 'resourceId' => $rid, 'fieldName' => $tv]);

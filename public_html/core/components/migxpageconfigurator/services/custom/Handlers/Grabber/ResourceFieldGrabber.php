@@ -78,7 +78,11 @@ class ResourceFieldGrabber
                 continue;
             }
             if (method_exists($resource, 'setTVValue')) {
-                $resource->setTVValue($name, $this->extractValue($el));
+                $value = $this->extractValue($el);
+                // TV лексиконятся отдельным неймспейсом mpc_resource_tv_<name>,
+                // чтобы НЕ коллизить с rfield того же имени (rfield → mpc_resource_<name>).
+                $key = $this->lexiconize($resource, $name, $value, 'mpc_resource_tv_');
+                $resource->setTVValue($name, $key !== '' ? $key : $value);
                 $written['tvs'][$name] = true;
             }
         }
@@ -107,9 +111,12 @@ class ResourceFieldGrabber
      * чтобы в колонке осталось значение, а не ключ (консистентно с каттером).
      * Защищённые alias/uri/template уже отфильтрованы выше.
      *
+     * Префикс ключа разный для rfield (`mpc_resource_`) и TV (`mpc_resource_tv_`)
+     * — чтобы поля с одинаковым именем не делили один ключ лексикона.
+     *
      * @return string ключ лексикона или '' (лексикон не пишется)
      */
-    private function lexiconize($resource, string $field, string $value): string
+    private function lexiconize($resource, string $field, string $value, string $keyPrefix = 'mpc_resource_'): string
     {
         if (!$this->useLexicons || $this->lexiconManager === null) {
             return '';
@@ -121,7 +128,7 @@ class ResourceFieldGrabber
         if ($ident === '') {
             return '';
         }
-        $key = 'mpc_resource_' . $field;
+        $key = $keyPrefix . $field;
         $this->lexiconManager->lexicons[$ident][$key] = $this->lexiconManager->sanitizeValue($value);
         return $key;
     }

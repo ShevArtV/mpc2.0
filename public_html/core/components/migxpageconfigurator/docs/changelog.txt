@@ -1,3 +1,15 @@
+2.5.3-rc
+==============
+Лексиконизация TV-полей (`data-mpc-tv`) — по аналогии с rfield, замыкает цепочку перевода TV (грабер → каттер → write-API). Отменяет ограничение из 2.5.1-rc «tv не трогается».
+
+- Грабер (`ResourceFieldGrabber`): TV-ветка теперь лексиконится так же, как rfield — в TV-значение пишется КЛЮЧ `mpc_resource_tv_<name>`, текст уходит в файл лексикона ресурса. Гейты те же: `useLexicons` + `!isExcluded` (поле из `excludeLexiconFields` → прямое значение в TV, без ключа). Метод `lexiconize()` получил параметр `keyPrefix` (rfield → `mpc_resource_`, tv → `mpc_resource_tv_`).
+- **Отдельный неймспейс ключа `mpc_resource_tv_<name>`** (а не общий `mpc_resource_<name>`) — чтобы rfield и TV с ОДИНАКОВЫМ именем не делили один ключ лексикона (иначе перевод одного затирал бы другой). Тест `testRfieldAndTvSameNameUseDistinctKeys` фиксирует это.
+- Каттер (`replaceResourceMarkers`): получил параметр `lexiconKeyPrefix`; вызов для tv теперь с `lexiconize=true` и префиксом `mpc_resource_tv_` → рендерит `{'mpc_resource_tv_<name>' | lexicon}` (без лексиконов / для excluded — прямое `{$resource.tvs.<name>}`).
+- Write-API (`FieldWriter::writeTv`): зеркало `writeResourceField` — в лексиконном режиме, если у TV есть ключ `mpc_resource_tv_<name>`, правка пишется в ЛЕКСИКОН (колонку/TV-значение не трогаем); иначе прямой `setTVValue` (degradation, как у rfield). mpcVE-сторона (роутинг `type:'tv'` → writeTv) уже была — фронт-редактирование TV теперь лексикон-aware без изменений в пакете mpcVE.
+- `LexiconManager`/`LexiconWriter`/`Render` — без изменений (утилиты переиспользованы; `$resource.tvs` уже в скоупе рендера).
+- Тесты (+5, всего 255): `ResourceFieldGrabberTest` (+3: tv-лексикон вкл, tv-exclude, rfield/tv без коллизии), `CutterSnapshotTest` (+1: tv → `mpc_resource_tv_` lexicon-форма), `FieldWriterTest` (+1: writeTv в лексикон при наличии ключа). Применяется ПЕРЕНАРЕЗКОЙ.
+- Версия пакета `2.5.2` → `2.5.3`.
+
 2.5.2-rc
 ==============
 Единый exclude для всех лексиконизируемых полей (включая `rfield`). Отменяет решение из 2.5.1-rc «отдельный exclude для rfield не вводим».

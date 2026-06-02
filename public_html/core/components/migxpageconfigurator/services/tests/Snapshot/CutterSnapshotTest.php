@@ -227,6 +227,29 @@ class CutterSnapshotTest extends TestCase
         $this->assertStringContainsString("{'mpc_resource_content' | lexicon}", $tpl);
     }
 
+    /**
+     * При useLexicons TV рендерится через `| lexicon` по ОТДЕЛЬНОМУ ключу
+     * mpc_resource_tv_<name> (не коллизит с rfield того же имени).
+     */
+    public function testCutterLexiconizesTvWhenEnabled(): void
+    {
+        $modx = new ModxStub($this->fixturesDir, [
+            'mpc_use_lexicons'              => true,
+            'mpc_exclude_lexicons_filename' => 'components/migxpageconfigurator/services/exclude_lexicons.inc.php',
+        ]);
+
+        $cutter = new Cutter($modx, $this->makeBaseProperties());
+        $cutter->handle('rfields.html');
+        $tpl = file_get_contents($this->outputDir . '/sections/rftest.tpl');
+
+        // tv в тексте → innerHtml лексикон-форма с tv-неймспейсом
+        $this->assertStringContainsString("{'mpc_resource_tv_subtitle' | lexicon}", $tpl);
+        // tv на img → src лексикон-форма
+        $this->assertStringContainsString("src=\"{'mpc_resource_tv_cover' | lexicon}\"", $tpl);
+        // прямого чтения tvs.* при включённых лексиконах быть не должно
+        $this->assertStringNotContainsString('$resource.tvs.', $tpl);
+    }
+
     // ---------------------------------------------------------------
 
     private function clearDir(string $dir): void

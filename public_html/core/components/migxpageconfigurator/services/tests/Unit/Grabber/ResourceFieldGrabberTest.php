@@ -146,6 +146,51 @@ class ResourceFieldGrabberTest extends TestCase
         $this->assertArrayHasKey('pagetitle', $written['fields']);         // поле всё равно записано
     }
 
+    /** TV лексиконится в ключ mpc_resource_tv_<name>: TV-значение = ключ, лексикон = текст. */
+    public function testLexiconizesTvWhenEnabled(): void
+    {
+        $lm = $this->lexManager();
+        $grabber = new ResourceFieldGrabber(new Parser(), [], null, $lm, true);
+        $res = new ModxObjectStub('modResource', ['id' => 7]);
+
+        $grabber->grab('<span data-mpc-tv="subtitle">Подзаголовок</span>', $res);
+
+        $this->assertSame('mpc_resource_tv_subtitle', $res->getTVValue('subtitle'));     // TV = КЛЮЧ
+        $this->assertSame('Подзаголовок', $lm->lexicons[7]['mpc_resource_tv_subtitle']); // лексикон = значение
+    }
+
+    /** TV из excludeLexiconFields не лексиконится: TV = значение, лексикон пуст. */
+    public function testExcludedTvNotLexiconized(): void
+    {
+        $lm = new \MpcServices\Handlers\Grabber\LexiconManager(new \MpcTests\Stubs\ModxStub(), [
+            'useLexicons'          => true,
+            'lexiconFilenameField' => 'id',
+            'allowedTags'          => [''],
+            'allowModxTags'        => false,
+            'excludeLexiconFields' => ['subtitle'],
+        ]);
+        $grabber = new ResourceFieldGrabber(new Parser(), [], null, $lm, true);
+        $res = new ModxObjectStub('modResource', ['id' => 7]);
+
+        $grabber->grab('<span data-mpc-tv="subtitle">Подзаголовок</span>', $res);
+
+        $this->assertSame('Подзаголовок', $res->getTVValue('subtitle')); // TV = ЗНАЧЕНИЕ, не ключ
+        $this->assertSame([], $lm->lexicons);                            // лексикон не пишется
+    }
+
+    /** rfield и tv с ОДНИМ именем дают РАЗНЫЕ ключи лексикона (без коллизии). */
+    public function testRfieldAndTvSameNameUseDistinctKeys(): void
+    {
+        $lm = $this->lexManager();
+        $grabber = new ResourceFieldGrabber(new Parser(), [], null, $lm, true);
+        $res = new ModxObjectStub('modResource', ['id' => 7]);
+
+        $grabber->grab('<h1 data-mpc-rfield="title">Поле</h1><span data-mpc-tv="title">ТВ</span>', $res);
+
+        $this->assertSame('Поле', $lm->lexicons[7]['mpc_resource_title']);    // rfield-ключ
+        $this->assertSame('ТВ', $lm->lexicons[7]['mpc_resource_tv_title']);   // tv-ключ — отдельный
+    }
+
     /** Поля внутри обёртки data-mpc-res (разметка редактора) на грабе игнорируются. */
     public function testIgnoresFieldsInsideResWrapper(): void
     {

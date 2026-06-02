@@ -326,22 +326,24 @@ class Cutter extends Base
      * Render.php прокидывает в скоуп секции `$resource` = полный массив полей
      * ресурса, включая подмассив `tvs` (см. Render::parseConfig — `$section['resource']`).
      * Поэтому:
-     *   - data-mpc-rfield="pagetitle" → {$resource.pagetitle}
-     *   - data-mpc-tv="myTV"          → {$resource.tvs.myTV}
+     *   - data-mpc-rfield="pagetitle" → {$resource.pagetitle} | {'mpc_resource_pagetitle' | lexicon}
+     *   - data-mpc-tv="myTV"          → {$resource.tvs.myTV}   | {'mpc_resource_tv_myTV' | lexicon}
      *
-     * Значения per-resource (не общие между страницами) → НЕ лексиконятся.
-     * Эти поля динамические, в статичные секции (data-mpc-static) не предназначены.
-     * Адрес для редактирования (mpcVE) собирается отдельно — фасадом writeField.
+     * При useLexicons оба переводятся per-resource (rfield → mpc_resource_<field>,
+     * tv → mpc_resource_tv_<name>); без лексиконов или для excludeLexiconFields —
+     * прямое чтение колонки/TV. Эти поля динамические, в статичные секции
+     * (data-mpc-static) не предназначены. Адрес для редактирования (mpcVE)
+     * собирается отдельно — фасадом writeField.
      *
      * @return void
      */
     private function handleResourceFields(): void
     {
         // rfield — нативная колонка ресурса; tv — значение TV (через подмассив tvs).
-        // rfield лексиконится (перевод per-resource через ключ mpc_resource_<field>),
-        // tv — нет.
-        $this->replaceResourceMarkers('[data-mpc-rfield]', 'data-mpc-rfield', '$resource.', true);
-        $this->replaceResourceMarkers('[data-mpc-tv]', 'data-mpc-tv', '$resource.tvs.', false);
+        // Оба лексиконятся per-resource, но разными ключами, чтобы поля с одним
+        // именем не коллизили: rfield → mpc_resource_<field>, tv → mpc_resource_tv_<name>.
+        $this->replaceResourceMarkers('[data-mpc-rfield]', 'data-mpc-rfield', '$resource.', true, 'mpc_resource_');
+        $this->replaceResourceMarkers('[data-mpc-tv]', 'data-mpc-tv', '$resource.tvs.', true, 'mpc_resource_tv_');
     }
 
     /**
@@ -351,7 +353,7 @@ class Cutter extends Base
      *
      * @return void
      */
-    private function replaceResourceMarkers(string $selector, string $attr, string $exprPrefix, bool $lexiconize = false): void
+    private function replaceResourceMarkers(string $selector, string $attr, string $exprPrefix, bool $lexiconize = false, string $lexiconKeyPrefix = 'mpc_resource_'): void
     {
         if (!$items = $this->getItems($this->html, $selector)) {
             return;
@@ -382,7 +384,7 @@ class Cutter extends Base
                 && !empty($this->properties['useLexicons'])
                 && !$this->lexiconManager->isExcluded($name);
             $pls = $useLexicon
-                ? "{'mpc_resource_" . $name . "' | lexicon}"
+                ? "{'" . $lexiconKeyPrefix . $name . "' | lexicon}"
                 : '{' . $expr . '}';
             $itemHtml    = $this->parser->getHTMLString($item);
             $itemHtmlNew = '';
