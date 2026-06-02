@@ -241,7 +241,7 @@ class LexiconManager
         }
 
         $options['prefix'] = $options['prefix'] ?? $this->sectionLexiconPrefix;
-        $lexiconKey        = $this->getLexiconKey($options);
+        $lexiconKey        = self::getLexiconKey($options);
 
         $this->modx->invokeEvent('mpcOnGetLexiconKey', [
             'sectionLexiconPrefix' => $this->sectionLexiconPrefix,
@@ -326,7 +326,13 @@ class LexiconManager
         $this->modx->cacheManager->refresh(['lexicon_topics' => []]);
     }
 
-    private function getLexiconKey(array $options): string
+    /**
+     * ЕДИНЫЙ источник формата лексикон-ключа (грабер И редактор зовут ЭТУ функцию,
+     * чтобы ключи не разъезжались). PURE/STATIC — только из $options.
+     * Формат: {prefix}_{parentFieldName}_{fieldName} либо {prefix}_{fieldName};
+     * idx добавляется суффиксом ТОЛЬКО если он не пустой/не 0 (idx=0 → без суффикса).
+     */
+    public static function getLexiconKey(array $options): string
     {
         $fieldName       = $options['fieldName'] ?? '';
         $idx             = $options['idx'] ?? '';

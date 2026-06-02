@@ -261,11 +261,11 @@ class FieldWriter
     }
 
     /**
-     * Ключ лексикона для НОВОГО поля — формат как у грабера (LexiconManager):
-     *   top-поле:  {prefix}_{field}
-     *   row-поле:  {prefix}_{parentField}_{field}_{idx}
-     *   вложенное: {prefix}_{L1}_{L2}_…_{field}_{lastIdx}
-     * prefix берём из lexicon_prefix секции. '' если префикса нет.
+     * Ключ лексикона для НОВОГО поля. ФОРМАТ — через ЕДИНУЮ функцию
+     * {@see \MpcServices\Handlers\Grabber\LexiconManager::getLexiconKey} (та же,
+     * что у грабера), чтобы ключи редактора и грабера не разъезжались (напр. idx=0
+     * → без суффикса). prefix — из lexicon_prefix секции. '' если префикса нет.
+     * Вложенность (путь >1) пока не генерим (редко; вернётся '' → литерал).
      */
     private function makeLexiconKey(string $configJson, array $address): string
     {
@@ -287,16 +287,15 @@ class FieldWriter
         }
 
         $path = $this->addressPath($address);
-        if ($path) {
-            $parts = [$prefix];
-            foreach ($path as $seg) {
-                $parts[] = (string)$seg['field'];
-            }
-            $parts[] = $field;
-            $last = $path[count($path) - 1];
-            return implode('_', $parts) . '_' . (int)$last['idx'];
+        if (count($path) > 1) {
+            return ''; // вложенные новые поля — отдельно
         }
-        return $prefix . '_' . $field;
+        $options = ['prefix' => $prefix, 'fieldName' => $field];
+        if ($path) {
+            $options['parentFieldName'] = $path[0]['field'];
+            $options['idx']             = $path[0]['idx'];
+        }
+        return \MpcServices\Handlers\Grabber\LexiconManager::getLexiconKey($options);
     }
 
     /**

@@ -808,6 +808,17 @@ class LexiconManagerTest extends TestCase
         $this->assertArrayNotHasKey('k_old', $_lang);              // удалённое поле → orphan выпал
     }
 
+    /**
+     * ЕДИНЫЙ формат ключа (static) — им же пользуется редактор (FieldWriter),
+     * чтобы ключи не разъезжались. idx=0 → БЕЗ суффикса (как у грабера на сайте).
+     */
+    public function testGetLexiconKeyFormat(): void
+    {
+        $this->assertSame('p_title', LexiconManager::getLexiconKey(['prefix' => 'p', 'fieldName' => 'title']));
+        $this->assertSame('p_list_title', LexiconManager::getLexiconKey(['prefix' => 'p', 'parentFieldName' => 'list', 'fieldName' => 'title', 'idx' => 0]));
+        $this->assertSame('p_list_title_2', LexiconManager::getLexiconKey(['prefix' => 'p', 'parentFieldName' => 'list', 'fieldName' => 'title', 'idx' => 2]));
+    }
+
     /** С overwrite=true: значение из шаблона перезаписывает существующее. */
     public function testCreateLexiconsOverwritesWithFlag(): void
     {
