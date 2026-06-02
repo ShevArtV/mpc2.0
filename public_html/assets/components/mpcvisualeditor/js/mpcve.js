@@ -23,7 +23,7 @@
         richtext: 'Текст с форматированием — клик',
         image: 'Изображение — клик, чтобы заменить',
         media: 'Медиа — клик (редактор в разработке)',
-        rows: 'Список — клик (редактор в разработке)'
+        rows: 'Список — клик, чтобы добавить/удалить/переставить строки'
     };
 
     var typesMap = {};
@@ -222,7 +222,8 @@
     var editors = {
         text: { open: openTextEditor },
         richtext: { open: openTextEditor },
-        image: { open: openImageEditor }
+        image: { open: openImageEditor },
+        rows: { open: openRowsEditor }
     };
 
     function openTextEditor(el) {
@@ -467,6 +468,121 @@
                 // запись без нового файла — сохраняем текущий src + изменённые атрибуты
                 persist(cur, addr);
             }
+        });
+    }
+
+    // --- редактор СТРОК списка (add / delete / move) -----------------------
+    // Клик по контейнеру списка (data-mpc-field с data-mpc-item внутри) → панель
+    // строк. Операции пишутся в mpc_config (row/op → ConfigFieldWriter), значения
+    // строк (вкл. лексикон-ключи) едут со строкой. После операции — перезагрузка,
+    // чтобы список перерисовался из конфига. v1: списки уровня 1.
+    function listAddress(listEl) {
+        var sectionEl = listEl.closest('[data-mpc-section]');
+        var rid = cfg.resourceId || 0;
+        var resEl = listEl.closest('[data-mpc-res]');
+        if (resEl) {
+            var r = parseInt(resEl.getAttribute('data-mpc-res'), 10);
+            if (r > 0) { rid = r; }
+        }
+        return {
+            section: sectionEl ? sectionEl.getAttribute('data-mpc-section') : '',
+            parentField: listEl.getAttribute('data-mpc-field') || '',
+            level: (sectionEl && sectionEl.hasAttribute('data-mpc-static')) ? 'global' : 'resource',
+            resourceId: rid
+        };
+    }
+
+    function rowPreview(itemEl) {
+        var t = (itemEl.textContent || '').replace(/\s+/g, ' ').trim();
+        return t.length > 50 ? (t.slice(0, 50) + '…') : (t || '(пусто)');
+    }
+
+    function openRowsEditor(listEl) {
+        if (document.querySelector('.mpcve-modal')) { return; }
+        // v1: только списки уровня 1 (контейнер с data-mpc-field). Вложенные
+        // (data-mpc-field-1/2) — отдельный адрес parentField+idx, пока не тут.
+        if (listEl.getAttribute('data-mpc-field') === null) {
+            toast('Вложенные списки пока редактируются по полям, не строками', true);
+            return;
+        }
+        var addr = listAddress(listEl);
+        if (!addr.section || !addr.parentField) {
+            toast('Не удалось определить адрес списка', true);
+            return;
+        }
+
+        var items = [];
+        listEl.querySelectorAll('[data-mpc-item]').forEach(function (it) { items.push(it); });
+
+        var rowsHtml = items.length
+            ? items.map(function (it, idx) {
+                return '<div class="mpcve-rows__row" data-idx="' + idx + '">' +
+                    '<span class="mpcve-rows__num">' + (idx + 1) + '</span>' +
+                    '<span class="mpcve-rows__prev">' + esc(rowPreview(it)) + '</span>' +
+                    '<span class="mpcve-rows__act">' +
+                        '<button type="button" class="mpcve-rows__btn" data-op="up" title="Вверх">↑</button>' +
+                        '<button type="button" class="mpcve-rows__btn" data-op="down" title="Вниз">↓</button>' +
+                        '<button type="button" class="mpcve-rows__btn mpcve-rows__btn--del" data-op="del" title="Удалить">✕</button>' +
+                    '</span></div>';
+            }).join('')
+            : '<div class="mpcve-hpanel__empty">Строк пока нет — добавьте первую.</div>';
+
+        var overlay = document.createElement('div');
+        overlay.className = 'mpcve-modal';
+        overlay.innerHTML =
+            '<div class="mpcve-modal__card mpcve-modal__card--wide">' +
+                '<div class="mpcve-modal__head">Строки списка · ' + esc(addr.parentField) + '</div>' +
+                '<div class="mpcve-rows">' + rowsHtml + '</div>' +
+                '<div class="mpcve-modal__actions">' +
+                    '<button type="button" class="mpcve-btn mpcve-btn--primary" data-act="add">+ Добавить строку</button>' +
+                    '<button type="button" class="mpcve-btn" data-act="close">Закрыть</button>' +
+                '</div>' +
+            '</div>';
+        document.body.appendChild(overlay);
+
+        function close() { overlay.remove(); document.removeEventListener('keydown', onKey); }
+        function onKey(e) { if (e.key === 'Escape') { close(); } }
+        document.addEventListener('keydown', onKey);
+        overlay.addEventListener('click', function (e) { if (e.target === overlay) { close(); } });
+        overlay.querySelector('[data-act=close]').addEventListener('click', close);
+
+        function sendOp(extra, btn) {
+            var a = { type: 'row', section: addr.section, parentField: addr.parentField, level: addr.level, resourceId: addr.resourceId };
+            Object.keys(extra).forEach(function (k) { a[k] = extra[k]; });
+            if (btn) { btn.disabled = true; }
+            api.post('row/op', { address: a }).then(function (r) {
+                if (r && r.success) {
+                    toast('Готово, обновляю…');
+                    window.location.reload();
+                } else {
+                    toast((r && r.message) || 'Ошибка операции со строкой', true);
+                    if (btn) { btn.disabled = false; }
+                }
+            }).catch(function () {
+                toast('Сетевая ошибка', true);
+                if (btn) { btn.disabled = false; }
+            });
+        }
+
+        overlay.querySelector('[data-act=add]').addEventListener('click', function (e) {
+            sendOp({ op: 'add' }, e.currentTarget);
+        });
+
+        var n = items.length;
+        overlay.querySelectorAll('.mpcve-rows__row').forEach(function (rowEl) {
+            var idx = parseInt(rowEl.getAttribute('data-idx'), 10);
+            rowEl.querySelectorAll('[data-op]').forEach(function (btn) {
+                btn.addEventListener('click', function () {
+                    var op = btn.getAttribute('data-op');
+                    if (op === 'del') {
+                        sendOp({ op: 'delete', idx: idx }, btn);
+                    } else if (op === 'up' && idx > 0) {
+                        sendOp({ op: 'move', fromIdx: idx, toIdx: idx - 1 }, btn);
+                    } else if (op === 'down' && idx < n - 1) {
+                        sendOp({ op: 'move', fromIdx: idx, toIdx: idx + 1 }, btn);
+                    }
+                });
+            });
         });
     }
 

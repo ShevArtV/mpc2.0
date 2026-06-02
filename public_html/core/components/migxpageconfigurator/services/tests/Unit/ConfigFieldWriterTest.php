@@ -107,4 +107,54 @@ class ConfigFieldWriterTest extends TestCase
             $w->getValue($this->sampleConfig(), ['section' => 'hero', 'parentField' => 'cards', 'idx' => 1, 'fieldName' => 'title'])['data']['value']
         );
     }
+
+    // --- row-операции: add / delete / move -------------------------------
+
+    /** Декодирует строки списка cards из результата операции. */
+    private function cardsOf(array $res): array
+    {
+        $config = json_decode($res['data']['json'], true);
+        return json_decode($config['1']['cards'], true);
+    }
+
+    public function testAddRowAppendsEmptyByTemplate(): void
+    {
+        $w = new ConfigFieldWriter();
+        $res = $w->addRow($this->sampleConfig(), ['section' => 'hero', 'parentField' => 'cards']);
+        $this->assertTrue($res['success'], $res['message']);
+
+        $rows = $this->cardsOf($res);
+        $this->assertCount(3, $rows);
+        $this->assertSame(3, $rows[2]['MIGX_id']);   // max+1
+        $this->assertSame('', $rows[2]['title']);    // структура из первой строки, значение пустое
+    }
+
+    public function testDeleteRow(): void
+    {
+        $w = new ConfigFieldWriter();
+        $res = $w->deleteRow($this->sampleConfig(), ['section' => 'hero', 'parentField' => 'cards', 'idx' => 0]);
+        $this->assertTrue($res['success'], $res['message']);
+
+        $rows = $this->cardsOf($res);
+        $this->assertCount(1, $rows);
+        $this->assertSame('Карточка 2', $rows[0]['title']); // осталась вторая, переиндексирована
+    }
+
+    public function testDeleteRowRejectsBadIdx(): void
+    {
+        $w = new ConfigFieldWriter();
+        $res = $w->deleteRow($this->sampleConfig(), ['section' => 'hero', 'parentField' => 'cards', 'idx' => 9]);
+        $this->assertFalse($res['success']);
+    }
+
+    public function testMoveRowReordersAndValuesTravel(): void
+    {
+        $w = new ConfigFieldWriter();
+        $res = $w->moveRow($this->sampleConfig(), ['section' => 'hero', 'parentField' => 'cards', 'fromIdx' => 0, 'toIdx' => 1]);
+        $this->assertTrue($res['success'], $res['message']);
+
+        $rows = $this->cardsOf($res);
+        $this->assertSame('Карточка 2', $rows[0]['title']); // порядок переставлен
+        $this->assertSame('Карточка 1', $rows[1]['title']); // значение уехало вместе со строкой
+    }
 }

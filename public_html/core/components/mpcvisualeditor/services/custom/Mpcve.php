@@ -88,4 +88,19 @@ class Mpcve
         $writer = new \MpcServices\Handlers\FieldWriter($this->modx);
         return $writer->readConfig($level, $resourceId);
     }
+
+    /**
+     * Структурная операция над строками списка (add|delete|move). Делегирует в
+     * write-API mpc (FieldWriter::writeRowOp).
+     *
+     * @param array $address level/resourceId/section/parentField/op + idx|fromIdx,toIdx
+     */
+    public function rowOp(array $address): array
+    {
+        if (!class_exists('\\MpcServices\\Handlers\\FieldWriter')) {
+            return ['success' => false, 'message' => 'migxpageconfigurator (mpc) 2.4.0+ is required', 'data' => []];
+        }
+        $writer = new \MpcServices\Handlers\FieldWriter($this->modx);
+        return $writer->writeRowOp($address);
+    }
 }

@@ -1,3 +1,11 @@
+2.5.12-rc
+==============
+Write-API: структурные операции над строками списков (add/delete/move) для редактора.
+
+- `ConfigFieldWriter`: `addRow`/`deleteRow`/`moveRow` (PURE, через `mutateRows`) — манипуляции массивом строк поля-списка в mpc_config. addRow добавляет пустую строку по структуре первой (MIGX_id=max+1); deleteRow/moveRow — splice + reindex. Значения строк (вкл. лексикон-ключи) едут ВМЕСТЕ со строкой → переводы не теряются при перестановке/удалении (orphan-ключ удалённой строки безвреден, чистится перенарезкой). Тесты: +4 (`testAddRow…`/`testDeleteRow…`/`testMoveRow…`).
+- `FieldWriter::writeRowOp(address)` — обёртка: резолв уровня + load/save mpc_config + диспетч add|delete|move. Адрес: level/resourceId/section/parentField/op + idx (delete) / fromIdx,toIdx (move).
+- Версия пакета `2.5.11` → `2.5.12`.
+
 2.5.11-rc
 ==============
 Фикс: lexicon-мерж без updContent не тащит обратно ключи удалённых полей (orphan).

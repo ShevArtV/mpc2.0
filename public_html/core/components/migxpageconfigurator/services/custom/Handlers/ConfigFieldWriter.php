@@ -95,6 +95,98 @@ class ConfigFieldWriter
         return ['success' => true, 'message' => 'ok', 'data' => ['value' => $value]];
     }
 
+    /**
+     * Добавить ПУСТУЮ строку в конец списка (parentField). Структура под-полей
+     * копируется из первой существующей строки (значения сброшены), MIGX_id = max+1.
+     * Лексиконы: новые под-поля — пустые литералы (лексиконизируются на нарезке).
+     */
+    public function addRow(string $configJson, array $address): array
+    {
+        return $this->mutateRows($configJson, $address, static function (array $rows) {
+            $maxId = 0;
+            $template = [];
+            foreach ($rows as $row) {
+                if (is_array($row)) {
+                    $maxId = max($maxId, (int)($row['MIGX_id'] ?? 0));
+                    if (!$template) {
+                        $template = $row;
+                    }
+                }
+            }
+            $newRow = ['MIGX_id' => $maxId + 1];
+            foreach ($template as $k => $v) {
+                if ($k !== 'MIGX_id') {
+                    $newRow[$k] = is_array($v) ? [] : '';
+                }
+            }
+            $rows[] = $newRow;
+            return $rows;
+        });
+    }
+
+    /** Удалить строку по idx. Значения остальных строк (вкл. лексикон-ключи) едут с ними. */
+    public function deleteRow(string $configJson, array $address): array
+    {
+        $idx = (int)($address['idx'] ?? -1);
+        return $this->mutateRows($configJson, $address, static function (array $rows) use ($idx) {
+            if ($idx < 0 || $idx >= count($rows)) {
+                return null;
+            }
+            array_splice($rows, $idx, 1);
+            return $rows;
+        });
+    }
+
+    /** Переместить строку fromIdx → toIdx (значения/лексикон-ключи едут со строкой). */
+    public function moveRow(string $configJson, array $address): array
+    {
+        $from = (int)($address['fromIdx'] ?? -1);
+        $to   = (int)($address['toIdx'] ?? -1);
+        return $this->mutateRows($configJson, $address, static function (array $rows) use ($from, $to) {
+            $n = count($rows);
+            if ($from < 0 || $from >= $n || $to < 0 || $to >= $n) {
+                return null;
+            }
+            $moved = array_splice($rows, $from, 1);
+            array_splice($rows, $to, 0, $moved);
+            return $rows;
+        });
+    }
+
+    /**
+     * Общая мутация массива строк поля-списка. $fn(array $rows): ?array — возвращает
+     * новый массив строк или null (ошибка индекса). PURE.
+     */
+    private function mutateRows(string $configJson, array $address, callable $fn): array
+    {
+        $config = json_decode($configJson, true);
+        if (!is_array($config)) {
+            return $this->err('invalid mpc_config JSON');
+        }
+        $section     = (string)($address['section'] ?? '');
+        $parentField = (string)($address['parentField'] ?? '');
+        if ($section === '' || $parentField === '') {
+            return $this->err('section and parentField required');
+        }
+        $key = $this->findSectionKey($config, $section);
+        if ($key === null) {
+            return $this->err('section not found: ' . $section);
+        }
+
+        $rows = $this->decodeRows($config[$key][$parentField] ?? '');
+        $newRows = $fn($rows);
+        if ($newRows === null) {
+            return $this->err('invalid row index for ' . $parentField);
+        }
+        $config[$key][$parentField] = json_encode(array_values($newRows), JSON_UNESCAPED_UNICODE);
+
+        return [
+            'success' => true,
+            'message' => 'ok',
+            'data'    => ['json' => json_encode($config, JSON_UNESCAPED_UNICODE)],
+        ];
+    }
+
     private function findSectionKey(array $config, string $section): ?string
     {
         foreach ($config as $k => $s) {

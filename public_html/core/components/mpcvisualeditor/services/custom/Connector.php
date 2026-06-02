@@ -51,6 +51,9 @@ class Connector
             case 'field/save':
                 // Легаси точечной записи (rfield/tv/config) — оставлено для совместимости.
                 return (new Handlers\FieldSaveHandler($this->modx, $this->mpcve))->handle($request);
+            case 'row/op':
+                // Структурная операция над строками списка (add|delete|move).
+                return (new Handlers\RowOpHandler($this->modx, $this->mpcve))->handle($request);
             case 'image/upload':
                 // Загрузка картинки в media source mpc → возврат URL (фронт пишет
                 // его в поле через field/save). См. ImageUploadHandler.

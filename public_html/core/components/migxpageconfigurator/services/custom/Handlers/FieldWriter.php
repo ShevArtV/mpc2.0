@@ -249,6 +249,52 @@ class FieldWriter
     }
 
     /**
+     * Структурная операция над строками поля-списка: add | delete | move.
+     * Адрес: level, resourceId, section, parentField (имя списка), op, + idx
+     * (delete) / fromIdx,toIdx (move). Лексиконы не трогаем — значения строк
+     * (вкл. лексикон-ключи) едут вместе со строкой при перестановке/удалении.
+     */
+    public function writeRowOp(array $address): array
+    {
+        $op       = (string)($address['op'] ?? '');
+        $level    = (string)($address['level'] ?? 'resource');
+        $resource = $this->resolveLevelResource($level, (int)($address['resourceId'] ?? 0));
+        if (!$resource) {
+            return $this->result(false, 'target resource for level "' . $level . '" not found');
+        }
+
+        $configJson = (string)$resource->getTVValue($this->configTvName);
+        if ($configJson === '') {
+            return $this->result(false, 'empty mpc_config for level "' . $level . '"');
+        }
+
+        $cfw = new ConfigFieldWriter();
+        switch ($op) {
+            case 'add':    $res = $cfw->addRow($configJson, $address); break;
+            case 'delete': $res = $cfw->deleteRow($configJson, $address); break;
+            case 'move':   $res = $cfw->moveRow($configJson, $address); break;
+            default:       return $this->result(false, 'unknown row op: ' . $op);
+        }
+        if (!$res['success']) {
+            return $res;
+        }
+        if (!method_exists($resource, 'setTVValue')) {
+            return $this->result(false, 'setTVValue unavailable on resource');
+        }
+        $resource->setTVValue($this->configTvName, $res['data']['json']);
+
+        $this->afterSave($resource, [
+            'type'        => 'row',
+            'op'          => $op,
+            'level'       => $level,
+            'section'     => (string)($address['section'] ?? ''),
+            'fieldName'   => (string)($address['parentField'] ?? ''),
+        ]);
+
+        return $this->result(true, 'saved', ['type' => 'row', 'op' => $op, 'level' => $level]);
+    }
+
+    /**
      * Резолвит ресурс-носитель mpc_config для уровня. PURE-ish (только getObject).
      */
     private function resolveLevelResource(string $level, int $resourceId)
