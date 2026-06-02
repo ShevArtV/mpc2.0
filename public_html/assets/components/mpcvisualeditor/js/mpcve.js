@@ -535,6 +535,23 @@
         return items;
     }
 
+    // Число строк поля-списка в КОНФИГЕ (источник правды). null если не нашли.
+    // Нужно для медиа-списков: DOM-слоты фиксированы шаблоном и могут превышать
+    // число строк конфига → панель должна показывать ровно конфиг.
+    function configRowCount(addr) {
+        if (!configData) { return null; }
+        var cfg = configData[addr.level] || {};
+        var keys = Object.keys(cfg);
+        for (var i = 0; i < keys.length; i++) {
+            var s = cfg[keys[i]];
+            if (s && (s.section_name === addr.section || s.MIGX_formname === addr.section)) {
+                var rows = parseRecord(s[addr.parentField]);
+                return rows ? rows.length : 0;
+            }
+        }
+        return null;
+    }
+
     function openRowsEditor(listEl) {
         if (document.querySelector('.mpcve-modal')) { return; }
         // v1: только списки уровня 1 (контейнер с data-mpc-field). Вложенные
@@ -553,6 +570,14 @@
         // Img-список (list_images): строки — <img>, под-поле картинки в конфиге = 'img'.
         // Даём 📷 на каждую строку (загрузка/замена). picture/video/audio — позже.
         var mediaSub = (items[0] && items[0].tagName && items[0].tagName.toLowerCase() === 'img') ? 'img' : '';
+        // Медиа-список: DOM-слоты фиксированы шаблоном (нарезка), могут превышать
+        // число строк конфига → показываем ровно строки конфига (источник правды).
+        if (mediaSub) {
+            var cnt = configRowCount(addr);
+            if (cnt != null && cnt < items.length) {
+                items = items.slice(0, cnt);
+            }
+        }
 
         var rowsHtml = items.length
             ? items.map(function (it, idx) {
