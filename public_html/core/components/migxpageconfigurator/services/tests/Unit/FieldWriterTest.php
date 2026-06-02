@@ -194,6 +194,43 @@ class FieldWriterTest extends TestCase
         $this->assertSame('Литерал', $cards[1]['title']);             // литерал в конфиге
     }
 
+    /** Новая media-запись (картинка строки list_images) → src/alt получают лексикон-ключи. */
+    public function testNewMediaRecordGetsLexiconKeys(): void
+    {
+        $config = json_encode([
+            '1' => [
+                'section_name'   => 'gallery',
+                'MIGX_formname'  => 'mpc_gallery',
+                'lexicon_prefix' => 'gallery',
+                'list_images'    => json_encode([
+                    ['MIGX_id' => 1, 'img' => ''], // новая пустая строка
+                ], JSON_UNESCAPED_UNICODE),
+            ],
+        ], JSON_UNESCAPED_UNICODE);
+        $resource = new ModxObjectStub('modResource', ['id' => 5, 'context_key' => 'web', 'tv_mpc_config' => $config]);
+        $writer = new FieldWriter($this->makeModx($resource));
+        $log = [];
+        $this->injectLex($writer, [], $log); // ключей ещё нет
+
+        $record = json_encode([
+            ['MIGX_id' => 1, 'src' => '/new.jpg', 'alt' => 'Картинка', 'width' => '500', 'height' => '350'],
+        ], JSON_UNESCAPED_UNICODE);
+        $res = $writer->write(
+            ['type' => 'field', 'level' => 'resource', 'resourceId' => 5, 'section' => 'gallery', 'parentField' => 'list_images', 'idx' => 0, 'fieldName' => 'img'],
+            $record
+        );
+
+        $this->assertTrue($res['success'], $res['message']);
+        // idx=0 → ключи без суффикса (формат грабера через единую getLexiconKey)
+        $this->assertSame('/new.jpg', $log['gallery_list_images']);
+        $this->assertSame('Картинка', $log['gallery_list_images_alt']);
+        // в конфиге у media-записи лежат КЛЮЧИ, width — литерал
+        $img = json_decode(json_decode(json_decode($resource->getTVValue('mpc_config'), true)['1']['list_images'], true)[0]['img'], true);
+        $this->assertSame('gallery_list_images', $img[0]['src']);
+        $this->assertSame('gallery_list_images_alt', $img[0]['alt']);
+        $this->assertSame('500', $img[0]['width']);
+    }
+
     public function testConfigFieldEmptyConfigRejected(): void
     {
         $resource = new ModxObjectStub('modResource', ['id' => 5]); // нет tv_mpc_config

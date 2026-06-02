@@ -1,3 +1,10 @@
+2.5.16-rc
+==============
+Write-API: новая media-запись (картинка добавленной строки) получает лексикон-ключи.
+
+- `FieldWriter::writeConfigField`: для record-значения теперь различаем существующую запись (есть ключи → `mergeRecordWithLexicon`, как было) и НОВУЮ (`recordHasLexiconKeys`=false → `newRecordWithLexiconKeys`). Новая media-запись: для лексиконизируемых под-полей (`src`/`srcset`/`alt`/`title`) генерим ключи через единую `getLexiconKey` (idx=0 → без суффикса), пишем значения в лексикон, в запись кладём ключи; `width`/`height` — литералом. Без `lexicon_prefix` секции → литерал. Нужно для загрузки картинки в только что добавленную строку media-списка (иначе `src="{…|lexicon}"` → ''). Хелперы: `sectionPrefix`, `recordHasLexiconKeys`, `newRecordWithLexiconKeys`. Тест `testNewMediaRecordGetsLexiconKeys`.
+- Версия пакета `2.5.15` → `2.5.16`.
+
 2.5.15-rc
 ==============
 Рефакторинг: генерация лексикон-ключа — ЕДИНАЯ функция (грабер + редактор).

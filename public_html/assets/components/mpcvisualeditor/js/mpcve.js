@@ -328,7 +328,7 @@
         return el.tagName.toLowerCase() === 'img' && ftype !== 'bg_img' && !hasBg(el);
     }
 
-    function openImageEditor(el) {
+    function openImageEditor(el, forcedAddr) {
         if (document.querySelector('.mpcve-modal')) {
             return;
         }
@@ -466,7 +466,7 @@
         }
 
         saveBtn.addEventListener('click', function () {
-            var addr = fieldAddress(el);
+            var addr = forcedAddr || fieldAddress(el);
             if (!addr) {
                 toast('У элемента нет data-mpc-адреса — некуда сохранять', true);
                 return;
@@ -550,13 +550,19 @@
         }
 
         var items = listRows(listEl, addr.parentField);
+        // Img-список (list_images): строки — <img>, под-поле картинки в конфиге = 'img'.
+        // Даём 📷 на каждую строку (загрузка/замена). picture/video/audio — позже.
+        var mediaSub = (items[0] && items[0].tagName && items[0].tagName.toLowerCase() === 'img') ? 'img' : '';
 
         var rowsHtml = items.length
             ? items.map(function (it, idx) {
+                var upload = mediaSub
+                    ? '<button type="button" class="mpcve-rows__btn" data-op="img" title="Загрузить/заменить картинку">📷</button>'
+                    : '';
                 return '<div class="mpcve-rows__row" data-idx="' + idx + '">' +
                     '<span class="mpcve-rows__num">' + (idx + 1) + '</span>' +
                     '<span class="mpcve-rows__prev">' + esc(rowPreview(it)) + '</span>' +
-                    '<span class="mpcve-rows__act">' +
+                    '<span class="mpcve-rows__act">' + upload +
                         '<button type="button" class="mpcve-rows__btn" data-op="up" title="Вверх">↑</button>' +
                         '<button type="button" class="mpcve-rows__btn" data-op="down" title="Вниз">↓</button>' +
                         '<button type="button" class="mpcve-rows__btn mpcve-rows__btn--del" data-op="del" title="Удалить">✕</button>' +
@@ -611,7 +617,15 @@
             rowEl.querySelectorAll('[data-op]').forEach(function (btn) {
                 btn.addEventListener('click', function () {
                     var op = btn.getAttribute('data-op');
-                    if (op === 'del') {
+                    if (op === 'img') {
+                        // закрываем панель строк и открываем редактор картинки
+                        // ЭТОЙ строки с явным адресом rows[idx].img.
+                        close();
+                        openImageEditor(items[idx], {
+                            type: 'field', section: addr.section, parentField: addr.parentField,
+                            idx: idx, level: addr.level, resourceId: addr.resourceId, fieldName: mediaSub
+                        });
+                    } else if (op === 'del') {
                         sendOp({ op: 'delete', idx: idx }, btn);
                     } else if (op === 'up' && idx > 0) {
                         sendOp({ op: 'move', fromIdx: idx, toIdx: idx - 1 }, btn);

@@ -214,7 +214,16 @@ class FieldWriter
             $current = $cfw->getValue($configJson, $address)['data']['value'] ?? null;
 
             if ($this->isRecordValue($value)) {
-                $value = $this->mergeRecordWithLexicon($writer, $ident, $current, $value);
+                // Медиа-запись: если у текущей записи уже есть лексикон-ключи —
+                // мерж (обновляем лексикон, ключи остаются). Если запись НОВАЯ
+                // (ключей нет, напр. картинка только что добавленной строки) —
+                // генерим ключи для src/alt/title, иначе чанк src="{…|lexicon}"
+                // вернёт '' для литерала.
+                if ($this->recordHasLexiconKeys($writer, $ident, $current)) {
+                    $value = $this->mergeRecordWithLexicon($writer, $ident, $current, $value);
+                } else {
+                    $value = $this->newRecordWithLexiconKeys($writer, $ident, $configJson, $address, $value);
+                }
             } elseif (is_string($current) && $current !== '' && !$this->isRecordValue($current)
                 && $writer->has($ident, $current)) {
                 if (!$writer->set($ident, $current, is_scalar($value) ? (string)$value : '')) {
@@ -269,20 +278,9 @@ class FieldWriter
      */
     private function makeLexiconKey(string $configJson, array $address): string
     {
-        $section = (string)($address['section'] ?? '');
-        $field   = (string)($address['fieldName'] ?? '');
-        $config  = json_decode($configJson, true);
-        if (!is_array($config) || $field === '') {
-            return '';
-        }
-        $prefix = '';
-        foreach ($config as $s) {
-            if (is_array($s) && (($s['section_name'] ?? null) === $section || ($s['MIGX_formname'] ?? null) === $section)) {
-                $prefix = (string)($s['lexicon_prefix'] ?? '');
-                break;
-            }
-        }
-        if ($prefix === '') {
+        $field  = (string)($address['fieldName'] ?? '');
+        $prefix = $this->sectionPrefix($configJson, (string)($address['section'] ?? ''));
+        if ($field === '' || $prefix === '') {
             return '';
         }
 
@@ -296,6 +294,75 @@ class FieldWriter
             $options['idx']             = $path[0]['idx'];
         }
         return \MpcServices\Handlers\Grabber\LexiconManager::getLexiconKey($options);
+    }
+
+    /** lexicon_prefix секции из конфига ('' если нет). */
+    private function sectionPrefix(string $configJson, string $section): string
+    {
+        $config = json_decode($configJson, true);
+        if (!is_array($config)) {
+            return '';
+        }
+        foreach ($config as $s) {
+            if (is_array($s) && (($s['section_name'] ?? null) === $section || ($s['MIGX_formname'] ?? null) === $section)) {
+                return (string)($s['lexicon_prefix'] ?? '');
+            }
+        }
+        return '';
+    }
+
+    /** Есть ли в media-записи лексикон-ключи (существующая запись vs новая). */
+    private function recordHasLexiconKeys(LexiconWriter $writer, string $ident, $current): bool
+    {
+        foreach ($this->decodeRecord($current) as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            foreach ($row as $v) {
+                if (is_string($v) && $v !== '' && $writer->has($ident, $v)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
+     * НОВАЯ media-запись (картинка добавленной строки): генерим ключи лексикона
+     * для лексиконизируемых под-полей (src/srcset/alt/title) через ЕДИНУЮ
+     * getLexiconKey, пишем значения в лексикон, в запись кладём КЛЮЧИ. width/height
+     * и пр. — литералом. Без lexicon_prefix секции → литерал (не лексиконим).
+     */
+    private function newRecordWithLexiconKeys(LexiconWriter $writer, string $ident, string $configJson, array $address, $value): string
+    {
+        $rows   = $this->decodeRecord($value);
+        $prefix = $this->sectionPrefix($configJson, (string)($address['section'] ?? ''));
+        if ($prefix === '' || !$rows) {
+            return json_encode($rows, JSON_UNESCAPED_UNICODE);
+        }
+        // База ключа = parentField (строка media-списка) либо fieldName (top-level img).
+        $base = (string)($address['parentField'] ?? '');
+        if ($base === '') {
+            $base = (string)($address['fieldName'] ?? '');
+        }
+        $idx     = $address['idx'] ?? '';
+        $lexSubs = ['src' => '', 'srcset' => '', 'alt' => '_alt', 'title' => '_title'];
+        foreach ($rows as $i => $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            foreach ($lexSubs as $sub => $suffix) {
+                if (isset($row[$sub]) && is_string($row[$sub]) && $row[$sub] !== '') {
+                    $key = \MpcServices\Handlers\Grabber\LexiconManager::getLexiconKey([
+                        'prefix' => $prefix, 'fieldName' => $base . $suffix, 'idx' => $idx,
+                    ]);
+                    if ($key !== '' && $writer->set($ident, $key, $row[$sub])) {
+                        $rows[$i][$sub] = $key;
+                    }
+                }
+            }
+        }
+        return json_encode($rows, JSON_UNESCAPED_UNICODE);
     }
 
     /**
