@@ -201,6 +201,32 @@ class CutterSnapshotTest extends TestCase
         $this->assertStringNotContainsString('data-mpc-tv', $tpl);
     }
 
+    /**
+     * При useLexicons rfield рендерится через `| lexicon` по ключу
+     * mpc_resource_<field> — КРОМЕ полей из excludeLexiconFields (pagetitle):
+     * для них прямое чтение колонки, иначе grabber ключ не пишет → пусто.
+     */
+    public function testCutterExcludesNativeFieldsFromLexicon(): void
+    {
+        // useLexicons включаем через стаб (Base перетирает свойство из getOption);
+        // excludeLexiconFields грузится из файла mpc_exclude_lexicons_filename —
+        // указываем реальный exclude_lexicons.inc.php, где pagetitle в дефолте.
+        $modx = new ModxStub($this->fixturesDir, [
+            'mpc_use_lexicons'              => true,
+            'mpc_exclude_lexicons_filename' => 'components/migxpageconfigurator/services/exclude_lexicons.inc.php',
+        ]);
+
+        $cutter = new Cutter($modx, $this->makeBaseProperties());
+        $cutter->handle('rfields.html');
+        $tpl = file_get_contents($this->outputDir . '/sections/rftest.tpl');
+
+        // pagetitle исключён → прямое чтение колонки, без | lexicon
+        $this->assertStringContainsString('{$resource.pagetitle}', $tpl);
+        $this->assertStringNotContainsString('mpc_resource_pagetitle', $tpl);
+        // content не исключён → лексикон-форма
+        $this->assertStringContainsString("{'mpc_resource_content' | lexicon}", $tpl);
+    }
+
     // ---------------------------------------------------------------
 
     private function clearDir(string $dir): void

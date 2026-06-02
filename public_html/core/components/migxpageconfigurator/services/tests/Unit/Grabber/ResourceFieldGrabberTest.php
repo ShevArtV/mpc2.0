@@ -126,6 +126,26 @@ class ResourceFieldGrabberTest extends TestCase
         $this->assertSame('Заголовок', $lm->lexicons[7]['mpc_resource_pagetitle']);  // лексикон = значение
     }
 
+    /** Поле из excludeLexiconFields не лексиконится: колонка = значение, лексикон пуст. */
+    public function testExcludedRfieldNotLexiconized(): void
+    {
+        $lm = new \MpcServices\Handlers\Grabber\LexiconManager(new \MpcTests\Stubs\ModxStub(), [
+            'useLexicons'          => true,
+            'lexiconFilenameField' => 'id',
+            'allowedTags'          => [''],
+            'allowModxTags'        => false,
+            'excludeLexiconFields' => ['pagetitle'],
+        ]);
+        $grabber = new ResourceFieldGrabber(new Parser(), [], null, $lm, true);
+        $res = new ModxObjectStub('modResource', ['id' => 7]);
+
+        $written = $grabber->grab('<h1 data-mpc-rfield="pagetitle">Заголовок</h1>', $res);
+
+        $this->assertSame('Заголовок', $res->get('pagetitle'));            // колонка = ЗНАЧЕНИЕ, не ключ
+        $this->assertSame([], $lm->lexicons);                              // лексикон не пишется
+        $this->assertArrayHasKey('pagetitle', $written['fields']);         // поле всё равно записано
+    }
+
     /** Поля внутри обёртки data-mpc-res (разметка редактора) на грабе игнорируются. */
     public function testIgnoresFieldsInsideResWrapper(): void
     {

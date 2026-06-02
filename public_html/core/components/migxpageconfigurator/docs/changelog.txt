@@ -1,3 +1,12 @@
+2.5.2-rc
+==============
+Единый exclude для всех лексиконизируемых полей (включая `rfield`). Отменяет решение из 2.5.1-rc «отдельный exclude для rfield не вводим».
+
+- `excludeLexiconFields` теперь действует и на поля ресурса (`data-mpc-rfield`), а не только на config-секции. Раньше rfield-путь лексиконизации (грабер `ResourceFieldGrabber::lexiconize` + каттер `replaceResourceMarkers`) гейтился ТОЛЬКО на `useLexicons` и игнорировал список исключений — поэтому лексиконились ВСЕ rfield, включая `pagetitle`, который MODX читает из колонки напрямую (`<title>`/меню/крошки/дерево/поиск) и показывал бы там ключ вместо значения. Теперь оба места консистентно спрашивают `LexiconManager::isExcluded()` (новый публичный фасад над приватным `isFieldExcluded`): исключённое поле → грабер пишет в колонку ЗНАЧЕНИЕ (не ключ), каттер рендерит прямое `{$resource.<field>}` (не `| lexicon`). Гейты rfield-лексиконизации: `useLexicons` + `!isExcluded` (защищённые alias/uri/template по-прежнему отфильтрованы грабером раньше).
+- `pagetitle` добавлен в дефолтный `excludeLexiconFields` (`services/exclude_lexicons.inc.php`). Прочие нативные поля (`menutitle`/`longtitle`/`description`/…) — в project-specific exclude-файл (`mpc_exclude_lexicons_filename`) по необходимости (часто они как раз переводимы — в дефолт не кладём).
+- Тесты: `ResourceFieldGrabberTest` (+`testExcludedRfieldNotLexiconized`: колонка=значение, лексикон пуст), `CutterSnapshotTest` (+`testCutterExcludesNativeFieldsFromLexicon`: pagetitle→`{$resource.pagetitle}`, content→`| lexicon`). Применяется ПЕРЕНАРЕЗКОЙ.
+- Версия пакета `2.5.1` → `2.5.2`.
+
 2.5.1-rc
 ==============
 Под фронт-редактирование (mpcVE): лексикон-aware запись полей, лексиконизация полей ресурса, кросс-ресурсные поля. Оставшийся роадмап редактора — `core/components/mpcvisualeditor/docs/TODO.md`.

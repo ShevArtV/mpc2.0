@@ -102,14 +102,19 @@ class ResourceFieldGrabber
      * `mpc_resource_<field>` (per-resource перевод; на диск кладёт createLexicons),
      * и ВОЗВРАЩАЕМ ключ — его caller кладёт в колонку (как config-поля хранят
      * ключ в mpc_config). Пусто, если лексиконы выключены (тогда колонка =
-     * значение). Гейт — useLexicons (rfield-имена не исключаются, защищённые
-     * alias/uri/template уже отфильтрованы).
+     * значение). Гейты: useLexicons + excludeLexiconFields — поле из списка
+     * исключений (напр. `pagetitle`, читаемый MODX напрямую) НЕ лексиконится,
+     * чтобы в колонке осталось значение, а не ключ (консистентно с каттером).
+     * Защищённые alias/uri/template уже отфильтрованы выше.
      *
      * @return string ключ лексикона или '' (лексикон не пишется)
      */
     private function lexiconize($resource, string $field, string $value): string
     {
         if (!$this->useLexicons || $this->lexiconManager === null) {
+            return '';
+        }
+        if ($this->lexiconManager->isExcluded($field)) {
             return '';
         }
         $ident = $this->lexiconManager->getResourceIdentifierById((int)$resource->get('id'));

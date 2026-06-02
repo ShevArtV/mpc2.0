@@ -375,8 +375,13 @@ class Cutter extends Base
 
             $expr = $exprPrefix . $name;           // $resource.pagetitle / $resource.tvs.myTV
             // Лексикон-форма (rfield, useLexicons): перевод по ключу
-            // mpc_resource_<field>; иначе — прямое чтение колонки/TV.
-            $pls = ($lexiconize && !empty($this->properties['useLexicons']))
+            // mpc_resource_<field>; иначе — прямое чтение колонки/TV. Поля из
+            // excludeLexiconFields (напр. pagetitle) — всегда прямое чтение,
+            // иначе каттер ставит `| lexicon`, а grabber ключ не пишет → пусто.
+            $useLexicon = $lexiconize
+                && !empty($this->properties['useLexicons'])
+                && !$this->lexiconManager->isExcluded($name);
+            $pls = $useLexicon
                 ? "{'mpc_resource_" . $name . "' | lexicon}"
                 : '{' . $expr . '}';
             $itemHtml    = $this->parser->getHTMLString($item);

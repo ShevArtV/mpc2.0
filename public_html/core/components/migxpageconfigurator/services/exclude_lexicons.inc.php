@@ -31,6 +31,10 @@ $excludeLexiconFields = [
     'MIGX_id',
     'MIGX_formname',
     'id',
+    // Нативное поле ресурса, читаемое MODX напрямую (<title>, меню, крошки,
+    // дерево/поиск в админке). Лексиконизация показала бы там ключ вместо
+    // значения — поэтому pagetitle по умолчанию НЕ переводим.
+    'pagetitle',
     'section_name',
     'file_name',
     'is_static',

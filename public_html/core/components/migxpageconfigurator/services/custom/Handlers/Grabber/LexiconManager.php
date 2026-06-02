@@ -336,6 +336,16 @@ class LexiconManager
      *    поэтому row-специфичные паттерны действуют там; на cutter-стороне
      *    (без idx) такой паттерн просто не сматчится.
      */
+    /**
+     * Публичный фасад над {@see isFieldExcluded} — единая точка для внешних
+     * лексикон-путей (rfield-грабер, каттер resource-маркеров), чтобы exclude
+     * действовал на ВСЕ поля, а не только на config-секции внутри менеджера.
+     */
+    public function isExcluded(string $name): bool
+    {
+        return $this->isFieldExcluded($name);
+    }
+
     private function isFieldExcluded(string $name): bool
     {
         if ($name === '') {
