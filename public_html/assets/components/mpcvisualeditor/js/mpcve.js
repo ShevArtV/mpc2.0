@@ -470,20 +470,24 @@
         });
     }
 
-    // --- скрытые поля секций (config-driven панель) ------------------------
+    // --- скрытые поля У БЛОКА (config-driven) ------------------------------
     // Поля, вырезанные из страницы (data-mpc-remove) или вспомогательные, не
     // имеют DOM-маркера, но лежат в mpc_config. Грузим конфиг (config/get) и
-    // показываем такие поля отдельной панелью; запись — прежним field/save
-    // (адрес с parentField/idx для скрытых под-полей строк списков).
+    // вешаем на КАЖДЫЙ блок (секцию / элемент списка), у которого такие поля
+    // есть, кнопку «⊕ N» в углу — клик открывает панель ЭТОГО блока. Запись —
+    // прежним field/save (адрес с parentField/idx для под-полей строк списков).
     var configData = null; // { resourceId, resource:{}, global:{} } из config/get
-    var hiddenBtn = null;
     var STRUCTURAL = ['section_name', 'MIGX_formname', 'position', 'is_static',
         'file_name', 'limit', 'inline_styles', 'class_names', 'css_file_path'];
 
     function loadConfig() {
         return api.post('config/get', { resourceId: cfg.resourceId || 0 }).then(function (r) {
             configData = (r && r.success && r.data) ? r.data : null;
-        }).catch(function () { configData = null; });
+            if (!configData) { console.warn('[mpcVE] config/get вернул без данных:', r); }
+        }).catch(function (e) {
+            configData = null;
+            console.warn('[mpcVE] config/get ошибка запроса:', e);
+        });
     }
 
     function esc(s) {
@@ -509,24 +513,6 @@
         return null;
     }
 
-    // Поля с DOM-маркером (type=field) в секции: top-уровень + по строкам списков.
-    function visibleFields(sectionEl) {
-        var top = {}, rows = {};
-        var markers = sectionEl.querySelectorAll(SELECTOR);
-        for (var i = 0; i < markers.length; i++) {
-            var addr = fieldAddress(markers[i]);
-            if (!addr || addr.type !== 'field') { continue; }
-            if (addr.parentField != null && addr.idx != null) {
-                rows[addr.parentField] = rows[addr.parentField] || {};
-                rows[addr.parentField][addr.idx] = rows[addr.parentField][addr.idx] || {};
-                rows[addr.parentField][addr.idx][addr.fieldName] = true;
-            } else {
-                top[addr.fieldName] = true;
-            }
-        }
-        return { top: top, rows: rows };
-    }
-
     function parseRecord(v) {
         if (typeof v !== 'string') { return null; }
         var d;
@@ -550,62 +536,147 @@
         return v == null || typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean';
     }
 
-    // Дескрипторы скрытых полей секции + скрытых СКАЛЯРНЫХ под-полей строк списков.
-    function sectionHidden(sectionEl) {
+    function isScalarEditor(t) {
+        return t === 'text' || t === 'textarea' || t === 'richtext';
+    }
+
+    // Имена top-полей секции, имеющих DOM-маркер (НЕ внутри строки списка).
+    function visibleTopFields(sectionEl) {
+        var seen = {};
+        sectionEl.querySelectorAll(SELECTOR).forEach(function (el) {
+            var addr = fieldAddress(el);
+            if (addr && addr.type === 'field' && addr.parentField == null) {
+                seen[addr.fieldName] = true;
+            }
+        });
+        return seen;
+    }
+
+    // Скрытые СКАЛЯРНЫЕ top-поля секции (не структурные/медиа/записи, нет в DOM).
+    function sectionTopHidden(sectionEl) {
         var sc = sectionConfig(sectionEl);
         if (!sc) { return []; }
-        var vis = visibleFields(sectionEl);
+        var vis = visibleTopFields(sectionEl);
         var out = [];
         Object.keys(sc.obj).forEach(function (name) {
-            if (STRUCTURAL.indexOf(name) !== -1) { return; }
+            if (STRUCTURAL.indexOf(name) !== -1 || vis[name]) { return; }
             var value = sc.obj[name];
-            var t = fieldType(name, value);
-            if (t === 'rows') {
-                var rec = parseRecord(value) || [];
-                rec.forEach(function (row, idx) {
-                    Object.keys(row).forEach(function (sub) {
-                        if (sub === 'MIGX_id' || STRUCTURAL.indexOf(sub) !== -1) { return; }
-                        var sv = row[sub];
-                        if (!isScalar(sv) || parseRecord(sv)) { return; } // вложенные записи — не в v1
-                        if (vis.rows[name] && vis.rows[name][idx] && vis.rows[name][idx][sub]) { return; }
-                        out.push({
-                            level: sc.level, section: sc.section,
-                            parentField: name, idx: idx, fieldName: sub,
-                            value: sv == null ? '' : String(sv),
-                            type: typesMap[sub] || 'text',
-                            label: name + '[' + idx + '] · ' + sub
-                        });
-                    });
-                });
-                return;
-            }
-            if (t === 'image' || t === 'media' || t === 'picture') { return; } // медиа правится на странице
-            if (vis.top[name] || parseRecord(value)) { return; }
+            if (!isScalarEditor(fieldType(name, value)) || parseRecord(value)) { return; }
             out.push({
                 level: sc.level, section: sc.section,
-                fieldName: name,
-                value: value == null ? '' : String(value),
-                type: t,
-                label: name
+                fieldName: name, value: value == null ? '' : String(value),
+                type: fieldType(name, value), label: name
             });
         });
         return out;
     }
 
-    function collectHidden() {
-        var groups = [];
-        document.querySelectorAll('[data-mpc-section]').forEach(function (sectionEl) {
-            var fields = sectionHidden(sectionEl);
-            if (fields.length) {
-                groups.push({ section: sectionEl.getAttribute('data-mpc-section'), fields: fields });
-            }
-        });
-        return groups;
+    // Инфо строки списка по её DOM-элементу (level-1 item): section/level/obj/parentField/idx.
+    function itemInfo(itemEl) {
+        var sc = sectionConfig(itemEl.closest('[data-mpc-section]'));
+        if (!sc) { return null; }
+        var listEl = itemEl.closest('[data-mpc-field]'); // контейнер списка (предок)
+        if (!listEl) { return null; }
+        var idx = 0, sib = itemEl.previousElementSibling;
+        while (sib) {
+            if (sib.hasAttribute('data-mpc-item')) { idx++; }
+            sib = sib.previousElementSibling;
+        }
+        return {
+            section: sc.section, level: sc.level, obj: sc.obj,
+            parentField: listEl.getAttribute('data-mpc-field'), idx: idx
+        };
     }
 
-    function hiddenCount() {
-        if (!configData) { return 0; }
-        return collectHidden().reduce(function (n, g) { return n + g.fields.length; }, 0);
+    // Имена под-полей строки, имеющих DOM-маркер внутри ЭТОГО item (level-1).
+    function visibleItemSubs(itemEl) {
+        var seen = {};
+        itemEl.querySelectorAll('[data-mpc-field-1]').forEach(function (el) {
+            if (el.closest('[data-mpc-item]') === itemEl) {
+                seen[el.getAttribute('data-mpc-field-1')] = true;
+            }
+        });
+        return seen;
+    }
+
+    // Скрытые скалярные под-поля строки списка (level-1) + её инфо.
+    function itemHidden(itemEl) {
+        var info = itemInfo(itemEl);
+        if (!info) { return null; }
+        var rows = parseRecord(info.obj[info.parentField]);
+        var row = rows && rows[info.idx];
+        if (!row) { return null; }
+        var vis = visibleItemSubs(itemEl);
+        var out = [];
+        Object.keys(row).forEach(function (sub) {
+            if (sub === 'MIGX_id' || STRUCTURAL.indexOf(sub) !== -1 || vis[sub]) { return; }
+            var sv = row[sub];
+            if (!isScalar(sv) || parseRecord(sv)) { return; }
+            out.push({
+                level: info.level, section: info.section,
+                parentField: info.parentField, idx: info.idx,
+                fieldName: sub, value: sv == null ? '' : String(sv),
+                type: typesMap[sub] || 'text', label: sub
+            });
+        });
+        return { info: info, fields: out };
+    }
+
+    // --- триггеры у блоков + панель ----------------------------------------
+    function attachTrigger(blockEl, title, descriptors) {
+        // Якорим кнопку абсолютно в углу блока; если блок position:static —
+        // временно делаем relative (откатываем в removeHiddenTriggers).
+        if (window.getComputedStyle(blockEl).position === 'static') {
+            blockEl.style.position = 'relative';
+            blockEl.setAttribute('data-mpcve-posfix', '1');
+        }
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'mpcve-hidden-trigger';
+        btn.textContent = '⊕ ' + descriptors.length;
+        btn.title = title + ' — скрытые поля';
+        btn.addEventListener('click', function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            openBlockPanel(title, descriptors);
+        });
+        blockEl.appendChild(btn);
+    }
+
+    function buildHiddenTriggers() {
+        removeHiddenTriggers();
+        if (!configData) {
+            console.warn('[mpcVE] скрытые поля: конфиг не загружен (config/get). Кнопок не будет.');
+            return;
+        }
+        var sections = document.querySelectorAll('[data-mpc-section]');
+        var items = document.querySelectorAll('[data-mpc-item]');
+        var triggers = 0;
+        sections.forEach(function (sectionEl) {
+            var fields = sectionTopHidden(sectionEl);
+            if (fields.length) {
+                attachTrigger(sectionEl, 'Секция «' + sectionEl.getAttribute('data-mpc-section') + '»', fields);
+                triggers++;
+            }
+        });
+        items.forEach(function (itemEl) {
+            var h = itemHidden(itemEl);
+            if (h && h.fields.length) {
+                attachTrigger(itemEl, h.info.parentField + ' #' + (h.info.idx + 1), h.fields);
+                triggers++;
+            }
+        });
+        console.info('[mpcVE] скрытые поля: секций в DOM=' + sections.length +
+            ', строк списков=' + items.length + ', кнопок навешено=' + triggers +
+            (sections.length === 0 ? ' — нет data-mpc-section: проверь mpc_edit_mode (маркеры в рендере)' : ''));
+    }
+
+    function removeHiddenTriggers() {
+        document.querySelectorAll('.mpcve-hidden-trigger').forEach(function (b) { b.remove(); });
+        document.querySelectorAll('[data-mpcve-posfix]').forEach(function (el) {
+            el.style.position = '';
+            el.removeAttribute('data-mpcve-posfix');
+        });
     }
 
     function rowHtml(f, idx) {
@@ -621,27 +692,15 @@
             '</div></div>';
     }
 
-    function openHiddenPanel() {
+    function openBlockPanel(title, descriptors) {
         if (document.querySelector('.mpcve-modal')) { return; }
-        var groups = collectHidden();
-        var flat = [];
-
-        var body = groups.length
-            ? groups.map(function (g) {
-                var rows = g.fields.map(function (f) {
-                    var idx = flat.length; flat.push(f);
-                    return rowHtml(f, idx);
-                }).join('');
-                return '<div class="mpcve-hpanel__group">' +
-                    '<div class="mpcve-hpanel__sec">' + esc(g.section) + '</div>' + rows + '</div>';
-            }).join('')
-            : '<div class="mpcve-hpanel__empty">Скрытых полей не найдено.</div>';
+        var body = descriptors.map(function (f, i) { return rowHtml(f, i); }).join('');
 
         var overlay = document.createElement('div');
         overlay.className = 'mpcve-modal';
         overlay.innerHTML =
             '<div class="mpcve-modal__card mpcve-modal__card--wide">' +
-                '<div class="mpcve-modal__head">Скрытые поля</div>' +
+                '<div class="mpcve-modal__head">Скрытые поля · ' + esc(title) + '</div>' +
                 '<div class="mpcve-hpanel">' + body + '</div>' +
                 '<div class="mpcve-modal__actions">' +
                     '<button type="button" class="mpcve-btn" data-act="close">Закрыть</button>' +
@@ -656,7 +715,7 @@
         overlay.querySelector('[data-act=close]').addEventListener('click', close);
 
         overlay.querySelectorAll('.mpcve-hpanel__row').forEach(function (rowEl) {
-            var f = flat[parseInt(rowEl.getAttribute('data-i'), 10)];
+            var f = descriptors[parseInt(rowEl.getAttribute('data-i'), 10)];
             var ctrl = rowEl.querySelector('input, textarea');
             var btn = rowEl.querySelector('[data-act=save]');
             btn.addEventListener('click', function () {
@@ -682,13 +741,6 @@
                 });
             });
         });
-    }
-
-    function syncHiddenBtn() {
-        if (!hiddenBtn) { return; }
-        var n = editing ? hiddenCount() : 0;
-        hiddenBtn.hidden = n === 0;
-        if (n > 0) { hiddenBtn.textContent = 'Скрытые поля (' + n + ')'; }
     }
 
     // --- разметка / снятие разметки полей ----------------------------------
@@ -720,12 +772,13 @@
     function applyEditingState() {
         if (editing) {
             markEditable();
+            buildHiddenTriggers();
             document.body.classList.add('mpcve-on');
         } else {
             unmarkEditable();
+            removeHiddenTriggers();
             document.body.classList.remove('mpcve-on');
         }
-        syncHiddenBtn();
     }
 
     // --- UI ----------------------------------------------------------------
@@ -747,13 +800,9 @@
         bar.innerHTML =
             '<span class="mpcve-toolbar__title">mpcVisualEditor</span>' +
             '<span class="mpcve-toolbar__hint">клик по полю — править; Enter или уход — сохранить</span>' +
-            '<button type="button" class="mpcve-hidden-btn" data-mpcve="hidden" hidden></button>' +
             '<button type="button" data-mpcve="toggle"></button>';
         document.body.appendChild(bar);
         document.body.classList.add('mpcve-active');
-
-        hiddenBtn = bar.querySelector('[data-mpcve="hidden"]');
-        hiddenBtn.addEventListener('click', openHiddenPanel);
 
         var btn = bar.querySelector('[data-mpcve="toggle"]');
         function syncBtn() {
@@ -772,6 +821,10 @@
     function bindClicks() {
         document.addEventListener('click', function (e) {
             if (!editing) {
+                return;
+            }
+            // Клик по кнопке скрытых полей — её обрабатывает собственный listener.
+            if (e.target.closest && e.target.closest('.mpcve-hidden-trigger')) {
                 return;
             }
             var el = e.target.closest ? e.target.closest('.mpcve-editable') : null;
