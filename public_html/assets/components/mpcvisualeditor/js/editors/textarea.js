@@ -16,7 +16,7 @@ export function openTextareaEditor(el) {
     var overlay = document.createElement('div');
     overlay.className = 'mpcve-modal';
     overlay.innerHTML =
-        '<div class="mpcve-modal__card mpcve-modal__card--wide">' +
+        '<div class="mpcve-modal__card mpcve-modal__card--text">' +
             '<div class="mpcve-modal__head">Текст</div>' +
             '<textarea class="mpcve-ta__area" spellcheck="false"></textarea>' +
             '<div class="mpcve-modal__actions">' +

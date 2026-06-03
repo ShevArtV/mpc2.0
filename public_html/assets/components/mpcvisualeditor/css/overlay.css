@@ -364,6 +364,11 @@ body:not(.mpcve-on) .mpcve-media-badge {
     width: min(620px, 94vw);
 }
 
+/* Текстовые редакторы (textarea/richtext) — широкая карточка для удобного ввода. */
+.mpcve-modal__card--text {
+    width: min(900px, 96vw);
+}
+
 .mpcve-hpanel__group {
     margin-top: 14px;
     border-top: 1px solid #e2e8f0;

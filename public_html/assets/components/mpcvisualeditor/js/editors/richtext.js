@@ -17,7 +17,7 @@ export function openRichtextEditor(el) {
     var overlay = document.createElement('div');
     overlay.className = 'mpcve-modal';
     overlay.innerHTML =
-        '<div class="mpcve-modal__card mpcve-modal__card--wide">' +
+        '<div class="mpcve-modal__card mpcve-modal__card--text">' +
             '<div class="mpcve-modal__head">Текст с форматированием</div>' +
             rteToolbarHtml() +
             '<div class="mpcve-rte__area" contenteditable="true" spellcheck="false"></div>' +
