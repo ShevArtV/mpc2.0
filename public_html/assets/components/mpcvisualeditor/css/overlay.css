@@ -389,24 +389,29 @@ body:not(.mpcve-on) .mpcve-media-badge {
 
 .mpcve-hpanel__row {
     display: flex;
-    align-items: flex-start;
-    gap: 8px;
-    margin-top: 8px;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 5px;
+    margin-top: 14px;
 }
 
 .mpcve-hpanel__label {
-    flex: 0 0 34%;
     font-size: 13px;
     color: #475569;
     word-break: break-word;
-    padding-top: 7px;
 }
 
+/* Поле — отдельной строкой на всю ширину; кнопка «Сохранить» под полем справа. */
 .mpcve-hpanel__ctrl {
-    flex: 1 1 auto;
     display: flex;
+    flex-direction: column;
     gap: 6px;
-    align-items: flex-start;
+    align-items: stretch;
+    min-width: 0;
+}
+
+.mpcve-hpanel__ctrl > .mpcve-btn {
+    align-self: flex-end;
 }
 
 .mpcve-hpanel__ctrl input,
