@@ -15,7 +15,7 @@
  *
  * opts: { value, allowedTags:[], upload(file)->Promise<url> }.
  */
-import { toast } from '../dom.js';
+import { toast, esc } from '../dom.js';
 
 // Тег → кнопка. exec — execCommand; block — formatBlock; wrap — обернуть выделение
 // в тег (для small/mark/span, которых нет в execCommand); link/image — особые.
@@ -116,6 +116,14 @@ function create(container, opts) {
         });
     }
 
+    // Клик по уже вставленной картинке → диалог её атрибутов (alt/title/замена).
+    area.addEventListener('click', function (e) {
+        if (e.target && e.target.tagName === 'IMG') {
+            e.preventDefault();
+            openImageDialog(area, opts, e.target);
+        }
+    });
+
     // MutationObserver → события add/change/delete (для классов/обработчиков).
     var obs = new MutationObserver(function (muts) {
         muts.forEach(function (m) {
@@ -181,7 +189,7 @@ function wrapSelection(tag) {
     sel.addRange(r2);
 }
 
-// Картинка через наш загрузчик (opts.upload) → вставка <img> в каретку.
+// Картинка: загрузка через наш загрузчик → диалог атрибутов → вставка <img>.
 function pickImage(area, opts) {
     if (typeof opts.upload !== 'function') { toast('Загрузчик не настроен', true); return; }
     var input = document.createElement('input');
@@ -193,12 +201,80 @@ function pickImage(area, opts) {
         var file = input.files[0];
         input.remove();
         if (!file || file.type.indexOf('image/') !== 0) { return; }
-        area.focus();
         opts.upload(file).then(function (url) {
-            if (url) { document.execCommand('insertImage', false, url); }
+            if (url) { openImageDialog(area, opts, null, url); }
         }).catch(function (err) { toast((err && err.message) || 'Ошибка загрузки', true); });
     });
     input.click();
+}
+
+function setOrRemove(el, attr, val) {
+    if (val) { el.setAttribute(attr, val); } else { el.removeAttribute(attr); }
+}
+
+// Диалог атрибутов картинки. imgEl≠null → правим существующую (alt/title/src);
+// иначе вставляем НОВУЮ (src=presetSrc) через insertHTML с атрибутами — голый
+// insertImage не давал задать атрибуты. Замена файла — тем же загрузчиком.
+function openImageDialog(area, opts, imgEl, presetSrc) {
+    if (document.querySelector('.mpcve-imgdlg')) { return; }
+    var sel = window.getSelection();
+    var savedRange = (!imgEl && sel && sel.rangeCount) ? sel.getRangeAt(0) : null;
+    var src = imgEl ? (imgEl.getAttribute('src') || '') : (presetSrc || '');
+
+    var ov = document.createElement('div');
+    ov.className = 'mpcve-imgdlg';
+    var canUpload = typeof opts.upload === 'function';
+    ov.innerHTML =
+        '<div class="mpcve-imgdlg__card">' +
+            '<div class="mpcve-modal__head">Картинка</div>' +
+            '<div class="mpcve-imgdlg__prev"><img alt=""></div>' +
+            '<label class="mpcve-modal__field">alt (описание)<input type="text" data-f="alt"></label>' +
+            '<label class="mpcve-modal__field">title (подсказка)<input type="text" data-f="title"></label>' +
+            (canUpload ? '<label class="mpcve-pic__pick">Заменить файл<input type="file" accept="image/*" hidden></label>' : '') +
+            '<div class="mpcve-modal__actions">' +
+                '<button type="button" class="mpcve-btn" data-act="cancel">Отмена</button>' +
+                '<button type="button" class="mpcve-btn mpcve-btn--primary" data-act="ok">' + (imgEl ? 'Применить' : 'Вставить') + '</button>' +
+            '</div>' +
+        '</div>';
+    document.body.appendChild(ov);
+    var prev = ov.querySelector('.mpcve-imgdlg__prev img');
+    prev.src = src;
+    ov.querySelector('[data-f=alt]').value = imgEl ? (imgEl.getAttribute('alt') || '') : '';
+    ov.querySelector('[data-f=title]').value = imgEl ? (imgEl.getAttribute('title') || '') : '';
+
+    function close() { ov.remove(); document.removeEventListener('keydown', onKey); }
+    function onKey(e) { if (e.key === 'Escape') { close(); } }
+    document.addEventListener('keydown', onKey);
+    ov.addEventListener('click', function (e) { if (e.target === ov) { close(); } });
+    ov.querySelector('[data-act=cancel]').addEventListener('click', close);
+
+    var fileInput = ov.querySelector('input[type=file]');
+    if (fileInput) {
+        fileInput.addEventListener('change', function () {
+            var f = this.files[0];
+            if (!f || f.type.indexOf('image/') !== 0) { return; }
+            opts.upload(f).then(function (url) { if (url) { src = url; prev.src = url; } })
+                .catch(function (err) { toast((err && err.message) || 'Ошибка загрузки', true); });
+        });
+    }
+
+    ov.querySelector('[data-act=ok]').addEventListener('click', function () {
+        var a = ov.querySelector('[data-f=alt]').value;
+        var t = ov.querySelector('[data-f=title]').value;
+        if (imgEl) {
+            imgEl.setAttribute('src', src);
+            setOrRemove(imgEl, 'alt', a);
+            setOrRemove(imgEl, 'title', t);
+        } else {
+            area.focus();
+            if (savedRange) { var s = window.getSelection(); s.removeAllRanges(); s.addRange(savedRange); }
+            var html = '<img src="' + esc(src) + '"' +
+                (a ? ' alt="' + esc(a) + '"' : '') +
+                (t ? ' title="' + esc(t) + '"' : '') + '>';
+            document.execCommand('insertHTML', false, html);
+        }
+        close();
+    });
 }
 
 // --- реестр (pluggable) ------------------------------------------------

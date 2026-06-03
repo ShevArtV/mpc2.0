@@ -782,3 +782,62 @@ body:not(.mpcve-on) .mpcve-media-badge {
 .mpcve-rte__area:focus {
     border-color: #2563eb;
 }
+
+.mpcve-rte__area img {
+    max-width: 100%;
+    cursor: pointer;
+}
+
+/* Диалог атрибутов картинки (поверх richtext-модалки/панели). */
+.mpcve-imgdlg {
+    position: fixed;
+    inset: 0;
+    z-index: 100002;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(15, 23, 42, .55);
+    font: 14px -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+}
+
+.mpcve-imgdlg__card {
+    width: min(440px, 92vw);
+    max-height: 90vh;
+    overflow: auto;
+    background: #fff;
+    border-radius: 10px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, .35);
+    padding: 18px;
+}
+
+.mpcve-imgdlg__prev {
+    margin: 8px 0;
+    text-align: center;
+    background: #f1f5f9;
+    border-radius: 6px;
+    padding: 6px;
+}
+
+.mpcve-imgdlg__prev img {
+    max-width: 100%;
+    max-height: 160px;
+    border-radius: 4px;
+}
+
+.mpcve-imgdlg__card .mpcve-modal__field {
+    display: block;
+    margin: 8px 0;
+    font-size: 13px;
+    color: #475569;
+}
+
+.mpcve-imgdlg__card .mpcve-modal__field input {
+    display: block;
+    width: 100%;
+    margin-top: 4px;
+    padding: 7px 10px;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    font: inherit;
+    box-sizing: border-box;
+}
