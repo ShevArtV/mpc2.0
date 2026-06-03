@@ -58,6 +58,9 @@ class Connector
                 // Структурная операция над секциями (move|visibility|static) —
                 // RAW-запись массива конфига, не через лексикон-aware field/save.
                 return (new Handlers\SectionOpHandler($this->modx, $this->mpcve))->handle($request);
+            case 'cache/clear':
+                // Полная очистка кэша MODX (кнопка тулбара).
+                return (new Handlers\CacheClearHandler($this->modx, $this->mpcve))->handle($request);
             case 'image/upload':
                 // Загрузка картинки в media source mpc → возврат URL (фронт пишет
                 // его в поле через field/save). См. ImageUploadHandler.

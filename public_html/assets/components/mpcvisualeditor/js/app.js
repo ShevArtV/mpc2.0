@@ -98,12 +98,32 @@ function buildToolbar() {
         '<span class="mpcve-toolbar__title">mpcVisualEditor</span>' +
         '<span class="mpcve-toolbar__hint">клик по полю — править; Enter или уход — сохранить</span>' +
         (S.editing ? '<button type="button" data-mpcve="sections">☰ Секции</button>' : '') +
+        '<button type="button" data-mpcve="cache" title="Очистить кэш сайта">🧹 Кэш</button>' +
+        '<button type="button" data-mpcve="admin" title="Открыть текущий ресурс в админке">⚙ Админка</button>' +
         '<button type="button" data-mpcve="toggle"></button>';
     document.body.appendChild(bar);
     document.body.classList.add('mpcve-active');
 
     var secBtn = bar.querySelector('[data-mpcve="sections"]');
     if (secBtn) { secBtn.addEventListener('click', toggleSidebar); }
+
+    // Очистка кэша сайта (полный refresh MODX).
+    var cacheBtn = bar.querySelector('[data-mpcve="cache"]');
+    cacheBtn.addEventListener('click', function () {
+        cacheBtn.disabled = true;
+        api.post('cache/clear', {}).then(function (r) {
+            toast((r && r.success) ? 'Кэш очищен' : ((r && r.message) || 'Ошибка'), !(r && r.success));
+        }).catch(function () { toast('Сетевая ошибка', true); })
+          .then(function () { cacheBtn.disabled = false; });
+    });
+
+    // Открыть текущий ресурс в админке MODX (новая вкладка).
+    var adminBtn = bar.querySelector('[data-mpcve="admin"]');
+    adminBtn.addEventListener('click', function () {
+        var rid = S.cfg.resourceId || 0;
+        var mgr = S.cfg.managerUrl || '/manager/';
+        window.open(mgr + (mgr.indexOf('?') === -1 ? '?' : '&') + 'a=resource/update&id=' + rid, '_blank');
+    });
 
     var btn = bar.querySelector('[data-mpcve="toggle"]');
     function syncBtn() {

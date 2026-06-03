@@ -61,6 +61,8 @@ class Mpcve
             'editParam'    => $this->config['editParam'],
             'resourceId'   => $resource ? (int)$resource->get('id') : 0,
             'allowedTags'  => $allowedTags,
+            // Для кнопки «Открыть в админке» (тулбар).
+            'managerUrl'   => (string)$this->modx->getOption('manager_url', null, '/manager/'),
         ];
     }
 
