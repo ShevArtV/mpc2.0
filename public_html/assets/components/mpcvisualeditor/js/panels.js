@@ -5,11 +5,11 @@
  * кнопку-триггер; клик открывает панель ЭТОГО блока. Запись — field/save.
  */
 import { S } from './state.js';
-import { api } from './api.js';
+import { api, uploadMedia } from './api.js';
 import { esc, parseRecord, isScalar, fieldLabel, toast } from './dom.js';
 import { SECTION_STYLE_FIELDS, STRUCTURAL } from './constants.js';
 import { findSectionInLevel, sectionConfig } from './address.js';
-import { rteToolbarHtml, wireRteToolbar } from './editors/rte.js';
+import { createRte, sanitizeHtml } from './editors/rte.js';
 
 // Значение лексикона по ключу (в режиме лексиконов конфиг хранит КЛЮЧ, перевод —
 // в файле). Показываем перевод, а не ключ. Если v не ключ (или лексиконы выкл) —
@@ -237,11 +237,8 @@ function controlHtml(f) {
                '</div>';
     }
     if (f.type === 'richtext') {
-        // RTE с тулбаром форматирования (общий с модальным richtext-редактором).
-        return '<div class="mpcve-hpanel__rtebox">' +
-                 rteToolbarHtml() +
-                 '<div class="mpcve-hpanel__rte" contenteditable="true" spellcheck="false"></div>' +
-               '</div>';
+        // RTE через реестр (createRte при wire); тулбар из allowedTags. Хост — пустой.
+        return '<div class="mpcve-hpanel__rtebox"></div>';
     }
     var multiline = f.type === 'textarea' || f.value.length > 80 || f.value.indexOf('\n') !== -1;
     return multiline
@@ -293,10 +290,12 @@ function wireControl(rowEl, f, btn) {
         };
     }
     if (f.type === 'richtext') {
-        var rte = rowEl.querySelector('.mpcve-hpanel__rte');
-        rte.innerHTML = f.value;
-        wireRteToolbar(rowEl.querySelector('.mpcve-rte__toolbar'), rte);
-        return function () { return rte.innerHTML; };
+        var inst = createRte(rowEl.querySelector('.mpcve-hpanel__rtebox'), {
+            value: f.value,
+            allowedTags: S.cfg.allowedTags,
+            upload: function (file) { return uploadMedia(file, 'image'); }
+        });
+        return function () { return sanitizeHtml(inst.getHTML(), S.cfg.allowedTags); };
     }
     var ctrl = rowEl.querySelector('input, textarea');
     return function () { return ctrl.value; };

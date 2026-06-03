@@ -1,12 +1,15 @@
 /**
- * mpcVisualEditor — редактор текста С ФОРМАТИРОВАНИЕМ (richtext) в МОДАЛКЕ с RTE.
- * Тулбар (общий, editors/rte.js) поверх contenteditable. Значение — HTML
- * (innerHTML), пишется через field/save (лексикон-round-trip — как у инлайна).
+ * mpcVisualEditor — редактор текста С ФОРМАТИРОВАНИЕМ (richtext) в МОДАЛКЕ.
+ * Сам редактор — через реестр RTE (createRte), по умолчанию наш execCommand-
+ * провайдер; тулбар из allowedTags, картинки через загрузчик. На сохранении html
+ * чистится по allowedTags (sanitizeHtml — зеркалит strip_tags бэка). Значение
+ * пишется обычным field/save (лексикон-round-trip — как у инлайна).
  */
-import { api } from '../api.js';
+import { S } from '../state.js';
+import { api, uploadMedia } from '../api.js';
 import { toast } from '../dom.js';
 import { fieldAddress } from '../address.js';
-import { rteToolbarHtml, wireRteToolbar } from './rte.js';
+import { createRte, sanitizeHtml } from './rte.js';
 
 export function openRichtextEditor(el) {
     if (document.querySelector('.mpcve-modal')) { return; }
@@ -19,8 +22,7 @@ export function openRichtextEditor(el) {
     overlay.innerHTML =
         '<div class="mpcve-modal__card mpcve-modal__card--text">' +
             '<div class="mpcve-modal__head">Текст с форматированием</div>' +
-            rteToolbarHtml() +
-            '<div class="mpcve-rte__area" contenteditable="true" spellcheck="false"></div>' +
+            '<div class="mpcve-rte__host"></div>' +
             '<div class="mpcve-modal__actions">' +
                 '<button type="button" class="mpcve-btn" data-act="cancel">Отмена</button>' +
                 '<button type="button" class="mpcve-btn mpcve-btn--primary" data-act="save">Сохранить</button>' +
@@ -28,21 +30,22 @@ export function openRichtextEditor(el) {
         '</div>';
     document.body.appendChild(overlay);
 
-    var area = overlay.querySelector('.mpcve-rte__area');
-    area.innerHTML = orig;
-    area.focus();
+    var rte = createRte(overlay.querySelector('.mpcve-rte__host'), {
+        value: orig,
+        allowedTags: S.cfg.allowedTags,
+        upload: function (file) { return uploadMedia(file, 'image'); }
+    });
+    rte.focus();
 
-    function close() { overlay.remove(); document.removeEventListener('keydown', onKey); }
+    function close() { rte.destroy(); overlay.remove(); document.removeEventListener('keydown', onKey); }
     function onKey(e) { if (e.key === 'Escape') { close(); } }
     document.addEventListener('keydown', onKey);
     overlay.addEventListener('click', function (e) { if (e.target === overlay) { close(); } });
     overlay.querySelector('[data-act=cancel]').addEventListener('click', close);
 
-    wireRteToolbar(overlay.querySelector('.mpcve-rte__toolbar'), area);
-
     var saveBtn = overlay.querySelector('[data-act=save]');
     saveBtn.addEventListener('click', function () {
-        var value = area.innerHTML;
+        var value = sanitizeHtml(rte.getHTML(), S.cfg.allowedTags);
         saveBtn.disabled = true; saveBtn.textContent = 'Сохранение…';
         api.post('field/save', { address: addr, value: value }).then(function (r) {
             if (r && r.success) {

@@ -223,7 +223,7 @@ return [
     ],
     'mpc_allowed_tags' => [
         'xtype' => 'textarea',
-        'value' => 'b,p,span,h1,h2,h3,h4,h5,h6,small,i,blockquote,mark,ul,li,ol',
+        'value' => 'b,p,span,h1,h2,h3,h4,h5,h6,small,i,blockquote,mark,ul,li,ol,img,button,a,u,s',
         'area' => 'default',
     ],
     'mpc_allow_modx_tags' =>  [

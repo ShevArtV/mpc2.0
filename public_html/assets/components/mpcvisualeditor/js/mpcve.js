@@ -15,12 +15,14 @@ import { S } from './state.js';
 import { api } from './api.js';
 import { resolveAddress } from './address.js';
 import { toast } from './dom.js';
+import { setRteProvider } from './editors/rte.js';
 import { init } from './app.js';
 
 // Без коннектора работать нечем (плагин не передал конфиг) — выходим.
 if (S.cfg.connectorUrl) {
-    // Публичный мини-API (отладка / интеграции).
-    window.MpcVE = { cfg: S.cfg, api: api, resolveAddress: resolveAddress, toast: toast };
+    // Публичный мини-API (отладка / интеграции). setRte(provider) — подменить RTE:
+    // provider.create(container, {value,allowedTags,upload}) → {getHTML,focus,destroy}.
+    window.MpcVE = { cfg: S.cfg, api: api, resolveAddress: resolveAddress, toast: toast, setRte: setRteProvider };
 
     // Модуль-скрипты deferred: к моменту выполнения DOM уже распарсен
     // (readyState !== 'loading'), поэтому обычно стартуем сразу.

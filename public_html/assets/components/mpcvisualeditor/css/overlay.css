@@ -448,9 +448,10 @@ body:not(.mpcve-on) .mpcve-media-badge {
     border-radius: 6px 6px 0 0;
 }
 
-.mpcve-hpanel__rtebox .mpcve-hpanel__rte {
+.mpcve-hpanel__rtebox .mpcve-rte__area {
     border-top: 0;
     border-radius: 0 0 6px 6px;
+    min-height: 90px;
 }
 
 .mpcve-hpanel__rte {

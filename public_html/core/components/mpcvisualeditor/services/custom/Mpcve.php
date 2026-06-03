@@ -48,11 +48,19 @@ class Mpcve
     public function getClientConfig(): array
     {
         $resource = $this->modx->resource ?? null;
+        // Разрешённые HTML-теги (та же настройка, что фильтрует html перед записью
+        // в лексикон: strip_tags). RTE строит тулбар из неё и чистит html на save —
+        // кнопок для тегов, которые всё равно вырежутся, не показываем.
+        $allowedTags = array_values(array_filter(array_map(
+            'trim',
+            explode(',', (string)$this->modx->getOption('mpc_allowed_tags', null, ''))
+        )));
         return [
             'connectorUrl' => $this->config['connectorUrl'],
             'assetsUrl'    => $this->config['assetsUrl'],
             'editParam'    => $this->config['editParam'],
             'resourceId'   => $resource ? (int)$resource->get('id') : 0,
+            'allowedTags'  => $allowedTags,
         ];
     }
 
