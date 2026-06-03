@@ -13,6 +13,9 @@ use MpcVEServices\Mpcve;
  */
 class FieldTypesHandler
 {
+    /** Индекс таба «Настройки секции» в formtabs mpc_base (1=Контент, 2=Стили). */
+    private const SETTINGS_TAB_INDEX = 0;
+
     private \modX $modx;
     private Mpcve $mpcve;
 
@@ -30,10 +33,13 @@ class FieldTypesHandler
 
         $map = [];
         $labels = [];
+        // Имена полей таба «Настройки секции» (formtabs index 0; 1=Контент, 2=Стили).
+        // Фронт исключает их из панели скрытых полей (hide_section, position и т.п.).
+        $settings = [];
         if ($cfg = $this->modx->getObject('migxConfig', ['name' => $base])) {
             $tabs = json_decode((string)$cfg->get('formtabs'), true);
             if (is_array($tabs)) {
-                foreach ($tabs as $tab) {
+                foreach ($tabs as $tabIdx => $tab) {
                     foreach ($tab['fields'] ?? [] as $f) {
                         $name = (string)($f['field'] ?? '');
                         if ($name === '') {
@@ -48,12 +54,17 @@ class FieldTypesHandler
                         if ($caption !== '') {
                             $labels[$name] = $caption;
                         }
+                        if ((int)$tabIdx === self::SETTINGS_TAB_INDEX) {
+                            $settings[] = $name;
+                        }
                     }
                 }
             }
         }
 
-        return ['success' => true, 'message' => '', 'data' => ['fields' => $map, 'labels' => $labels]];
+        return ['success' => true, 'message' => '', 'data' => [
+            'fields' => $map, 'labels' => $labels, 'settings' => $settings,
+        ]];
     }
 
     /**

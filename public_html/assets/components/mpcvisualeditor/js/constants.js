@@ -1,0 +1,34 @@
+/**
+ * mpcVisualEditor — константы (без зависимостей).
+ */
+
+// Атрибуты-маркеры редактируемых полей в DOM (edit-mode сохраняет их в рендере).
+export var FIELD_ATTRS = ['data-mpc-field', 'data-mpc-rfield', 'data-mpc-tv',
+    'data-mpc-field-1', 'data-mpc-field-2', 'data-mpc-field-3'];
+export var SELECTOR = FIELD_ATTRS.map(function (a) { return '[' + a + ']'; }).join(',');
+
+// Подсказки (title) по типу редактора.
+export var TYPE_HINT = {
+    text: 'Текст — клик, чтобы редактировать',
+    richtext: 'Текст с форматированием — клик',
+    image: 'Изображение — клик, чтобы заменить',
+    picture: 'Адаптивная картинка — клик: главное фото + источники',
+    media: 'Видео/аудио — клик: файл, постер, источники, атрибуты',
+    rows: 'Список — клик, чтобы добавить/удалить/переставить строки',
+    link: 'Ссылка — клик, чтобы изменить адрес (текст правится внутри)'
+};
+
+// Редактируемые поля СЕКЦИИ = вкладка «Стили секции», кроме css_file_path.
+export var SECTION_STYLE_FIELDS = ['inline_styles', 'class_names'];
+
+// Структурные ключи (для скрытых под-полей СТРОК списков) — не редактируем.
+export var STRUCTURAL = ['section_name', 'MIGX_formname', 'MIGX_id', 'id', 'position',
+    'is_static', 'file_name', 'limit', 'lexicon_prefix', 'css_file_path',
+    'inline_styles', 'class_names'];
+
+// Понятные подписи известных полей (приоритетнее captions из конфигуратора).
+export var FIELD_LABELS = {
+    inline_styles: 'Inline-стили',
+    class_names: 'CSS-классы',
+    resources: 'Ресурсы (resources)'
+};

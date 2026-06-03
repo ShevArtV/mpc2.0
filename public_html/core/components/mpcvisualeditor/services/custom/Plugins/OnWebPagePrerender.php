@@ -41,7 +41,7 @@ class OnWebPagePrerender extends PluginHandler
 
         $inject = '<link rel="stylesheet" href="' . $assetsUrl . 'css/overlay.css">' . PHP_EOL
             . '<script>window.mpcVEConfig=' . $clientCfg . ';</script>' . PHP_EOL
-            . '<script defer src="' . $assetsUrl . 'js/mpcve.js"></script>' . PHP_EOL;
+            . '<script type="module" src="' . $assetsUrl . 'js/mpcve.js"></script>' . PHP_EOL;
 
         $resource->_output = str_ireplace('</body>', $inject . '</body>', $resource->_output);
     }

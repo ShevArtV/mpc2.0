@@ -5,18 +5,29 @@ namespace MpcVEServices\Handlers;
 use MpcVEServices\Mpcve;
 
 /**
- * Экшен image/upload: приём загруженного файла-изображения, запись в MODX
- * media source (тот же, что использует грабер mpc: `mpc_media_source` →
- * `default_media_source`) и возврат публичного URL. Сам URL фронт затем пишет
- * в поле через field/save — здесь только загрузка.
+ * Экшен image/upload: приём загруженного медиа-файла, запись в MODX media source
+ * (тот же, что использует грабер mpc: `mpc_media_source` → `default_media_source`)
+ * и возврат публичного URL. Сам URL фронт затем пишет в поле через field/save —
+ * здесь только загрузка.
  *
- * Папка: `mpc_media_path` + `images/` (консистентно с грабером). Имя файла —
+ * Тип файла — параметр `kind` (image|video|audio, по умолчанию image): задаёт
+ * белый список расширений, mime-проверку и подпапку (images/ | videos/ | audios/).
+ * Папка: `mpc_media_path` + подпапка (консистентно с грабером). Имя файла —
  * санитайз исходного + короткий sha1 контента (дедуп одинаковых, без коллизий).
  */
 class ImageUploadHandler
 {
-    /** Белый список расширений изображений. */
+    /** Белые списки расширений по типу медиа. */
     private const ALLOWED = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'avif'];
+    private const ALLOWED_VIDEO = ['mp4', 'webm', 'ogv', 'ogg', 'mov', 'm4v'];
+    private const ALLOWED_AUDIO = ['mp3', 'ogg', 'oga', 'wav', 'm4a', 'aac', 'weba'];
+
+    /** Тип медиа → [расширения, подпапка, базовое имя по умолчанию]. */
+    private const KINDS = [
+        'image' => [self::ALLOWED,       'images/', 'image'],
+        'video' => [self::ALLOWED_VIDEO, 'videos/', 'video'],
+        'audio' => [self::ALLOWED_AUDIO, 'audios/', 'audio'],
+    ];
 
     private \modX $modx;
     private Mpcve $mpcve;
@@ -37,13 +48,19 @@ class ImageUploadHandler
             return $this->err($this->modx->lexicon('mpcve_err_upload'));
         }
 
+        $kind = (string)($request['kind'] ?? 'image');
+        if (!isset(self::KINDS[$kind])) {
+            $kind = 'image';
+        }
+        [$allowed, $subdir, $defaultBase] = self::KINDS[$kind];
+
         $maxBytes = (int)$this->modx->getOption('mpcve_max_upload', null, 10 * 1024 * 1024);
         if ($maxBytes > 0 && (int)($file['size'] ?? 0) > $maxBytes) {
             return $this->err($this->modx->lexicon('mpcve_err_upload_size'));
         }
 
         $ext = strtolower((string)pathinfo((string)$file['name'], PATHINFO_EXTENSION));
-        if (!in_array($ext, self::ALLOWED, true) || !$this->isImage((string)$file['tmp_name'], $ext)) {
+        if (!in_array($ext, $allowed, true) || !$this->mimeOk((string)$file['tmp_name'], $ext, $kind)) {
             return $this->err($this->modx->lexicon('mpcve_err_upload_ext'));
         }
 
@@ -57,7 +74,7 @@ class ImageUploadHandler
             return $this->err($this->modx->lexicon('mpcve_err_source'));
         }
 
-        return $this->processUpload($source, $this->uploadDir(), (string)$file['name'], $ext, $content);
+        return $this->processUpload($source, $this->uploadDir($subdir), (string)$file['name'], $ext, $content, $defaultBase);
     }
 
     /**
@@ -66,9 +83,9 @@ class ImageUploadHandler
      *
      * @param object $source modMediaSource (или совместимый)
      */
-    public function processUpload($source, string $dir, string $originalName, string $ext, string $content): array
+    public function processUpload($source, string $dir, string $originalName, string $ext, string $content, string $defaultBase = 'image'): array
     {
-        $base = $this->sanitizeFileName((string)pathinfo($originalName, PATHINFO_FILENAME)) ?: 'image';
+        $base = $this->sanitizeFileName((string)pathinfo($originalName, PATHINFO_FILENAME)) ?: $defaultBase;
         $name = $base . '-' . substr(sha1($content), 0, 8) . '.' . $ext;
 
         $this->ensureContainer($source, $dir);
@@ -109,6 +126,15 @@ class ImageUploadHandler
         return trim((string)$name, '-');
     }
 
+    /** Mime-проверка по типу медиа. image → getimagesize; video/audio → finfo. */
+    private function mimeOk(string $tmp, string $ext, string $kind): bool
+    {
+        if ($kind === 'image') {
+            return $this->isImage($tmp, $ext);
+        }
+        return $this->isMedia($tmp, $kind);
+    }
+
     private function isImage(string $tmp, string $ext): bool
     {
         // svg — XML, getimagesize не валидирует; доверяем расширению (загрузка
@@ -120,14 +146,38 @@ class ImageUploadHandler
         return $info !== false && strpos((string)($info['mime'] ?? ''), 'image/') === 0;
     }
 
-    private function uploadDir(): string
+    /**
+     * Видео/аудио: проверяем по реальному mime (finfo). Контейнер ogg/webm
+     * даёт ambiguous mime (video/ vs audio/ vs application/ogg) — принимаем,
+     * если mime начинается с нужного типа ИЛИ это ogg-контейнер. Если finfo
+     * недоступен — доверяем уже проверенному расширению (право mpcve_edit).
+     */
+    private function isMedia(string $tmp, string $kind): bool
+    {
+        if (!function_exists('finfo_open')) {
+            return true;
+        }
+        $finfo = @finfo_open(FILEINFO_MIME_TYPE);
+        if (!$finfo) {
+            return true;
+        }
+        $mime = (string)@finfo_file($finfo, $tmp);
+        @finfo_close($finfo);
+        if ($mime === '') {
+            return true;
+        }
+        return strpos($mime, $kind . '/') === 0
+            || strpos($mime, 'application/ogg') === 0;
+    }
+
+    private function uploadDir(string $subdir = 'images/'): string
     {
         $prefix = trim((string)$this->modx->getOption(
             'mpc_media_path',
             null,
             'assets/components/migxpageconfigurator/media/'
         ), '/');
-        return ($prefix !== '' ? $prefix . '/' : '') . 'images/';
+        return ($prefix !== '' ? $prefix . '/' : '') . $subdir;
     }
 
     private function getMediaSource()

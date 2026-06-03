@@ -47,6 +47,11 @@ class ConfigGetHandler
                 'resourceId' => $resourceId,
                 'resource'   => $resource['data']['config'] ?? [],
                 'global'     => $global['data']['config'] ?? [],
+                // Карты лексикона по уровням — панель показывает значения, не ключи.
+                'lexicons'   => [
+                    'resource' => $this->mpcve->readLexicons('resource', $resourceId),
+                    'global'   => $this->mpcve->readLexicons('global', $resourceId),
+                ],
             ],
         ];
     }

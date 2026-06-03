@@ -1,0 +1,207 @@
+/**
+ * mpcVisualEditor — редактор изображений (загрузка файла, замена src/фона,
+ * migx-запись img с атрибутами alt/title/width/height).
+ */
+import { api } from '../api.js';
+import { toast, bgUrl, hasBg } from '../dom.js';
+import { fieldAddress } from '../address.js';
+
+function currentImageSrc(el) {
+    if (el.tagName.toLowerCase() === 'img') {
+        return el.currentSrc || el.src || '';
+    }
+    var bg = bgUrl(el);
+    if (bg) {
+        return bg;
+    }
+    var img = el.querySelector ? el.querySelector('img') : null;
+    return img ? (img.currentSrc || img.src || '') : '';
+}
+
+function setImageSrc(el, url) {
+    if (el.tagName.toLowerCase() === 'img') {
+        el.removeAttribute('srcset');
+        el.src = url;
+        return;
+    }
+    // Фон: пишем обратно в inline style того же элемента.
+    if (bgUrl(el)) {
+        el.style.backgroundImage = 'url("' + url + '")';
+        return;
+    }
+    var img = el.querySelector ? el.querySelector('img') : null;
+    if (img) {
+        img.removeAttribute('srcset');
+        img.src = url;
+    }
+}
+
+// Картинка-ЗАПИСЬ (migx-поле img) vs простой путь (фон/bg_img). У записи
+// значение в конфиге — [{MIGX_id,src,alt,title,width,height}], у пути — строка.
+function isRecordImage(el) {
+    var ftype = el.getAttribute('data-mpc-ftype') || '';
+    return el.tagName.toLowerCase() === 'img' && ftype !== 'bg_img' && !hasBg(el);
+}
+
+export function openImageEditor(el, forcedAddr) {
+    if (document.querySelector('.mpcve-modal')) {
+        return;
+    }
+    var asRecord = isRecordImage(el);
+    var cur      = currentImageSrc(el);
+    var curAlt   = el.getAttribute('alt') || '';
+    var curTitle = el.getAttribute('title') || '';
+    var curW     = el.getAttribute('width') || '';
+    var curH     = el.getAttribute('height') || '';
+
+    var overlay = document.createElement('div');
+    overlay.className = 'mpcve-modal';
+    var attrFields = asRecord
+        ? '<label class="mpcve-modal__field">alt<input type="text" data-f="alt"></label>' +
+          '<label class="mpcve-modal__field">title<input type="text" data-f="title"></label>'
+        : '';
+    overlay.innerHTML =
+        '<div class="mpcve-modal__card">' +
+            '<div class="mpcve-modal__head">Изображение</div>' +
+            '<div class="mpcve-modal__preview"></div>' +
+            '<label class="mpcve-modal__drop">' +
+                '<span>Перетащите файл сюда или <b>выберите</b></span>' +
+                '<input type="file" accept="image/*" hidden>' +
+            '</label>' +
+            attrFields +
+            '<div class="mpcve-modal__actions">' +
+                '<button type="button" class="mpcve-btn" data-act="cancel">Отмена</button>' +
+                '<button type="button" class="mpcve-btn mpcve-btn--primary" data-act="save">Сохранить</button>' +
+            '</div>' +
+        '</div>';
+    document.body.appendChild(overlay);
+
+    var preview    = overlay.querySelector('.mpcve-modal__preview');
+    var input      = overlay.querySelector('input[type=file]');
+    var drop       = overlay.querySelector('.mpcve-modal__drop');
+    var saveBtn    = overlay.querySelector('[data-act=save]');
+    var altInput   = overlay.querySelector('[data-f=alt]');
+    var titleInput = overlay.querySelector('[data-f=title]');
+    if (altInput)   { altInput.value = curAlt; }
+    if (titleInput) { titleInput.value = curTitle; }
+
+    var chosen = null;
+    var newW = '', newH = '';
+
+    // В режиме пути (фон) без файла сохранять нечего; у записи можно править атрибуты.
+    if (!asRecord) {
+        saveBtn.disabled = true;
+        saveBtn.textContent = 'Загрузить и сохранить';
+    }
+
+    renderPreview(cur, false);
+
+    function renderPreview(src, isNew) {
+        preview.innerHTML = src
+            ? '<img alt="">' + (isNew ? '<span class="mpcve-modal__badge">новое</span>' : '')
+            : '<span class="mpcve-modal__empty">нет изображения</span>';
+        if (src) { preview.querySelector('img').src = src; }
+    }
+
+    function close() {
+        overlay.remove();
+        document.removeEventListener('keydown', onKey);
+    }
+    function onKey(e) { if (e.key === 'Escape') { close(); } }
+    document.addEventListener('keydown', onKey);
+    overlay.addEventListener('click', function (e) { if (e.target === overlay) { close(); } });
+    overlay.querySelector('[data-act=cancel]').addEventListener('click', close);
+
+    function pick(file) {
+        if (!file || file.type.indexOf('image/') !== 0) {
+            toast('Это не изображение', true);
+            return;
+        }
+        chosen = file;
+        var reader = new FileReader();
+        reader.onload = function (ev) {
+            renderPreview(ev.target.result, true);
+            var probe = new Image();
+            probe.onload = function () {
+                newW = String(probe.naturalWidth || '');
+                newH = String(probe.naturalHeight || '');
+            };
+            probe.src = ev.target.result;
+        };
+        reader.readAsDataURL(file);
+        saveBtn.disabled = false;
+    }
+
+    input.addEventListener('change', function () { pick(input.files[0]); });
+    ['dragover', 'dragenter'].forEach(function (ev) {
+        drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.add('mpcve-modal__drop--over'); });
+    });
+    ['dragleave', 'drop'].forEach(function (ev) {
+        drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.remove('mpcve-modal__drop--over'); });
+    });
+    drop.addEventListener('drop', function (e) {
+        if (e.dataTransfer && e.dataTransfer.files[0]) { pick(e.dataTransfer.files[0]); }
+    });
+
+    function busy(on, label) {
+        saveBtn.disabled = on;
+        if (label) { saveBtn.textContent = label; }
+    }
+
+    // Записываем поле: для записи — полная migx-запись (src+атрибуты),
+    // иначе — путь-строка. ConfigFieldWriter хранит value как есть.
+    function persist(src, addr) {
+        var value;
+        if (asRecord) {
+            value = JSON.stringify([{
+                MIGX_id: 1,
+                src: src,
+                alt: altInput ? altInput.value : curAlt,
+                title: titleInput ? titleInput.value : curTitle,
+                width: (chosen && newW) ? newW : curW,
+                height: (chosen && newH) ? newH : curH
+            }]);
+        } else {
+            value = src;
+        }
+        api.post('field/save', { address: addr, value: value }).then(function (r2) {
+            if (r2 && r2.success) {
+                setImageSrc(el, src);
+                if (asRecord) {
+                    if (altInput) { el.setAttribute('alt', altInput.value); }
+                    if (titleInput && titleInput.value) { el.setAttribute('title', titleInput.value); }
+                }
+                toast('Сохранено');
+                close();
+            } else {
+                toast((r2 && r2.message) || 'Ошибка сохранения', true);
+                busy(false, 'Сохранить');
+            }
+        }).catch(function () { toast('Сетевая ошибка', true); busy(false, 'Сохранить'); });
+    }
+
+    saveBtn.addEventListener('click', function () {
+        var addr = forcedAddr || fieldAddress(el);
+        if (!addr) {
+            toast('У элемента нет data-mpc-адреса — некуда сохранять', true);
+            return;
+        }
+        if (!asRecord && !chosen) {
+            return;
+        }
+        busy(true, 'Сохранение…');
+        if (chosen) {
+            api.upload('image/upload', chosen).then(function (res) {
+                if (!res || !res.success || !res.data || !res.data.url) {
+                    toast((res && res.message) || 'Ошибка загрузки', true);
+                    busy(false, 'Сохранить');
+                    return;
+                }
+                persist(res.data.url, addr);
+            }).catch(function () { toast('Сетевая ошибка', true); busy(false, 'Сохранить'); });
+        } else {
+            // запись без нового файла — сохраняем текущий src + изменённые атрибуты
+            persist(cur, addr);
+        }
+    });
+}

@@ -90,6 +90,19 @@ class Mpcve
     }
 
     /**
+     * Карта лексикона уровня {key:value} — чтобы панель скрытых полей показывала
+     * ЗНАЧЕНИЯ, а не ключи. Пусто, если лексиконы выключены.
+     */
+    public function readLexicons(string $level, int $resourceId): array
+    {
+        if (!class_exists('\\MpcServices\\Handlers\\FieldWriter')) {
+            return [];
+        }
+        $writer = new \MpcServices\Handlers\FieldWriter($this->modx);
+        return $writer->readLexicons($level, $resourceId);
+    }
+
+    /**
      * Структурная операция над строками списка (add|delete|move). Делегирует в
      * write-API mpc (FieldWriter::writeRowOp).
      *
