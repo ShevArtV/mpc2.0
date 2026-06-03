@@ -11,6 +11,7 @@ import { toast } from './dom.js';
 import { markEl } from './mark.js';
 import { editors } from './editors/index.js';
 import { buildHiddenTriggers, removeHiddenTriggers } from './panels.js';
+import { toggleSidebar } from './sidebar.js';
 
 // --- разметка / снятие разметки полей ----------------------------------
 function markEditable() {
@@ -96,9 +97,13 @@ function buildToolbar() {
     bar.innerHTML =
         '<span class="mpcve-toolbar__title">mpcVisualEditor</span>' +
         '<span class="mpcve-toolbar__hint">клик по полю — править; Enter или уход — сохранить</span>' +
+        (S.editing ? '<button type="button" class="mpcve-btn" data-mpcve="sections">☰ Секции</button>' : '') +
         '<button type="button" data-mpcve="toggle"></button>';
     document.body.appendChild(bar);
     document.body.classList.add('mpcve-active');
+
+    var secBtn = bar.querySelector('[data-mpcve="sections"]');
+    if (secBtn) { secBtn.addEventListener('click', toggleSidebar); }
 
     var btn = bar.querySelector('[data-mpcve="toggle"]');
     function syncBtn() {
