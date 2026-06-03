@@ -13,7 +13,7 @@ import { toast } from './dom.js';
 
 var heartbeatTimer = null;
 var lastActivity = 0;
-var idleMs = 600000;
+var idleMs = 300000;
 
 function now() { return Date.now(); }
 
@@ -21,8 +21,8 @@ export function markActivity() { lastActivity = now(); }
 
 export function acquireLock() {
     return api.post('lock/acquire', { resourceId: S.cfg.resourceId || 0 })
-        .then(function (r) { return (r && r.success && r.data) ? r.data : { mine: true, ttl: 600 }; })
-        .catch(function () { return { mine: true, ttl: 600 }; }); // сеть упала — не блокируем правку
+        .then(function (r) { return (r && r.success && r.data) ? r.data : { mine: true, ttl: 300 }; })
+        .catch(function () { return { mine: true, ttl: 300 }; }); // сеть упала — не блокируем правку
 }
 
 function releaseLock() {
@@ -40,7 +40,7 @@ function beaconRelease() {
 
 // Жизненный цикл лока ПОСЛЕ успешного захвата (mine=true).
 export function startLockLifecycle(ttlSec) {
-    idleMs = (ttlSec > 0 ? ttlSec : 600) * 1000;
+    idleMs = (ttlSec > 0 ? ttlSec : 300) * 1000;
     var beatMs = Math.max(60000, Math.floor(idleMs / 3)); // 3 биения за TTL
     markActivity();
     heartbeatTimer = setInterval(tick, beatMs);

@@ -203,7 +203,7 @@ export function init() {
                 document.body.classList.add('mpcve-active');
                 return;
             }
-            startLockLifecycle(lock ? lock.ttl : 600);
+            startLockLifecycle(lock ? lock.ttl : 300);
             applyEditingState();
         });
     }).catch(applyEditingState);

@@ -87,8 +87,8 @@ class LockHandler
 
     private function ttl(): int
     {
-        $ttl = (int)$this->modx->getOption('mpcve_lock_ttl', null, 600);
-        return $ttl > 0 ? $ttl : 600;
+        $ttl = (int)$this->modx->getOption('mpcve_lock_ttl', null, 300);
+        return $ttl > 0 ? $ttl : 300;
     }
 
     private function ok(array $data): array
