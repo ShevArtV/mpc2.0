@@ -92,6 +92,7 @@ class FieldTypesHandler
                 }
                 return 'rows';
             case 'textarea':
+                return 'textarea';
             case 'text':
             case '':
             default:

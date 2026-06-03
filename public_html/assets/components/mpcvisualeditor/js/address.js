@@ -102,12 +102,13 @@ export function buildRowPath(el, lvl) {
 // Тип редактора по значению data-mpc-ftype (имя типа-прототипа mpc_base).
 export function ftypeToEditor(ftype) {
     if (!ftype) { return ''; }
-    if (ftype === 'richtext') { return 'richtext'; }
+    if (ftype === 'richtext') { return 'richtext'; }   // модалка RTE
+    if (ftype === 'textarea') { return 'textarea'; }   // модалка textarea
     if (ftype === 'img' || ftype === 'bg_img') { return 'image'; }
     if (ftype === 'picture') { return 'picture'; }
     if (ftype === 'video' || ftype === 'audio') { return 'media'; }
     if (ftype.indexOf('list') === 0) { return 'rows'; }
-    return 'text'; // text/textarea/number/checkbox — инлайн-текст
+    return 'text'; // text/number/checkbox — инлайн-текст
 }
 
 // Атрибут-маркер списка + его уровень вложенности (0 = top-level data-mpc-field,
