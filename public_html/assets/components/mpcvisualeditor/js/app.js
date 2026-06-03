@@ -23,6 +23,11 @@ function unmarkEditable() {
         el.removeAttribute('data-mpcve-type');
         el.removeAttribute('contenteditable');
         el.removeAttribute('title');
+        // Снять временные controls, добавленные на <audio> в markEl.
+        if (el.getAttribute('data-mpcve-controls') === '1') {
+            el.removeAttribute('controls');
+            el.removeAttribute('data-mpcve-controls');
+        }
     });
 }
 

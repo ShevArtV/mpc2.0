@@ -120,6 +120,10 @@ class mpcExpand {
    */
   getImgData(el, content) {
     const svg = new DOMParser().parseFromString(content, "text/html").getElementsByTagName("svg")[0];
+    // Контент по data-lazy/src оказался не SVG (битый путь, растровый файл,
+    // медиа): <svg> нет — выходим, не роняя страницу (иначе removeAttribute
+    // of undefined). Элемент остаётся как есть.
+    if (!svg) return;
     const attributes = ['width', 'height', 'id', 'class'];
 
     svg.removeAttribute('xmlns');

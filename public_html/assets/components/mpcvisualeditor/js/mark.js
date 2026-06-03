@@ -18,6 +18,14 @@ export function markEl(el) {
     if (isMedia(el)) {
         el.classList.add('mpcve-editable--media');
     }
+    // <audio> без controls не имеет видимой области (0×0) → по нему нельзя
+    // кликнуть, чтобы открыть редактор. В режиме правки временно включаем
+    // нативные controls (видимый кликабельный бар); снимаем при выходе
+    // (unmarkEditable). Видео и так видно (кадр/постер), его не трогаем.
+    if (el.tagName.toLowerCase() === 'audio' && !el.hasAttribute('controls')) {
+        el.setAttribute('controls', '');
+        el.setAttribute('data-mpcve-controls', '1');
+    }
 }
 
 // Пометить все поля внутри root (вкл. сам root, если он поле). Для JS-строк.
