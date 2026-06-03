@@ -12,6 +12,7 @@ import { markEl } from './mark.js';
 import { editors } from './editors/index.js';
 import { buildHiddenTriggers, removeHiddenTriggers } from './panels.js';
 import { toggleSidebar } from './sidebar.js';
+import { toggleChangelog } from './changelog.js';
 import { acquireLock, startLockLifecycle, showLockBanner, releaseOnExit, markActivity } from './lock.js';
 
 // --- разметка / снятие разметки полей ----------------------------------
@@ -99,6 +100,7 @@ function buildToolbar() {
         '<span class="mpcve-toolbar__title">mpcVisualEditor</span>' +
         '<span class="mpcve-toolbar__hint">клик по полю — править; Enter или уход — сохранить</span>' +
         (S.editing ? '<button type="button" data-mpcve="sections">☰ Секции</button>' : '') +
+        (S.editing ? '<button type="button" data-mpcve="history" title="История изменений ресурса">🕓 История</button>' : '') +
         '<button type="button" data-mpcve="cache" title="Очистить кэш сайта">🧹 Кэш</button>' +
         '<button type="button" data-mpcve="admin" title="Открыть текущий ресурс в админке">⚙ Админка</button>' +
         '<button type="button" data-mpcve="toggle"></button>';
@@ -107,6 +109,9 @@ function buildToolbar() {
 
     var secBtn = bar.querySelector('[data-mpcve="sections"]');
     if (secBtn) { secBtn.addEventListener('click', toggleSidebar); }
+
+    var histBtn = bar.querySelector('[data-mpcve="history"]');
+    if (histBtn) { histBtn.addEventListener('click', toggleChangelog); }
 
     // Очистка кэша сайта (полный refresh MODX).
     var cacheBtn = bar.querySelector('[data-mpcve="cache"]');

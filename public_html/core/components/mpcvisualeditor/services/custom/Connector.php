@@ -67,6 +67,12 @@ class Connector
             case 'lock/release':
                 // Снять блокировку (явный выход / закрытие вкладки — beacon).
                 return (new Handlers\LockHandler($this->modx, $this->mpcve))->release($request);
+            case 'log/list':
+                // Журнал изменений ресурса (кто/когда/что).
+                return (new Handlers\LogHandler($this->modx, $this->mpcve))->list($request);
+            case 'log/revert':
+                // Откат правки поля (записать старое значение обратно).
+                return (new Handlers\LogHandler($this->modx, $this->mpcve))->revert($request);
             case 'image/upload':
                 // Загрузка картинки в media source mpc → возврат URL (фронт пишет
                 // его в поле через field/save). См. ImageUploadHandler.

@@ -56,7 +56,7 @@ export function openLinkEditor(el) {
         var value = hrefInput.value;
         saveBtn.disabled = true;
         saveBtn.textContent = 'Сохранение…';
-        api.post('field/save', { address: addr, value: value }).then(function (res) {
+        api.post('field/save', { address: addr, value: value, old: curHref }).then(function (res) {
             if (res && res.success) {
                 el.setAttribute('href', value);
                 toast('Сохранено');

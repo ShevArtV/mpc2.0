@@ -47,7 +47,7 @@ export function openRichtextEditor(el) {
     saveBtn.addEventListener('click', function () {
         var value = sanitizeHtml(rte.getHTML(), S.cfg.allowedTags);
         saveBtn.disabled = true; saveBtn.textContent = 'Сохранение…';
-        api.post('field/save', { address: addr, value: value }).then(function (r) {
+        api.post('field/save', { address: addr, value: value, old: orig }).then(function (r) {
             if (r && r.success) {
                 el.innerHTML = value; // обновляем страницу без перезагрузки
                 toast('Сохранено');

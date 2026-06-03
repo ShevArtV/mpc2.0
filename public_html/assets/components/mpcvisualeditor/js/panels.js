@@ -381,8 +381,9 @@ function openBlockPanel(title, descriptors) {
             };
             if (f.parentField != null) { addr.parentField = f.parentField; addr.idx = f.idx; }
             var value = getValue();
+            var old = (f.value == null) ? '' : f.value; // прежнее значение — для журнала/отката
             btn.disabled = true; btn.textContent = '…';
-            api.post('field/save', { address: addr, value: value }).then(function (r) {
+            api.post('field/save', { address: addr, value: value, old: old }).then(function (r) {
                 if (r && r.success) {
                     f.value = value;
                     rowEl.classList.add('mpcve-hpanel__row--saved');

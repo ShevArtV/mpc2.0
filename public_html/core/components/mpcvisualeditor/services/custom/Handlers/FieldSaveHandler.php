@@ -37,7 +37,26 @@ class FieldSaveHandler
         }
 
         $value = $request['value'] ?? '';
+        // Старое значение редактор присылает сам (`old`) — есть → запись откатываемая.
+        $old = array_key_exists('old', $request) ? $request['old'] : null;
 
-        return $this->mpcve->writeField($address, $value);
+        $res = $this->mpcve->writeField($address, $value);
+
+        if (!empty($res['success'])) {
+            (new ChangeLog($this->modx))->add([
+                'resource_id' => (int)($address['resourceId'] ?? 0),
+                'user_id'     => (int)($this->modx->user ? $this->modx->user->get('id') : 0),
+                'username'    => (string)($this->modx->user ? $this->modx->user->get('username') : ''),
+                'action'      => 'field',
+                'section'     => (string)($address['section'] ?? ''),
+                'field'       => (string)($address['fieldName'] ?? ''),
+                'address'     => json_encode($address, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+                'old_value'   => $old === null ? null : (is_scalar($old) ? (string)$old : json_encode($old)),
+                'new_value'   => is_scalar($value) ? (string)$value : json_encode($value),
+                'revertable'  => ($old !== null) ? 1 : 0,
+            ]);
+        }
+
+        return $res;
     }
 }

@@ -7,13 +7,14 @@ import { toast } from '../dom.js';
 import { fieldAddress } from '../address.js';
 
 // Пер-полевое сохранение: адрес поля + значение → field/save → FieldWriter.
-export function saveField(el) {
+// old — прежнее значение (для журнала/отката).
+export function saveField(el, old) {
     var addr = fieldAddress(el);
     if (!addr) {
         return;
     }
     var value = el.getAttribute('data-mpcve-type') === 'richtext' ? el.innerHTML : el.innerText;
-    api.post('field/save', { address: addr, value: value }).then(function (res) {
+    api.post('field/save', { address: addr, value: value, old: old == null ? '' : old }).then(function (res) {
         if (res && res.success) {
             toast('Сохранено');
         } else {
@@ -61,7 +62,7 @@ export function openTextEditor(el) {
     function onBlur() {
         cleanup();
         if (el.innerHTML !== orig) {
-            saveField(el);
+            saveField(el, orig);
         }
     }
     el.addEventListener('keydown', onKey);

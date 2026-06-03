@@ -34,6 +34,22 @@ class RowOpHandler
             $address['resourceId'] = (int)($request['resourceId'] ?? 0);
         }
 
-        return $this->mpcve->rowOp($address);
+        $res = $this->mpcve->rowOp($address);
+
+        if (!empty($res['success'])) {
+            // Аудит (откат структурных операций не поддержан → revertable=0).
+            (new ChangeLog($this->modx))->add([
+                'resource_id' => (int)($address['resourceId'] ?? 0),
+                'user_id'     => (int)($this->modx->user ? $this->modx->user->get('id') : 0),
+                'username'    => (string)($this->modx->user ? $this->modx->user->get('username') : ''),
+                'action'      => 'row',
+                'section'     => (string)($address['section'] ?? ''),
+                'field'       => (string)($address['parentField'] ?? ''),
+                'new_value'   => 'строка: ' . (string)($address['op'] ?? ''),
+                'revertable'  => 0,
+            ]);
+        }
+
+        return $res;
     }
 }

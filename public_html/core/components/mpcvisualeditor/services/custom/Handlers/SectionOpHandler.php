@@ -48,14 +48,32 @@ class SectionOpHandler
 
         switch ($op) {
             case 'move':
-                return $this->move($config, $resourceId, $request);
+                $res = $this->move($config, $resourceId, $request);
+                break;
             case 'visibility':
-                return $this->setField($config, $resourceId, $request, 'hide_section');
+                $res = $this->setField($config, $resourceId, $request, 'hide_section');
+                break;
             case 'static':
-                return $this->setStatic($config, $resourceId, $request);
+                $res = $this->setStatic($config, $resourceId, $request);
+                break;
             default:
                 return $this->err('unknown section op: ' . $op);
         }
+
+        if (!empty($res['success'])) {
+            // Аудит секционной операции (откат не поддержан → revertable=0).
+            (new ChangeLog($this->modx))->add([
+                'resource_id' => $resourceId,
+                'user_id'     => (int)($this->modx->user ? $this->modx->user->get('id') : 0),
+                'username'    => (string)($this->modx->user ? $this->modx->user->get('username') : ''),
+                'action'      => 'section',
+                'section'     => (string)($request['section'] ?? ''),
+                'field'       => $op,
+                'new_value'   => 'секции: ' . $op . (isset($request['value']) ? ('=' . $request['value']) : ''),
+                'revertable'  => 0,
+            ]);
+        }
+        return $res;
     }
 
     /** Индекс секции по имени (section_name или MIGX_formname). -1 — нет. */

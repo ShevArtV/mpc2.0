@@ -976,3 +976,60 @@ body:not(.mpcve-on) .mpcve-media-badge {
     text-align: center;
     box-shadow: 0 2px 8px rgba(0, 0, 0, .25);
 }
+
+/* --- журнал изменений (переиспользует .mpcve-sidebar) ---------------- */
+.mpcve-clog__row {
+    padding: 9px 6px;
+    border-bottom: 1px solid #f1f5f9;
+    font-size: 12px;
+}
+
+.mpcve-clog__meta {
+    color: #94a3b8;
+    font-size: 11px;
+}
+
+.mpcve-clog__field {
+    font-weight: 600;
+    color: #334155;
+    margin: 2px 0;
+    word-break: break-word;
+}
+
+.mpcve-clog__diff {
+    color: #475569;
+    word-break: break-word;
+}
+
+.mpcve-clog__old {
+    color: #b91c1c;
+    text-decoration: line-through;
+    opacity: .8;
+}
+
+.mpcve-clog__new {
+    color: #15803d;
+}
+
+.mpcve-clog__revert {
+    margin-top: 5px;
+    padding: 3px 9px;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    background: #fff;
+    color: #2563eb;
+    font-size: 11px;
+    cursor: pointer;
+}
+
+.mpcve-clog__revert:hover {
+    background: #eff6ff;
+}
+
+.mpcve-clog__reverted {
+    display: inline-block;
+    margin-top: 5px;
+    font-size: 11px;
+    color: #94a3b8;
+    font-style: italic;
+}
