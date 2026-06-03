@@ -62,8 +62,29 @@ class FieldTypesHandler
             }
         }
 
+        // Карта типов TV (имя TV → тип редактора по modTemplateVar.type). TV — НЕ
+        // config-поле mpc_base, поэтому для них своя карта: иначе тип брался по
+        // совпадению имени с config-полем (TV subtitle ловил тип одноимённого поля).
+        $tvs = [];
+        foreach ($this->modx->getCollection('modTemplateVar') as $tv) {
+            $name = (string)$tv->get('name');
+            if ($name === '') {
+                continue;
+            }
+            $type = (string)$tv->get('type');
+            $configs = '';
+            if ($type === 'migx') {
+                $props = $tv->get('input_properties');
+                if (is_string($props)) {
+                    $props = json_decode($props, true);
+                }
+                $configs = is_array($props) ? (string)($props['configs'] ?? '') : '';
+            }
+            $tvs[$name] = $this->editorType($type, $configs);
+        }
+
         return ['success' => true, 'message' => '', 'data' => [
-            'fields' => $map, 'labels' => $labels, 'settings' => $settings,
+            'fields' => $map, 'labels' => $labels, 'settings' => $settings, 'tvs' => $tvs,
         ]];
     }
 

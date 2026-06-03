@@ -17,7 +17,8 @@ export var S = {
     cfg: window.mpcVEConfig || {},
     // По умолчанию редактирование включено; выключается тумблером (cookie '0').
     editing: getCookie('mpcve_editing') !== '0',
-    typesMap: {},        // имя поля → тип (карта fields/types из mpc_base)
+    typesMap: {},        // имя config-поля → тип (карта fields/types из mpc_base)
+    tvTypes: {},         // имя TV → тип редактора (modTemplateVar.type) — своя карта
     labelsMap: {},       // имя поля → caption из конфигуратора
     settingsFields: [],  // имена полей таба «Настройки секции» (исключаем из панели)
     configData: null,    // { resourceId, resource:{}, global:{}, lexicons:{} } из config/get

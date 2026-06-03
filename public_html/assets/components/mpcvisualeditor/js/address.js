@@ -5,6 +5,15 @@
 import { S } from './state.js';
 import { isMedia, hasBg, parseRecord } from './dom.js';
 
+// Тип редактора для стандартных полей ресурса MODX (rfield). Не перечисленные
+// (pagetitle/longtitle/menutitle/…) → text по умолчанию. data-mpc-ftype на
+// маркере переопределяет (проверяется раньше в editorTypeFor).
+var RFIELD_TYPES = {
+    content: 'richtext',
+    introtext: 'textarea',
+    description: 'textarea'
+};
+
 // --- адрес поля из DOM -------------------------------------------------
 export function resolveAddress(el) {
     var type = null, fieldName = null;
@@ -161,7 +170,19 @@ export function editorTypeFor(el, addr) {
     if (isListEl(el)) {
         return 'rows';
     }
-    var mapped = (addr.fieldName && S.typesMap[addr.fieldName]) || '';
+    // Тип берём из карты, СООТВЕТСТВУЮЩЕЙ типу адреса (иначе TV/rfield ловили тип
+    // одноимённого config-поля — коллизия имён): tv → своя карта типов TV;
+    // rfield → стандартные типы ресурс-полей MODX; field → карта mpc_base.
+    var mapped = '';
+    if (addr.fieldName) {
+        if (addr.type === 'tv') {
+            mapped = S.tvTypes[addr.fieldName] || '';
+        } else if (addr.type === 'rfield') {
+            mapped = RFIELD_TYPES[addr.fieldName] || '';
+        } else {
+            mapped = S.typesMap[addr.fieldName] || '';
+        }
+    }
     // Явный не-картиночный тип из mpc_base (richtext/media/rows) — приоритет.
     if (mapped && mapped !== 'text' && mapped !== 'image') {
         return mapped;

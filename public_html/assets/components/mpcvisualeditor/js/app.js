@@ -156,6 +156,7 @@ export function init() {
         api.post('fields/types', {}).then(function (res) {
             if (res && res.success && res.data) {
                 if (res.data.fields) { S.typesMap = res.data.fields; }
+                if (res.data.tvs) { S.tvTypes = res.data.tvs; }
                 if (res.data.labels) { S.labelsMap = res.data.labels; }
                 if (res.data.settings) { S.settingsFields = res.data.settings; }
             }
