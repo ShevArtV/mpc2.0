@@ -27,6 +27,15 @@ function isSettingsField(fname) {
     return STRUCTURAL.indexOf(fname) !== -1 || S.settingsFields.indexOf(fname) !== -1;
 }
 
+// Одиночная img-ЗАПИСЬ [{MIGX_id,src,alt,title,width,height}] — есть src, НЕТ
+// sources/img (так отличаем от picture/video/audio-записей со sources/вложенным
+// img, которые панель пока не редактирует). Такие записи правим value-based
+// (превью+загрузка), сохраняя структуру записи.
+function isImgRecord(rec) {
+    return !!(rec && rec.length === 1 && rec[0] &&
+        rec[0].src !== undefined && rec[0].sources === undefined && rec[0].img === undefined);
+}
+
 // Стилевые поля секции (вкладка «Стили» mpc_base, кроме css_file_path).
 // Показываем ВСЕГДА (даже пустые — чтобы можно было ЗАДАТЬ ещё не существующее
 // значение, напр. CSS-класс для оформления).
@@ -78,7 +87,16 @@ function sectionHidden(sectionEl) {
         Object.keys(sc.obj).forEach(function (fname) {
             if (isSettingsField(fname) || visible[fname]) { return; }
             var v = sc.obj[fname];
-            if (!isScalar(v) || parseRecord(v)) { return; }
+            var rec = parseRecord(v);
+            if (isImgRecord(rec)) {
+                out.push({
+                    level: sc.level, section: sc.section, fieldName: fname,
+                    type: 'image', record: rec, label: fieldLabel(fname),
+                    value: lexValue(rec[0].src == null ? '' : String(rec[0].src), sc.level)
+                });
+                return;
+            }
+            if (!isScalar(v) || rec) { return; } // прочие записи/не-скаляры пока пропускаем
             out.push({
                 level: sc.level, section: sc.section,
                 fieldName: fname, value: lexValue(v == null ? '' : String(v), sc.level),
@@ -129,7 +147,17 @@ function itemHidden(itemEl) {
     Object.keys(row).forEach(function (sub) {
         if (sub === 'MIGX_id' || STRUCTURAL.indexOf(sub) !== -1 || vis[sub]) { return; }
         var sv = row[sub];
-        if (!isScalar(sv) || parseRecord(sv)) { return; }
+        var rec = parseRecord(sv);
+        if (isImgRecord(rec)) {
+            out.push({
+                level: info.level, section: info.section,
+                parentField: info.parentField, idx: info.idx,
+                fieldName: sub, type: 'image', record: rec, label: fieldLabel(sub),
+                value: lexValue(rec[0].src == null ? '' : String(rec[0].src), info.level)
+            });
+            return;
+        }
+        if (!isScalar(sv) || rec) { return; } // прочие записи/не-скаляры пока пропускаем
         out.push({
             level: info.level, section: info.section,
             parentField: info.parentField, idx: info.idx,
@@ -235,7 +263,8 @@ function wireControl(rowEl, f, btn) {
         var box = rowEl.querySelector('.mpcve-hpanel__img');
         var thumb = box.querySelector('.mpcve-hpanel__thumb');
         var fileInput = box.querySelector('input[type=file]');
-        var curUrl = f.value || '';
+        var curUrl = f.value || '';  // путь/URL для превью (для записи — резолвнутый src)
+        var changed = false;         // загрузили ли новый файл
         var draw = function () {
             thumb.innerHTML = curUrl ? '<img alt="">' : '<span class="mpcve-modal__empty">нет</span>';
             if (curUrl) { thumb.querySelector('img').src = curUrl; }
@@ -246,12 +275,22 @@ function wireControl(rowEl, f, btn) {
             if (!file || file.type.indexOf('image/') !== 0) { return; }
             btn.disabled = true; btn.textContent = '⇧';
             api.upload('image/upload', file).then(function (res) {
-                if (res && res.success && res.data && res.data.url) { curUrl = res.data.url; draw(); }
+                if (res && res.success && res.data && res.data.url) { curUrl = res.data.url; changed = true; draw(); }
                 else { toast((res && res.message) || 'Ошибка загрузки', true); }
             }).catch(function () { toast('Сетевая ошибка', true); })
               .then(function () { btn.disabled = false; btn.textContent = 'Сохранить'; });
         });
-        return function () { return curUrl; };
+        return function () {
+            // img-ЗАПИСЬ: сохраняем структуру записи, меняем только src. Если не
+            // грузили — оставляем исходный src (лексикон-ключ → бэк его не трогает).
+            if (f.record) {
+                var row0 = {};
+                Object.keys(f.record[0]).forEach(function (k) { row0[k] = f.record[0][k]; });
+                if (changed) { row0.src = curUrl; }
+                return JSON.stringify([row0]);
+            }
+            return curUrl;  // путь-строка (bg_img и т.п.)
+        };
     }
     if (f.type === 'richtext') {
         var rte = rowEl.querySelector('.mpcve-hpanel__rte');
