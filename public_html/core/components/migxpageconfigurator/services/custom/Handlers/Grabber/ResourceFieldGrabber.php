@@ -67,7 +67,7 @@ class ResourceFieldGrabber
             $value = $this->extractValue($el);
             // При лексиконизации в КОЛОНКУ кладём ключ (как config-поля хранят
             // ключ в mpc_config), значение — в лексикон. Иначе колонка = значение.
-            $key = $this->lexiconize($resource, $name, $value);
+            $key = $this->lexiconize($resource, $name, $value, LexiconManager::contentTypeForTag($el->tagName()));
             $resource->set($name, $key !== '' ? $key : $value);
             $written['fields'][$name] = true;
         }
@@ -81,7 +81,7 @@ class ResourceFieldGrabber
                 $value = $this->extractValue($el);
                 // TV лексиконятся отдельным неймспейсом mpc_resource_tv_<name>,
                 // чтобы НЕ коллизить с rfield того же имени (rfield → mpc_resource_<name>).
-                $key = $this->lexiconize($resource, $name, $value, 'mpc_resource_tv_');
+                $key = $this->lexiconize($resource, $name, $value, LexiconManager::contentTypeForTag($el->tagName()), 'mpc_resource_tv_');
                 $resource->setTVValue($name, $key !== '' ? $key : $value);
                 $written['tvs'][$name] = true;
             }
@@ -106,9 +106,11 @@ class ResourceFieldGrabber
      * `mpc_resource_<field>` (per-resource перевод; на диск кладёт createLexicons),
      * и ВОЗВРАЩАЕМ ключ — его caller кладёт в колонку (как config-поля хранят
      * ключ в mpc_config). Пусто, если лексиконы выключены (тогда колонка =
-     * значение). Гейты: useLexicons + excludeLexiconFields — поле из списка
-     * исключений (напр. `pagetitle`, читаемый MODX напрямую) НЕ лексиконится,
-     * чтобы в колонке осталось значение, а не ключ (консистентно с каттером).
+     * значение). Решение «лексиконизировать» — ЕДИНОЕ с каттером и редактором:
+     * `LexiconManager::shouldLexiconize($contentType, $field)` (content-type ∈
+     * mpc_translated_content + exclude). content-type — по тегу маркера
+     * (`contentTypeForTag`): image-TV при настройке без `image` НЕ лексиконится;
+     * exclude (напр. `pagetitle`) — тоже не лексиконится (значение в колонке).
      * Защищённые alias/uri/template уже отфильтрованы выше.
      *
      * Префикс ключа разный для rfield (`mpc_resource_`) и TV (`mpc_resource_tv_`)
@@ -116,12 +118,16 @@ class ResourceFieldGrabber
      *
      * @return string ключ лексикона или '' (лексикон не пишется)
      */
-    private function lexiconize($resource, string $field, string $value, string $keyPrefix = 'mpc_resource_'): string
+    private function lexiconize($resource, string $field, string $value, string $contentType = 'text', string $keyPrefix = 'mpc_resource_'): string
     {
         if (!$this->useLexicons || $this->lexiconManager === null) {
             return '';
         }
-        if ($this->lexiconManager->isExcluded($field)) {
+        // ЕДИНОЕ решение с каттером/редактором: content-type ∈ mpc_translated_content
+        // + exclude (image-TV при настройке без 'image' → НЕ лексиконизируется).
+        // prefix пуст — rfield/TV вне секции.
+        $this->lexiconManager->setContext('', false);
+        if (!$this->lexiconManager->shouldLexiconize($contentType, $field)) {
             return '';
         }
         $ident = $this->lexiconManager->getResourceIdentifierById((int)$resource->get('id'));

@@ -17,14 +17,14 @@ class FieldWriterTest extends TestCase
     /**
      * modX-стаб, отдающий контролируемый resource-объект по getObject('modResource').
      */
-    private function makeModx(ModxObjectStub $resource): ModxStub
+    private function makeModx(ModxObjectStub $resource, array $configOverrides = []): ModxStub
     {
-        return new class($resource) extends ModxStub {
+        return new class($resource, $configOverrides) extends ModxStub {
             private ModxObjectStub $res;
 
-            public function __construct(ModxObjectStub $res)
+            public function __construct(ModxObjectStub $res, array $cfg)
             {
-                parent::__construct();
+                parent::__construct(null, $cfg);
                 $this->res = $res;
             }
 
@@ -98,6 +98,44 @@ class FieldWriterTest extends TestCase
         $this->assertSame('', $resource->getTVValue('subtitle'));       // TV-значение (колонку) не трогали
     }
 
+    /** Канон: rfield/tv тоже учитывают mpc_translated_content. Если content-type не
+     *  переводим — пишем в КОЛОНКУ, даже если лексикон-ключ у ресурса есть. */
+    public function testRfieldAndTvStayInColumnWhenNotTranslatable(): void
+    {
+        $makeLex = function (array &$log) {
+            return new class($log) extends \MpcServices\Handlers\LexiconWriter {
+                private array $log;
+                public function __construct(array &$log) { $this->log = &$log; }
+                public function identifier(int $rid): string { return 'res' . $rid; }
+                public function has(string $identifier, string $key): bool { return true; } // ключ якобы ЕСТЬ
+                public function set(string $identifier, string $key, string $value): bool { $this->log[$key] = $value; return true; }
+            };
+        };
+        $inject = function (FieldWriter $writer, $lex) {
+            $ref = new \ReflectionObject($writer);
+            $ul = $ref->getProperty('useLexicons');      $ul->setAccessible(true); $ul->setValue($writer, true);
+            $lw = $ref->getProperty('lexWriterInstance'); $lw->setAccessible(true); $lw->setValue($writer, $lex);
+        };
+
+        // rfield (content-type 'text') при mpc_translated_content='image' → колонка
+        $res1 = new ModxObjectStub('modResource', ['id' => 5, 'context_key' => 'web']);
+        $w1 = new FieldWriter($this->makeModx($res1, ['mpc_translated_content' => 'image']));
+        $log1 = []; $inject($w1, $makeLex($log1));
+        $r1 = $w1->write(['type' => 'rfield', 'resourceId' => 5, 'fieldName' => 'content'], 'Текст');
+        $this->assertTrue($r1['success'], $r1['message']);
+        $this->assertSame([], $log1);                     // НЕ в лексикон
+        $this->assertSame('Текст', $res1->get('content')); // в колонку
+
+        // tv при mpc_translated_content='image' → колонка
+        $res2 = new ModxObjectStub('modResource', ['id' => 5, 'context_key' => 'web']);
+        $w2 = new FieldWriter($this->makeModx($res2, ['mpc_translated_content' => 'image']));
+        $log2 = []; $inject($w2, $makeLex($log2));
+        $r2 = $w2->write(['type' => 'tv', 'resourceId' => 5, 'fieldName' => 'subtitle'], 'Текст');
+        $this->assertTrue($r2['success'], $r2['message']);
+        $this->assertSame([], $log2);                          // НЕ в лексикон
+        $this->assertSame('Текст', $res2->getTVValue('subtitle')); // в колонку
+    }
+
     public function testRejectsInvalidAddress(): void
     {
         $resource = new ModxObjectStub('modResource', ['id' => 5]);
@@ -149,7 +187,7 @@ class FieldWriterTest extends TestCase
                 'MIGX_formname'  => 'mpc_hero',
                 'lexicon_prefix' => 'hero',
                 'cards'          => json_encode([
-                    ['MIGX_id' => 1, 'title' => 'hero_cards_title_0'], // строка с лексикон-ключом
+                    ['MIGX_id' => 1, 'title' => 'hero_cards_title'],   // строка idx0 с лексикон-ключом (idx0 → без суффикса)
                     ['MIGX_id' => 2, 'title' => ''],                   // новая пустая строка
                 ], JSON_UNESCAPED_UNICODE),
             ],
@@ -162,7 +200,7 @@ class FieldWriterTest extends TestCase
         $resource = new ModxObjectStub('modResource', ['id' => 5, 'context_key' => 'web', 'tv_mpc_config' => $this->listConfig()]);
         $writer = new FieldWriter($this->makeModx($resource));
         $log = [];
-        $this->injectLex($writer, ['hero_cards_title_0'], $log); // у соседней строки ключ ЕСТЬ
+        $this->injectLex($writer, ['hero_cards_title'], $log); // у соседней строки (idx0) ключ ЕСТЬ
 
         $res = $writer->write(
             ['type' => 'field', 'level' => 'resource', 'resourceId' => 5, 'section' => 'hero', 'fieldName' => 'title', 'parentField' => 'cards', 'idx' => 1],
@@ -170,18 +208,67 @@ class FieldWriterTest extends TestCase
         );
 
         $this->assertTrue($res['success'], $res['message']);
-        $this->assertSame('Новый текст', $log['hero_cards_title_1']); // значение в лексиконе под сгенерированным ключом
+        $this->assertSame('Новый текст', $log['hero_cards_1_title_1']); // значение в лексиконе под сгенерированным ключом (idx1 → схема грабера)
         $cards = json_decode(json_decode($resource->getTVValue('mpc_config'), true)['1']['cards'], true);
-        $this->assertSame('hero_cards_title_1', $cards[1]['title']);  // в конфиг лёг КЛЮЧ
+        $this->assertSame('hero_cards_1_title_1', $cards[1]['title']);  // в конфиг лёг КЛЮЧ
     }
 
-    /** Если соседи — литералы (поле не лексиконится) → новое значение пишется литералом. */
-    public function testNewRowFieldStaysLiteralWhenNotLexiconized(): void
+    /** Конфиг с ВЛОЖЕННЫМ списком: элемент [0] имеет вложенную строку с ключом,
+     *  элемент [1] (новый) — вложенный список пуст (deep-clone). Как реальный
+     *  грабер: вложенный список — нативный массив внутри строки. */
+    private function nestedListConfig(): string
     {
-        $resource = new ModxObjectStub('modResource', ['id' => 5, 'context_key' => 'web', 'tv_mpc_config' => $this->listConfig()]);
+        return json_encode([
+            '1' => [
+                'section_name'   => 'inner',
+                'MIGX_formname'  => 'mpc_inner',
+                'lexicon_prefix' => 'inner',
+                'list_of_lists'  => json_encode([
+                    ['MIGX_id' => 1, 'title' => 'inner_list_of_lists_title', 'list_triple_img' => [
+                        ['MIGX_id' => 1, 'title' => 'inner_list_of_lists_list_triple_img_title'], // существующий КЛЮЧ
+                    ]],
+                    ['MIGX_id' => 2, 'title' => '', 'list_triple_img' => [
+                        ['MIGX_id' => 1, 'title' => ''], // новый элемент: вложенная строка пуста
+                    ]],
+                ], JSON_UNESCAPED_UNICODE),
+            ],
+        ], JSON_UNESCAPED_UNICODE);
+    }
+
+    /** Поле ВЛОЖЕННОЙ строки НОВОГО элемента лексиконизируется по КАНОНУ
+     *  (content-type 'text' ∈ mpc_translated_content), даже если свой вложенный
+     *  список пуст — решение не зависит от соседних ключей. Ключ по схеме грабера. */
+    public function testNewNestedFieldGetsLexiconKey(): void
+    {
+        $resource = new ModxObjectStub('modResource', ['id' => 5, 'context_key' => 'web', 'tv_mpc_config' => $this->nestedListConfig()]);
         $writer = new FieldWriter($this->makeModx($resource));
         $log = [];
-        $this->injectLex($writer, [], $log); // ключей нет → has() всегда false
+        $this->injectLex($writer, [], $log); // соседних ключей нет — решает настройка, не precedent
+
+        $res = $writer->write([
+            'type' => 'field', 'level' => 'resource', 'resourceId' => 5, 'section' => 'inner', 'fieldName' => 'title',
+            'path' => [['field' => 'list_of_lists', 'idx' => 1], ['field' => 'list_triple_img', 'idx' => 0]],
+        ], 'Вложенный новый');
+
+        $this->assertTrue($res['success'], $res['message']);
+        // ключ сгенерён по схеме грабера для [1][0] и значение ушло в лексикон
+        $this->assertSame('Вложенный новый', $log['inner_list_of_lists_1_list_triple_img_title']);
+        // в конфиг (вложенную строку) лёг КЛЮЧ, а не литерал
+        $lol = json_decode(json_decode($resource->getTVValue('mpc_config'), true)['1']['list_of_lists'], true);
+        $lti = $lol[1]['list_triple_img'];
+        $lti = is_string($lti) ? json_decode($lti, true) : $lti;
+        $this->assertSame('inner_list_of_lists_1_list_triple_img_title', $lti[0]['title']);
+    }
+
+    /** Канон: решает mpc_translated_content, а не соседи. Если 'text' НЕ в списке
+     *  переводимых типов → текстовое поле пишется литералом, даже если у соседа ключ. */
+    public function testNewRowFieldStaysLiteralWhenContentTypeNotTranslatable(): void
+    {
+        $resource = new ModxObjectStub('modResource', ['id' => 5, 'context_key' => 'web', 'tv_mpc_config' => $this->listConfig()]);
+        // mpc_translated_content без 'text' → текст не лексиконится (хотя у соседа idx0 ключ ЕСТЬ)
+        $writer = new FieldWriter($this->makeModx($resource, ['mpc_translated_content' => 'image']));
+        $log = [];
+        $this->injectLex($writer, ['hero_cards_title'], $log);
 
         $res = $writer->write(
             ['type' => 'field', 'level' => 'resource', 'resourceId' => 5, 'section' => 'hero', 'fieldName' => 'title', 'parentField' => 'cards', 'idx' => 1],

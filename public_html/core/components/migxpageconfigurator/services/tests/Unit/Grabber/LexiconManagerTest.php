@@ -240,6 +240,48 @@ class LexiconManagerTest extends TestCase
     }
 
     // ---------------------------------------------------------------
+    // appendLexiconParent / getLexiconKeyForPath — единая конструкция
+    // parentFieldName для грабера И редактора. Ключи запиннены по РЕАЛЬНОМУ
+    // лексикону секции (prefix 'third'): см. lexicon/ru/index.inc.php.
+    // ---------------------------------------------------------------
+
+    public function testContentTypeForTag(): void
+    {
+        $this->assertSame('image', LexiconManager::contentTypeForTag('img'));
+        $this->assertSame('image', LexiconManager::contentTypeForTag('source'));
+        $this->assertSame('image', LexiconManager::contentTypeForTag('picture'));
+        $this->assertSame('video', LexiconManager::contentTypeForTag('video'));
+        $this->assertSame('audio', LexiconManager::contentTypeForTag('audio'));
+        $this->assertSame('text', LexiconManager::contentTypeForTag('div'));
+        $this->assertSame('text', LexiconManager::contentTypeForTag('a'));
+        $this->assertSame('text', LexiconManager::contentTypeForTag('H1')); // регистронезависимо
+    }
+
+    public function testAppendLexiconParentBuildsChain(): void
+    {
+        $this->assertSame('list_of_lists', LexiconManager::appendLexiconParent('', 'list_of_lists', 0));
+        $this->assertSame('list_of_lists_1', LexiconManager::appendLexiconParent('', 'list_of_lists', 1));
+        $this->assertSame('list_of_lists_list_triple_img', LexiconManager::appendLexiconParent('list_of_lists', 'list_triple_img', 0));
+        $this->assertSame('list_of_lists_1_list_triple_img_1', LexiconManager::appendLexiconParent('list_of_lists_1', 'list_triple_img', 1));
+    }
+
+    public function testGetLexiconKeyForPathMatchesGrabberKeys(): void
+    {
+        // top-level поле
+        $this->assertSame('third_title', LexiconManager::getLexiconKeyForPath('third', [], 'title'));
+        // строка списка (idx0 → без суффиксов; idx>0 → idx в parentFieldName И суффикс листа)
+        $this->assertSame('third_list_of_lists_1_title_1', LexiconManager::getLexiconKeyForPath('third', [['field' => 'list_of_lists', 'idx' => 1]], 'title'));
+        $this->assertSame('third_list_of_lists_2_title_2', LexiconManager::getLexiconKeyForPath('third', [['field' => 'list_of_lists', 'idx' => 2]], 'title'));
+        $this->assertSame('third_list_triple_img_1_title_1', LexiconManager::getLexiconKeyForPath('third', [['field' => 'list_triple_img', 'idx' => 1]], 'title'));
+        // ВЛОЖЕННЫЙ список (path длины 2)
+        $this->assertSame('third_list_of_lists_list_triple_img_title', LexiconManager::getLexiconKeyForPath('third', [['field' => 'list_of_lists', 'idx' => 0], ['field' => 'list_triple_img', 'idx' => 0]], 'title'));
+        $this->assertSame('third_list_of_lists_1_list_triple_img_title', LexiconManager::getLexiconKeyForPath('third', [['field' => 'list_of_lists', 'idx' => 1], ['field' => 'list_triple_img', 'idx' => 0]], 'title'));
+        // пустой prefix/field → ''
+        $this->assertSame('', LexiconManager::getLexiconKeyForPath('', [], 'title'));
+        $this->assertSame('', LexiconManager::getLexiconKeyForPath('third', [], ''));
+    }
+
+    // ---------------------------------------------------------------
     // setContext() — wipe прежних статик-ключей секции (orphan/excluded)
     // ---------------------------------------------------------------
 

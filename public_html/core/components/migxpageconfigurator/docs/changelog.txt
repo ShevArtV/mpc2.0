@@ -1,3 +1,53 @@
+2.5.22-rc
+==============
+Условный рендер булевых медиа-атрибутов + preload как строка (для редактора video/audio mpcVE).
+
+HTML-boolean-атрибуты (`controls`/`autoplay`/`loop`/`muted`) включены самим ФАКТОМ присутствия — `controls="0"` всё равно включает контролы. Каттер рендерил их подстановкой значения (`controls="{$rec.controls}"`), из-за чего из фронт-редактора их нельзя было ВЫКЛЮЧИТЬ. Теперь рендерим условно.
+
+- `Cutter\PlaceholderProcessor`: булевы атрибуты (`BOOL_ATTRS`) в `setAttributes` помечаются сентинелом `@@MPCBOOL@@`, новый `renderBoolAttrs` превращает его в `{if $rec.attr}attr{/if}` (firstSymbol `{` для обычных секций / `##` для static → резолвится на final-пассе). Так атрибут выводится только при truthy-значении; `0` его не печатает. Вызов — в конце `setMediaPlaceholder` (булевы только на главном video/audio; source/img их не имеют). Лексиконизация/подстановка прочих атрибутов не затронута.
+- `Grabber\FieldValueExtractor::getMediaValue`: `preload` теперь грабится как `string` (перечислимый auto|metadata|none), а не `boolean` — иначе значение терялось (1/0) и рендер `preload="{$rec.preload}"` давал мусор. Булевы (controls/autoplay/loop/muted) остаются 1/0 (presence) — совместимо с условным рендером (`{if 1}` → есть, `{if 0}` → нет), регрессии первого рендера нет.
+- ВАЖНО: чтобы булев атрибут стал управляемым из редактора, он должен присутствовать в разметке на нарезке (иначе `{if}` не сгенерён — нечего включать/выключать).
+- Тесты: `PlaceholderProcessorTest::testSetPlaceholdersVideoBooleanAttrsConditionalRender` (+условный рендер, нет сентинела/value-подстановки) — 290/290 зелёные.
+
+2.5.21-rc
+==============
+ЕДИНОЕ решение «лексиконизировать ли поле» для каттера, грабера и редактора.
+
+Решение размазывалось и расходилось: config-поля каттер/грабер гейтили по content-type (shouldLexiconize/in_array), а rfield/TV — только по `useLexicons + exclude`, БЕЗ content-type. Итог: image-TV получал `| lexicon` (каттер) и ключ в колонке (грабер), хотя `image` нет в `mpc_translated_content`. Редактор же вообще решал по эвристике «есть ли ключ у соседей». Теперь ВСЕ идут через `LexiconManager::shouldLexiconize($contentType, $field[, $parent])` (content-type ∈ `mpc_translated_content` + `exclude_lexicons`).
+
+- `LexiconManager::contentTypeForTag($tag)` — ЕДИНЫЙ маппинг тег→content-type (img/source/picture→image, video→video, audio→audio, иначе text). Один источник для каттера и грабера.
+- `Cutter::replaceResourceMarkers` (rfield/TV): `| lexicon` ставится только если `shouldLexiconize(contentTypeForTag(tag), name)`. Было `!isExcluded(name)` без content-type.
+- `ResourceFieldGrabber::lexiconize` (rfield/TV): тот же гейт. image-TV при настройке без `image` → путь в колонке, не ключ; exclude (pagetitle) сохранён.
+- `FieldWriter` (редактор): решение тоже каноничное (`shouldLexiconize`) вместо прежней эвристики `fieldUsesLexiconKeys` (удалена). content-type: config — `inputTVtype` поля из mpc_base; TV — `modTemplateVar.type`; rfield — `text`. idx-less цепочка parentFieldName (как каттер); ключ для записи — idx-ful (`getLexiconKeyForPath`). Гейт применён и к rfield/TV-веткам редактора.
+- ВАЖНО: секции/ресурсы, нарезанные при ДРУГОЙ настройке `mpc_translated_content`, рассинхронизированы с новым решением — нужна перенарезка (`mgr_tpl`). Отметить в документации пакета.
+- Тесты: `LexiconManagerTest` (+contentTypeForTag), `ResourceFieldGrabberTest` (+image-TV не лексиконится; tdc-проп в фикстурах), `FieldWriterTest` (rfield/tv/скаляр гейтятся настройкой) — 289/289 (Unit+Snapshot) зелёные.
+
+2.5.20-rc
+==============
+Лексикон-ключи вложенных полей: единая КОНСТРУКЦИЯ parentFieldName (грабер+редактор).
+
+- Раньше формат ЛИСТА ключа был единым (`LexiconManager::getLexiconKey`), но КОНСТРУКЦИЯ `parentFieldName` для вложенности (цепочка `{field}`/`{field}_{idx}` по уровням) жила только в грабере (`ContentParser`), а редактор (`FieldWriter::makeLexiconKey`) на вложенных полях бейлил в '' → значение писалось ЛИТЕРАЛОМ в конфиг → чанк `{$field|lexicon}` рендерил ПУСТО. Итог: у нового вложенного элемента картинка сохранялась (запись-ветка ключи генерит), а скалярные поля (title/subtitle/content) — нет.
+- Конструкция вынесена в `LexiconManager`: `appendLexiconParent($parent,$field,$idx)` — один сегмент цепочки (грабер зовёт инкрементально при рекурсии); `getLexiconKeyForPath($prefix,$path,$fieldName)` — сворачивает путь и форматирует листом через `getLexiconKey` (редактор зовёт). Теперь ОБА идут через одну функцию — ключи не разъезжаются.
+- `ContentParser::parseHTML` переключён на `appendLexiconParent` (вывод побайтово тот же — Snapshot-тесты грабера зелёные). `FieldWriter::makeLexiconKey` → `getLexiconKeyForPath` (вложенность любой глубины; убран бейл на path>1).
+- ПОБОЧНО исправлен ключ строк списка при idx>0: было `{prefix}_{field}_{name}_{idx}` (неверно), стало `{prefix}_{field}_{idx}_{name}_{idx}` как у грабера (реальный лексикон: `third_list_of_lists_1_title_1`). Тест `testNewRowFieldGetsLexiconKey` приведён к верной схеме.
+- `FieldWriter::fieldUsesLexiconKeys` РАСШИРЕН: ищет лексикон-ключ поля во ВСЕХ экземплярах списка (по всем индексам всех уровней, новый рекурсивный `listFieldHasLexiconKey`), а не только у соседей в КОНКРЕТНОЙ строке-списке. Без этого у НОВОГО верхнего элемента его вложенный список целиком пуст (deep-clone) → соседей-ключей нет → поле не лексиконизировалось → значение писалось литералом → после перезагрузки чанк `{$f|lexicon}` рендерил ПУСТО («значения сохраняются, но после reload пустые»). Тест `testNewNestedFieldGetsLexiconKeyFromOtherInstances`.
+- Тесты: `LexiconManagerTest` +2, `FieldWriterTest` +1 — 286/286 (Unit+Snapshot) зелёные.
+
+2.5.19-rc
+==============
+Row-операции по вложенным спискам (path) + deep-clone новой строки.
+
+- `ConfigFieldWriter::mutateRows` — поддержка ВЛОЖЕННЫХ списков: `address.path` = путь спуска к строке-контейнеру `[{field,idx},…]` (НЕ включает целевой список), `parentField` = имя целевого списка в этой строке. Переиспользует `mutateAtPath` (декод JSON-строк по уровням). Для top-level списков path пуст (прежнее поведение). Новый `descentPath()` берёт путь ТОЛЬКО из `address.path` (для row-ops `parentField+idx` — не путь: idx тут операнд $fn). add/delete/move работают на любой глубине.
+- `ConfigFieldWriter::addRow` — новая строка теперь deep-clone образца (`blankRow`/`blankRows`): скаляры → '', ВЛОЖЕННЫЕ списки → структура каждой строки СОХРАНЯЕТСЯ рекурсивно, значения чистятся. ВАЖНО: вложенный список внутри строки `ContentParser` хранит НАТИВНЫМ массивом (json-кодируется только верхний уровень поля), поэтому deep-clone ловит и нативные массивы строк-объектов, и JSON-строки (после правок через mutateAtPath). Иначе ветка `is_array→[]` затирала дочерний список нового элемента → «row not found in path for field img» при сохранении вложенного img. Прочие нативные массивы (sources, пустые) → []. `looksLikeRows()` детектит JSON-строку строк-объектов.
+- Тесты `ConfigFieldWriterTest`: +6 (deep-clear строковой и нативной структуры, nested add/delete/move по path, ошибка пути, регрессия «img нового вложенного элемента») — 20/20 зелёные.
+
+2.5.18-rc
+==============
+Read-API лексикона: дамп карты key→value для показа ЗНАЧЕНИЙ в редакторе.
+
+- `LexiconWriter::all(identifier)` — полная карта `key=>value` лексикона ресурса (через `LexiconManager::getLexicons`). Нужна визуальному редактору (mpcVE), чтобы панель скрытых полей показывала значение, а не ключ (иначе сохранение без правки записало бы сам ключ в значение — порча).
+- `FieldWriter::readLexicons(level, resourceId)` — карта лексикона уровня (resource|global) для фронта; пусто, если `mpc_use_lexicons` выкл. Резолвит ресурс уровня (`resolveLevelResource`) + идентификатор файла. Read-only, без записи.
+
 2.5.17-rc
 ==============
 Write-API: глубокий лексикон-мерж media-записи с sources (picture/video/audio).

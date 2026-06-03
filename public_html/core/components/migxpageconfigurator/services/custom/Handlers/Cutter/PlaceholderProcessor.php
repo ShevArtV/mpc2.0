@@ -18,6 +18,15 @@ use MpcServices\Handlers\Parser;
  */
 class PlaceholderProcessor
 {
+    /**
+     * HTML-булевы атрибуты медиа: включены самим ФАКТОМ присутствия
+     * (`controls="0"` всё равно включает). Подстановкой значения их не выключить
+     * — рендерим условно: `{if $rec.controls}controls{/if}`. Каттер ставит
+     * на них сентинел в setAttributes, renderBoolAttrs превращает его в {if}.
+     */
+    private const BOOL_ATTRS = ['controls', 'autoplay', 'loop', 'muted'];
+    private const BOOL_SENTINEL = '@@MPCBOOL@@';
+
     private \modX $modx;
     private array $properties;
     private Parser $parser;
@@ -421,6 +430,11 @@ class PlaceholderProcessor
             $html = $this->wrapInCondition($condition, $html, $firstSymbol);
         }
 
+        // Сентинелы булевых атрибутов главного элемента → условный рендер {if}.
+        // Только main video/audio несёт controls/autoplay/loop/muted; source/img
+        // их не имеют, поэтому конверсия по main complexName покрывает всё.
+        $html = $this->renderBoolAttrs($html, $firstSymbol, $complexName);
+
         return $html;
     }
 
@@ -577,7 +591,12 @@ class PlaceholderProcessor
 
         foreach ($allowedAttrs as $attrName) {
             if ($row->hasAttribute($attrName)) {
-                if (empty($lexiconAttrs[$attrName])) {
+                // Булев атрибут (controls/autoplay/loop/muted): помечаем сентинелом,
+                // renderBoolAttrs обернёт его в {if} (условный рендер вместо
+                // подстановки значения — иначе `controls="0"` не выключается).
+                if (in_array($attrName, self::BOOL_ATTRS, true)) {
+                    $row->setAttribute($attrName, self::BOOL_SENTINEL);
+                } elseif (empty($lexiconAttrs[$attrName])) {
                     $row->setAttribute($attrName, "{$firstSymbol}{$complexName}.{$attrName}}");
                 } elseif ($deferVar) {
                     $row->setAttribute($attrName, "##" . "$complexName.$attrName" . " | lexicon}");
@@ -588,6 +607,23 @@ class PlaceholderProcessor
         }
 
         return $row;
+    }
+
+    /**
+     * Превращает сентинел булевых атрибутов в условный Fenom-рендер:
+     * `controls="@@MPCBOOL@@"` → `{if $rec.controls}controls{/if}` (firstSymbol:
+     * `{` для обычных секций, `##` для static — резолвится в `{` на final-пассе).
+     * Так булев атрибут выводится ТОЛЬКО при truthy-значении в конфиге; `0` —
+     * не выводится (HTML-boolean нельзя выключить значением). PURE.
+     */
+    private function renderBoolAttrs(string $html, string $firstSymbol, string $complexName): string
+    {
+        $pattern = '/\s+(' . implode('|', self::BOOL_ATTRS) . ')="' . preg_quote(self::BOOL_SENTINEL, '/') . '"/';
+        $out = preg_replace_callback($pattern, function (array $m) use ($firstSymbol, $complexName) {
+            $attr = $m[1];
+            return ' ' . $firstSymbol . 'if ' . $complexName . '.' . $attr . '}' . $attr . $firstSymbol . '/if}';
+        }, $html);
+        return $out ?? $html;
     }
 
     // ---------------------------------------------------------------

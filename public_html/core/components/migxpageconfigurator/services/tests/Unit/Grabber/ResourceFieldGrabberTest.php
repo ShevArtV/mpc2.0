@@ -106,10 +106,11 @@ class ResourceFieldGrabberTest extends TestCase
     private function lexManager(): \MpcServices\Handlers\Grabber\LexiconManager
     {
         return new \MpcServices\Handlers\Grabber\LexiconManager(new \MpcTests\Stubs\ModxStub(), [
-            'useLexicons'          => true,
-            'lexiconFilenameField' => 'id',
-            'allowedTags'          => [''],
-            'allowModxTags'        => false,
+            'useLexicons'              => true,
+            'lexiconFilenameField'     => 'id',
+            'allowedTags'              => [''],
+            'allowModxTags'            => false,
+            'translatableContentTypes' => ['text', 'image', 'poster', 'video', 'audio'],
         ]);
     }
 
@@ -134,6 +135,7 @@ class ResourceFieldGrabberTest extends TestCase
             'lexiconFilenameField' => 'id',
             'allowedTags'          => [''],
             'allowModxTags'        => false,
+            'translatableContentTypes' => ['text', 'image', 'poster', 'video', 'audio'],
             'excludeLexiconFields' => ['pagetitle'],
         ]);
         $grabber = new ResourceFieldGrabber(new Parser(), [], null, $lm, true);
@@ -167,6 +169,7 @@ class ResourceFieldGrabberTest extends TestCase
             'lexiconFilenameField' => 'id',
             'allowedTags'          => [''],
             'allowModxTags'        => false,
+            'translatableContentTypes' => ['text', 'image', 'poster', 'video', 'audio'],
             'excludeLexiconFields' => ['subtitle'],
         ]);
         $grabber = new ResourceFieldGrabber(new Parser(), [], null, $lm, true);
@@ -176,6 +179,28 @@ class ResourceFieldGrabberTest extends TestCase
 
         $this->assertSame('Подзаголовок', $res->getTVValue('subtitle')); // TV = ЗНАЧЕНИЕ, не ключ
         $this->assertSame([], $lm->lexicons);                            // лексикон не пишется
+    }
+
+    /** Канон: image-TV при mpc_translated_content БЕЗ 'image' НЕ лексиконится
+     *  (хранит путь, не ключ) — content-type определяется по тегу маркера. */
+    public function testImageTvNotLexiconizedWhenImageNotTranslatable(): void
+    {
+        $lm = new \MpcServices\Handlers\Grabber\LexiconManager(new \MpcTests\Stubs\ModxStub(), [
+            'useLexicons'              => true,
+            'lexiconFilenameField'     => 'id',
+            'allowedTags'              => [''],
+            'allowModxTags'            => false,
+            'translatableContentTypes' => ['text', 'contact'], // image НЕ переводим
+        ]);
+        $grabber = new ResourceFieldGrabber(new Parser(), [], null, $lm, true);
+        $res = new ModxObjectStub('modResource', ['id' => 7]);
+
+        $grabber->grab('<img data-mpc-tv="cover" src="/img/cover.jpg"><span data-mpc-tv="subtitle">Текст</span>', $res);
+
+        $this->assertSame('/img/cover.jpg', $res->getTVValue('cover'));               // image-TV: путь, НЕ ключ
+        $this->assertSame('mpc_resource_tv_subtitle', $res->getTVValue('subtitle'));  // text-TV: ключ (text переводим)
+        $this->assertArrayNotHasKey('mpc_resource_tv_cover', $lm->lexicons[7] ?? []); // ключ image не заведён
+        $this->assertSame('Текст', $lm->lexicons[7]['mpc_resource_tv_subtitle']);
     }
 
     /** rfield и tv с ОДНИМ именем дают РАЗНЫЕ ключи лексикона (без коллизии). */

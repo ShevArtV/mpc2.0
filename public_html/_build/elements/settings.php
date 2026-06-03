@@ -188,7 +188,7 @@ return [
     ],
     'mpc_translated_content' => [
         'xtype' => 'textarea',
-        'value' => 'text,image,poster,video,audio',
+        'value' => 'text,contact',
         'area' => 'default',
     ],
     'mpc_lexicon_filename_field' => [
@@ -223,7 +223,7 @@ return [
     ],
     'mpc_allowed_tags' => [
         'xtype' => 'textarea',
-        'value' => '',
+        'value' => 'b,p,span,h1,h2,h3,h4,h5,h6,small,i,blockquote,mark,ul,li,ol',
         'area' => 'default',
     ],
     'mpc_allow_modx_tags' =>  [

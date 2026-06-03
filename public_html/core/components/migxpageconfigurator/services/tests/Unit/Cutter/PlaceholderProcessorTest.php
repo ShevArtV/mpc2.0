@@ -408,6 +408,22 @@ class PlaceholderProcessorTest extends TestCase
         $this->assertStringNotContainsString("controls}' | lexicon", $html);
     }
 
+    public function testSetPlaceholdersVideoBooleanAttrsConditionalRender(): void
+    {
+        // Булевы атрибуты (controls/muted/…) рендерятся УСЛОВНО: выводятся только
+        // при truthy-значении в конфиге. Подстановкой значения их не выключить
+        // (`controls="0"` всё равно включает), поэтому НЕ `controls="{$...}"`,
+        // а `{if $clip[0].controls}controls{/if}`.
+        $html = $this->lexHtml(
+            '<section data-mpc-section="test"><video data-mpc-field="clip" src="m.mp4" controls muted></video></section>',
+            ['video']
+        );
+        $this->assertStringContainsString('{if $clip[0].controls}controls{/if}', $html);
+        $this->assertStringContainsString('{if $clip[0].muted}muted{/if}', $html);
+        $this->assertStringNotContainsString('controls="{$clip[0].controls}"', $html);
+        $this->assertStringNotContainsString('@@MPCBOOL@@', $html);
+    }
+
     public function testSetPlaceholdersVideoTitleWithLexicon(): void
     {
         $html = $this->lexHtml(

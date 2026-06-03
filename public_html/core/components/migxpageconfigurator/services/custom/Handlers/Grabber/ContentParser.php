@@ -68,10 +68,10 @@ class ContentParser
                 $mediaLists[$fieldName][] = $row;
             } elseif (!empty($items = $this->parser->findByAttribute($this->parser->getHTMLString($row), '[' . $itemAttrName . ']'))) {
                 foreach ($items as $k => $item) {
-                    $parentFieldName = $k ? "{$fieldName}_{$k}" : $fieldName;
-                    $parentFieldName = $lexiconOptions['parentFieldName']
-                        ? "{$lexiconOptions['parentFieldName']}_$parentFieldName"
-                        : $parentFieldName;
+                    // Конструкция parentFieldName — единая с редактором (LexiconManager).
+                    $parentFieldName = LexiconManager::appendLexiconParent(
+                        (string)($lexiconOptions['parentFieldName'] ?? ''), $fieldName, $k
+                    );
 
                     $fields[$fieldName][$k]['MIGX_id'] = $k + 1;
                     $value = $this->parseHTML($this->parser->getHTMLString($item), [

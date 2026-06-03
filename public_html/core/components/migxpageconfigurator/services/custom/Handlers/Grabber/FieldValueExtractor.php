@@ -139,7 +139,9 @@ class FieldValueExtractor
             'controls' => 'boolean',
             'loop' => 'boolean',
             'muted' => 'boolean',
-            'preload' => 'boolean',
+            // preload — перечислимый (auto|metadata|none), а НЕ HTML-boolean:
+            // храним строковое значение, иначе теряется (рендерится подстановкой).
+            'preload' => 'string',
         ];
 
         if ($element->tagName() === 'video') {

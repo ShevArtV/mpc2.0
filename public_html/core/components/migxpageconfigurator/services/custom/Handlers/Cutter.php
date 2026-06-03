@@ -376,13 +376,19 @@ class Cutter extends Base
             }
 
             $expr = $exprPrefix . $name;           // $resource.pagetitle / $resource.tvs.myTV
-            // Лексикон-форма (rfield, useLexicons): перевод по ключу
-            // mpc_resource_<field>; иначе — прямое чтение колонки/TV. Поля из
-            // excludeLexiconFields (напр. pagetitle) — всегда прямое чтение,
-            // иначе каттер ставит `| lexicon`, а grabber ключ не пишет → пусто.
+            // Лексикон-форма (rfield/TV, useLexicons): перевод по ключу
+            // mpc_resource_<field>; иначе — прямое чтение колонки/TV. Решение —
+            // ЕДИНОЕ с грабером и редактором: shouldLexiconize (content-type ∈
+            // mpc_translated_content + exclude). content-type — по тегу маркера
+            // (img→image и т.д.), prefix пуст (rfield/TV вне секции). Так image-TV
+            // не получает `| lexicon`, если image не в mpc_translated_content.
+            $this->lexiconManager->setContext('', false);
             $useLexicon = $lexiconize
                 && !empty($this->properties['useLexicons'])
-                && !$this->lexiconManager->isExcluded($name);
+                && $this->lexiconManager->shouldLexiconize(
+                    LexiconManager::contentTypeForTag($item->tagName()),
+                    $name
+                );
             $pls = $useLexicon
                 ? "{'" . $lexiconKeyPrefix . $name . "' | lexicon}"
                 : '{' . $expr . '}';

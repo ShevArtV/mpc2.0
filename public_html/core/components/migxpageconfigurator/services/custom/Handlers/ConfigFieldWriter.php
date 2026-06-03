@@ -146,11 +146,15 @@ class ConfigFieldWriter
     /**
      * Добавить ПУСТУЮ строку в конец списка (parentField). Структура под-полей
      * копируется из первой существующей строки (значения сброшены), MIGX_id = max+1.
-     * Лексиконы: новые под-поля — пустые литералы (лексиконизируются на нарезке).
+     * ВЛОЖЕННЫЕ списки (JSON-строка строк) — структура СОХРАНЯЕТСЯ рекурсивно, а
+     * значения чистятся (чтобы в новом элементе дочерний список был заполняем —
+     * каждое поле получает плейсхолдер на фронте). Лексиконы: новые под-поля —
+     * пустые литералы (лексиконизируются на нарезке с `1`).
      */
     public function addRow(string $configJson, array $address): array
     {
-        return $this->mutateRows($configJson, $address, static function (array $rows) {
+        $self = $this;
+        return $this->mutateRows($configJson, $address, static function (array $rows) use ($self) {
             $maxId = 0;
             $template = [];
             foreach ($rows as $row) {
@@ -161,15 +165,65 @@ class ConfigFieldWriter
                     }
                 }
             }
-            $newRow = ['MIGX_id' => $maxId + 1];
-            foreach ($template as $k => $v) {
-                if ($k !== 'MIGX_id') {
-                    $newRow[$k] = is_array($v) ? [] : '';
-                }
-            }
-            $rows[] = $newRow;
+            $rows[] = $self->blankRow($template, $maxId + 1);
             return $rows;
         });
+    }
+
+    /**
+     * Пустая строка по образцу $template: скаляры → '', нативные массивы → [],
+     * вложенные списки (JSON-строка строк-объектов) → структура каждой строки
+     * сохраняется, но значения чистятся (рекурсивно). Так дочерний список нового
+     * элемента приходит заполняемым, а не пропадает. PURE.
+     *
+     * @internal вызывается из addRow (замыкание); публичность — для замыкания.
+     */
+    public function blankRow(array $template, int $newId): array
+    {
+        $row = ['MIGX_id' => $newId];
+        foreach ($template as $k => $v) {
+            if ($k === 'MIGX_id') {
+                continue;
+            }
+            if (is_array($v)) {
+                // НАТИВНЫЙ массив. Вложенный список (массив строк-объектов) хранится
+                // именно так: ContentParser кодирует JSON только верхний уровень поля,
+                // вложенность остаётся нативной. Сохраняем структуру (deep-clone),
+                // иначе дочерний список нового элемента затрётся. Прочее (sources,
+                // пустой массив) — чистим в [].
+                $row[$k] = ($v !== [] && is_array(reset($v))) ? $this->blankRows($v) : [];
+            } elseif ($this->looksLikeRows($v)) {
+                // То же, но вложенный список лежит JSON-строкой (после правок через
+                // mutateAtPath) — сохраняем строкой.
+                $row[$k] = json_encode($this->blankRows($this->decodeRows($v)), JSON_UNESCAPED_UNICODE);
+            } else {
+                $row[$k] = '';
+            }
+        }
+        return $row;
+    }
+
+    /** Пустые версии массива строк (рекурсивно, MIGX_id переиндексирован). */
+    private function blankRows(array $rows): array
+    {
+        $out = [];
+        $nid = 0;
+        foreach ($rows as $r) {
+            if (is_array($r)) {
+                $out[] = $this->blankRow($r, ++$nid);
+            }
+        }
+        return $out;
+    }
+
+    /** Значение похоже на migx-строки (JSON-массив объектов или пустой массив)? */
+    private function looksLikeRows($v): bool
+    {
+        if (!is_string($v) || $v === '') {
+            return false;
+        }
+        $d = json_decode($v, true);
+        return is_array($d) && ($d === [] || is_array(reset($d)));
     }
 
     /** Удалить строку по idx. Значения остальных строк (вкл. лексикон-ключи) едут с ними. */
@@ -204,6 +258,11 @@ class ConfigFieldWriter
     /**
      * Общая мутация массива строк поля-списка. $fn(array $rows): ?array — возвращает
      * новый массив строк или null (ошибка индекса). PURE.
+     *
+     * Вложенные списки: address.path — путь СПУСКА к строке-контейнеру [{field,idx},…]
+     * (НЕ включает целевой список), parentField — имя целевого списка в той строке.
+     * Для top-level list path пуст. parentField+idx как путь для row-ops НЕ
+     * используем (idx здесь — операнд $fn, а не сегмент спуска).
      */
     private function mutateRows(string $configJson, array $address, callable $fn): array
     {
@@ -221,18 +280,55 @@ class ConfigFieldWriter
             return $this->err('section not found: ' . $section);
         }
 
-        $rows = $this->decodeRows($config[$key][$parentField] ?? '');
-        $newRows = $fn($rows);
-        if ($newRows === null) {
-            return $this->err('invalid row index for ' . $parentField);
+        $descent = $this->descentPath($address);
+        if ($descent) {
+            $failed = false;
+            $self = $this;
+            $ok = $this->mutateAtPath($config[$key], $descent, 0, function (array &$row) use ($parentField, $fn, $self, &$failed) {
+                $rows = $self->decodeRows($row[$parentField] ?? '');
+                $newRows = $fn($rows);
+                if ($newRows === null) {
+                    $failed = true;
+                    return false;
+                }
+                $row[$parentField] = json_encode(array_values($newRows), JSON_UNESCAPED_UNICODE);
+                return true;
+            });
+            if (!$ok || $failed) {
+                return $this->err('invalid nested row path/index for ' . $parentField);
+            }
+        } else {
+            $rows = $this->decodeRows($config[$key][$parentField] ?? '');
+            $newRows = $fn($rows);
+            if ($newRows === null) {
+                return $this->err('invalid row index for ' . $parentField);
+            }
+            $config[$key][$parentField] = json_encode(array_values($newRows), JSON_UNESCAPED_UNICODE);
         }
-        $config[$key][$parentField] = json_encode(array_values($newRows), JSON_UNESCAPED_UNICODE);
 
         return [
             'success' => true,
             'message' => 'ok',
             'data'    => ['json' => json_encode($config, JSON_UNESCAPED_UNICODE)],
         ];
+    }
+
+    /**
+     * Путь СПУСКА к строке-контейнеру для row-операций над вложенным списком —
+     * ТОЛЬКО из address.path (parentField+idx тут не путь: idx — операнд). Пуст
+     * для top-level списков.
+     */
+    private function descentPath(array $address): array
+    {
+        $out = [];
+        if (!empty($address['path']) && is_array($address['path'])) {
+            foreach ($address['path'] as $seg) {
+                if (is_array($seg) && isset($seg['field'], $seg['idx']) && $seg['field'] !== '') {
+                    $out[] = ['field' => (string)$seg['field'], 'idx' => (int)$seg['idx']];
+                }
+            }
+        }
+        return $out;
     }
 
     private function findSectionKey(array $config, string $section): ?string

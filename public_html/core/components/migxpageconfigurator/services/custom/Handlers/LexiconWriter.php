@@ -53,6 +53,19 @@ class LexiconWriter
         return array_key_exists($key, $this->lm->getLexicons($identifier, $this->basePath));
     }
 
+    /**
+     * Полная карта key→value лексикона ресурса. Для показа ЗНАЧЕНИЙ (а не ключей)
+     * в панели скрытых полей редактора. Пусто, если файла/идентификатора нет.
+     */
+    public function all(string $identifier): array
+    {
+        if ($identifier === '') {
+            return [];
+        }
+        $map = $this->lm->getLexicons($identifier, $this->basePath);
+        return is_array($map) ? $map : [];
+    }
+
     /** Обновляет значение ключа, сохраняя остальные записи файла. */
     public function set(string $identifier, string $key, string $value): bool
     {

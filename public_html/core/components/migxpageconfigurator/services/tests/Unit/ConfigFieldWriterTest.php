@@ -216,4 +216,144 @@ class ConfigFieldWriterTest extends TestCase
         ];
         $this->assertFalse($w->setValue($this->nestedConfig(), $address, 'x')['success']);
     }
+
+    // --- row-операции по path: вложенные списки + deep-clear --------------
+
+    public function testAddRowDeepClearsNestedStructure(): void
+    {
+        $w = new ConfigFieldWriter();
+        // добавляем строку в top-level catalog: новая строка сохраняет СТРУКТУРУ
+        // вложенного items (1 строка), но значения пустые → дочерний список заполняем.
+        $res = $w->addRow($this->nestedConfig(), ['section' => 'cat', 'parentField' => 'catalog']);
+        $this->assertTrue($res['success'], $res['message']);
+
+        $catalog = json_decode(json_decode($res['data']['json'], true)['1']['catalog'], true);
+        $this->assertCount(2, $catalog);
+        $newRow = $catalog[1];
+        $this->assertSame(2, $newRow['MIGX_id']);
+        $this->assertSame('', $newRow['title']);
+
+        $items = json_decode($newRow['items'], true);
+        $this->assertCount(1, $items, 'структура вложенного списка сохранена');
+        $this->assertSame('', $items[0]['title'], 'значения вложенной строки очищены');
+        $this->assertSame(1, $items[0]['MIGX_id']);
+    }
+
+    public function testAddRowToNestedListByPath(): void
+    {
+        $w = new ConfigFieldWriter();
+        $address = [
+            'section'     => 'cat',
+            'parentField' => 'items',
+            'path'        => [['field' => 'catalog', 'idx' => 0]],
+        ];
+        $res = $w->addRow($this->nestedConfig(), $address);
+        $this->assertTrue($res['success'], $res['message']);
+
+        $catalog = json_decode(json_decode($res['data']['json'], true)['1']['catalog'], true);
+        $items = json_decode($catalog[0]['items'], true);
+        $this->assertCount(2, $items, 'во вложенный список добавлена строка');
+        $this->assertSame('Старый товар', $items[0]['title'], 'существующая строка цела');
+        $this->assertSame(2, $items[1]['MIGX_id']);
+        $this->assertSame('', $items[1]['title']);
+    }
+
+    public function testDeleteAndMoveRowInNestedListByPath(): void
+    {
+        $w = new ConfigFieldWriter();
+        $base = [
+            'section'     => 'cat',
+            'parentField' => 'items',
+            'path'        => [['field' => 'catalog', 'idx' => 0]],
+        ];
+        // добавляем 2-ю вложенную строку и пишем в неё значение
+        $cfg = $w->addRow($this->nestedConfig(), $base)['data']['json'];
+        $cfg = $w->setValue($cfg, [
+            'section'   => 'cat', 'fieldName' => 'title',
+            'path'      => [['field' => 'catalog', 'idx' => 0], ['field' => 'items', 'idx' => 1]],
+        ], 'Второй')['data']['json'];
+
+        // move 0 -> 1 (значение едет со строкой)
+        $moved = $w->moveRow($cfg, array_merge($base, ['fromIdx' => 0, 'toIdx' => 1]));
+        $this->assertTrue($moved['success'], $moved['message']);
+        $catalog = json_decode(json_decode($moved['data']['json'], true)['1']['catalog'], true);
+        $items = json_decode($catalog[0]['items'], true);
+        $this->assertSame('Второй', $items[0]['title']);
+        $this->assertSame('Старый товар', $items[1]['title']);
+
+        // delete idx 0 из вложенного списка
+        $del = $w->deleteRow($cfg, array_merge($base, ['idx' => 0]));
+        $this->assertTrue($del['success'], $del['message']);
+        $catalog2 = json_decode(json_decode($del['data']['json'], true)['1']['catalog'], true);
+        $items2 = json_decode($catalog2[0]['items'], true);
+        $this->assertCount(1, $items2);
+        $this->assertSame('Второй', $items2[0]['title']);
+    }
+
+    public function testRowOpBadNestedPathFails(): void
+    {
+        $w = new ConfigFieldWriter();
+        $res = $w->addRow($this->nestedConfig(), [
+            'section'     => 'cat',
+            'parentField' => 'items',
+            'path'        => [['field' => 'catalog', 'idx' => 9]],
+        ]);
+        $this->assertFalse($res['success']);
+    }
+
+    // --- реальный формат грабера: вложенный список = НАТИВНЫЙ массив ------
+    // ContentParser json-кодирует только ВЕРХНИЙ уровень поля, поэтому вложенный
+    // список внутри строки лежит нативным массивом (не JSON-строкой). Регрессия:
+    // «row not found in path for field img» при сохранении img нового элемента.
+
+    private function nativeNestedConfig(): string
+    {
+        return json_encode([
+            '1' => [
+                'section_name'  => 'cat',
+                'MIGX_formname' => 'mpc_cat',
+                'catalog'       => json_encode([
+                    ['MIGX_id' => 1, 'title' => 'Группа', 'items' => [
+                        ['MIGX_id' => 1, 'title' => 'Товар', 'img' => [['MIGX_id' => 1, 'src' => 'a.jpg', 'alt' => 'A']]],
+                    ]],
+                ], JSON_UNESCAPED_UNICODE),
+            ],
+        ], JSON_UNESCAPED_UNICODE);
+    }
+
+    public function testAddRowDeepClearsNativeNestedStructure(): void
+    {
+        $w = new ConfigFieldWriter();
+        $res = $w->addRow($this->nativeNestedConfig(), ['section' => 'cat', 'parentField' => 'catalog']);
+        $this->assertTrue($res['success'], $res['message']);
+
+        $catalog = json_decode(json_decode($res['data']['json'], true)['1']['catalog'], true);
+        $this->assertCount(2, $catalog);
+        $new = $catalog[1];
+        $items = $new['items'];
+        $this->assertIsArray($items, 'вложенный нативный список сохранён как массив');
+        $this->assertCount(1, $items, 'структура вложенного списка не затёрта');
+        $this->assertSame('', $items[0]['title'], 'значения вложенной строки очищены');
+        $this->assertSame('', $items[0]['img'][0]['src'], 'img внутри вложенной строки очищен, структура цела');
+    }
+
+    public function testSetNestedImgInNewTopRowResolves(): void
+    {
+        $w = new ConfigFieldWriter();
+        // добавляем новую верхнюю строку (с вложенной структурой), затем пишем img
+        // в её вложенный элемент по path — раньше падало «row not found».
+        $cfg = $w->addRow($this->nativeNestedConfig(), ['section' => 'cat', 'parentField' => 'catalog'])['data']['json'];
+        $res = $w->setValue($cfg, [
+            'section'   => 'cat',
+            'fieldName' => 'img',
+            'path'      => [['field' => 'catalog', 'idx' => 1], ['field' => 'items', 'idx' => 0]],
+        ], json_encode([['MIGX_id' => 1, 'src' => 'new.jpg']]));
+        $this->assertTrue($res['success'], $res['message']);
+
+        $catalog = json_decode(json_decode($res['data']['json'], true)['1']['catalog'], true);
+        // items после правки через mutateAtPath перекодирован в JSON-строку.
+        $items = is_string($catalog[1]['items']) ? json_decode($catalog[1]['items'], true) : $catalog[1]['items'];
+        $img = is_string($items[0]['img']) ? json_decode($items[0]['img'], true) : $items[0]['img'];
+        $this->assertSame('new.jpg', $img[0]['src']);
+    }
 }

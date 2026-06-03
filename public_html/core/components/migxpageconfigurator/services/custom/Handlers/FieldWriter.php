@@ -44,6 +44,14 @@ class FieldWriter
 
     private ?LexiconWriter $lexWriterInstance = null;
 
+    /** Props для LexiconManager (решение «лексиконизировать»: content-type + exclude). */
+    private array $lmProps;
+
+    private ?\MpcServices\Handlers\Grabber\LexiconManager $lmInstance = null;
+
+    /** Кэш: имя поля mpc_base → inputTVtype (для content-type config-полей). */
+    private ?array $baseInputTypes = null;
+
     public function __construct(\modX $modx, array $properties = [])
     {
         $this->modx = $modx;
@@ -75,6 +83,101 @@ class FieldWriter
             'allowedTags'          => explode(',', (string)$this->modx->getOption('mpc_allowed_tags', null, '')),
             'allowModxTags'        => (bool)$this->modx->getOption('mpc_allow_modx_tags', null, false),
         ];
+
+        // Решение «лексиконизировать ли поле» берём КАНОНИЧНОЕ (как нарезка):
+        // content-type ∈ mpc_translated_content + exclude_lexicons. Те же props,
+        // что собирает Base::initialize для грабера/каттера.
+        $translatable = (string)$this->modx->getOption('mpc_translated_content', '', 'text,image,poster,video,audio');
+        $excludeLexiconFields = [];
+        $excludeFile = (string)$this->modx->getOption(
+            'mpc_exclude_lexicons_filename',
+            '',
+            'components/migxpageconfigurator/services/exclude_lexicons.inc.php'
+        );
+        if ($excludeFile !== '') {
+            $excludePath = (string)$this->modx->getOption('core_path', null, '') . $excludeFile;
+            if (is_file($excludePath)) {
+                include $excludePath; // задаёт/дополняет $excludeLexiconFields
+            }
+        }
+        $this->lmProps = array_merge($this->lexProps, [
+            'useLexicons'              => $this->useLexicons,
+            'translatableContentTypes' => array_map('trim', explode(',', $translatable)),
+            'excludeLexiconFields'     => is_array($excludeLexiconFields) ? $excludeLexiconFields : [],
+        ]);
+    }
+
+    /** LexiconManager для решения «лексиконизировать» (ленивый; useLexicons — текущий). */
+    private function lexiconManager(): \MpcServices\Handlers\Grabber\LexiconManager
+    {
+        if ($this->lmInstance === null) {
+            $props = $this->lmProps;
+            $props['useLexicons'] = $this->useLexicons;
+            $this->lmInstance = new \MpcServices\Handlers\Grabber\LexiconManager($this->modx, $props);
+        }
+        return $this->lmInstance;
+    }
+
+    /**
+     * Каноничное решение «лексиконизировать ли поле» — ТО ЖЕ, что нарезка
+     * (`LexiconManager::shouldLexiconize`): content-type ∈ mpc_translated_content
+     * + exclude_lexicons (по имени / полному пути / префиксному ключу). Заменяет
+     * прежнюю эвристику «есть ли ключ у соседей».
+     *
+     * @param string $contentType text|image|… (по виду поля, как у грабера)
+     * @param array  $path        путь строк [{field,idx},…] — для idx-less цепочки
+     *                            parentFieldName (как каттер, на уровне схемы)
+     * @param string $prefix      lexicon_prefix секции (config-поля) или '' (rfield/tv)
+     */
+    private function shouldLexiconizeField(string $contentType, string $fieldName, array $path, string $prefix, bool $isStatic): bool
+    {
+        $parent = '';
+        foreach ($path as $seg) {
+            $parent = \MpcServices\Handlers\Grabber\LexiconManager::appendLexiconParent($parent, (string)$seg['field'], 0);
+        }
+        $lm = $this->lexiconManager();
+        $lm->setContext($prefix, $isStatic);
+        return $lm->shouldLexiconize($contentType, $fieldName, $parent);
+    }
+
+    /** Content-type поля по виду: config → inputTVtype из mpc_base; tv → modTemplateVar.type; image→image, иначе text. */
+    private function mapInputToContentType(string $inputType): string
+    {
+        return stripos($inputType, 'image') !== false ? 'image' : 'text';
+    }
+
+    private function configFieldContentType(string $fieldName): string
+    {
+        return $this->mapInputToContentType($this->baseInputType($fieldName));
+    }
+
+    private function tvContentType(string $tvName): string
+    {
+        $tv = $this->modx->getObject('modTemplateVar', ['name' => $tvName]);
+        return $this->mapInputToContentType($tv ? (string)$tv->get('type') : '');
+    }
+
+    /** inputTVtype поля из formtabs mpc_base (кэш по всем табам). '' если не найдено. */
+    private function baseInputType(string $fieldName): string
+    {
+        if ($this->baseInputTypes === null) {
+            $this->baseInputTypes = [];
+            $base = (string)$this->modx->getOption('mpc_base_section_name', null, 'mpc_base');
+            if ($cfg = $this->modx->getObject('migxConfig', ['name' => $base])) {
+                $tabs = json_decode((string)$cfg->get('formtabs'), true);
+                if (is_array($tabs)) {
+                    foreach ($tabs as $tab) {
+                        foreach ($tab['fields'] ?? [] as $f) {
+                            $name = (string)($f['field'] ?? '');
+                            if ($name !== '' && !isset($this->baseInputTypes[$name])) {
+                                $this->baseInputTypes[$name] = (string)($f['inputTVtype'] ?? '');
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return $this->baseInputTypes[$fieldName] ?? '';
     }
 
     /**
@@ -120,7 +223,9 @@ class FieldWriter
         // если у целевого ресурса этот ключ уже есть (т.е. ресурс mpc-управляемый/
         // лексиконизированный). Иначе (обычная статья из сниппета, ключа нет) —
         // пишем в колонку. Колонку при лексиконе не трогаем — рендер берёт перевод.
-        if ($this->useLexicons) {
+        // Гейт mpc_translated_content + exclude (как нарезка): rfield = content-type
+        // 'text'; если 'text' не переводим / поле исключено — в колонку, не в лексикон.
+        if ($this->useLexicons && $this->shouldLexiconizeField('text', $field, [], '', false)) {
             $writer = $this->lexiconWriter();
             $ident  = $writer->identifier($rid);
             if ($writer->has($ident, 'mpc_resource_' . $field)) {
@@ -155,7 +260,8 @@ class FieldWriter
         // ключ mpc_resource_tv_<name> в файле лексикона ресурса. Пишем в лексикон
         // ТОЛЬКО если ключ у ресурса уже есть (TV лексиконизирован при нарезке);
         // иначе — прямой setTVValue. Значение TV (колонку) при лексиконе не трогаем.
-        if ($this->useLexicons) {
+        // Гейт mpc_translated_content + exclude: content-type TV из БД (modTemplateVar.type).
+        if ($this->useLexicons && $this->shouldLexiconizeField($this->tvContentType($tv), $tv, [], '', false)) {
             $writer = $this->lexiconWriter();
             $ident  = $writer->identifier($rid);
             if ($writer->has($ident, 'mpc_resource_tv_' . $tv)) {
@@ -243,7 +349,13 @@ class FieldWriter
                 return $this->result(true, 'saved', ['type' => 'field', 'level' => $level, 'lexicon' => true]);
             } elseif (is_string($value) && $value !== '' && !$this->isRecordValue($value)
                 && ($current === null || $current === '' || (is_string($current) && !$writer->has($ident, $current)))
-                && $this->fieldUsesLexiconKeys($configJson, $address, $writer, $ident)) {
+                && $this->shouldLexiconizeField(
+                    $this->configFieldContentType((string)($address['fieldName'] ?? '')),
+                    (string)($address['fieldName'] ?? ''),
+                    $this->addressPath($address),
+                    $this->sectionPrefix($configJson, (string)($address['section'] ?? '')),
+                    (string)($address['level'] ?? '') === 'global'
+                )) {
                 // НОВОЕ лексиконизируемое поле (напр. поле только что добавленной
                 // строки): ключа ещё нет. Генерим ключ как грабер, пишем значение
                 // в лексикон, в конфиг кладём КЛЮЧ — иначе чанк {$field|lexicon}
@@ -280,7 +392,7 @@ class FieldWriter
      * {@see \MpcServices\Handlers\Grabber\LexiconManager::getLexiconKey} (та же,
      * что у грабера), чтобы ключи редактора и грабера не разъезжались (напр. idx=0
      * → без суффикса). prefix — из lexicon_prefix секции. '' если префикса нет.
-     * Вложенность (путь >1) пока не генерим (редко; вернётся '' → литерал).
+     * Вложенность любой глубины — через getLexiconKeyForPath (единая схема).
      */
     private function makeLexiconKey(string $configJson, array $address): string
     {
@@ -290,16 +402,12 @@ class FieldWriter
             return '';
         }
 
-        $path = $this->addressPath($address);
-        if (count($path) > 1) {
-            return ''; // вложенные новые поля — отдельно
-        }
-        $options = ['prefix' => $prefix, 'fieldName' => $field];
-        if ($path) {
-            $options['parentFieldName'] = $path[0]['field'];
-            $options['idx']             = $path[0]['idx'];
-        }
-        return \MpcServices\Handlers\Grabber\LexiconManager::getLexiconKey($options);
+        // Вложенность любой глубины — ключ собирает ЕДИНАЯ функция (та же схема
+        // parentFieldName, что у грабера): top-level, строка списка (любой idx),
+        // вложенная строка. Раньше тут был бейл на path>1 (→ литерал → пусто).
+        return \MpcServices\Handlers\Grabber\LexiconManager::getLexiconKeyForPath(
+            $prefix, $this->addressPath($address), $field
+        );
     }
 
     /** lexicon_prefix секции из конфига ('' если нет). */
@@ -479,61 +587,6 @@ class FieldWriter
         ]);
     }
 
-    /**
-     * Лексиконизируется ли поле — смотрим то же поле в ДРУГИХ строках того же
-     * списка: если там лежит лексикон-ключ → да (тогда новое значение тоже под
-     * ключом). Иначе (литералы / нет соседей) → false, пишем литералом.
-     */
-    private function fieldUsesLexiconKeys(string $configJson, array $address, LexiconWriter $writer, string $ident): bool
-    {
-        $path = $this->addressPath($address);
-        if (!$path) {
-            return false; // top-level: не угадываем, пишем литералом
-        }
-        $config = json_decode($configJson, true);
-        if (!is_array($config)) {
-            return false;
-        }
-        $section = (string)($address['section'] ?? '');
-        $field   = (string)($address['fieldName'] ?? '');
-        $container = null;
-        foreach ($config as $s) {
-            if (is_array($s) && (($s['section_name'] ?? null) === $section || ($s['MIGX_formname'] ?? null) === $section)) {
-                $container = $s;
-                break;
-            }
-        }
-        if ($container === null) {
-            return false;
-        }
-
-        // Спускаемся по пути до контейнера строк нашего поля (последний сегмент).
-        for ($d = 0, $n = count($path); $d < $n; $d++) {
-            $seg  = $path[$d];
-            $rows = $container[$seg['field']] ?? null;
-            if (is_string($rows)) {
-                $rows = json_decode($rows, true);
-            }
-            if (!is_array($rows)) {
-                return false;
-            }
-            if ($d === $n - 1) {
-                foreach ($rows as $i => $row) {
-                    if ($i === (int)$seg['idx'] || !is_array($row)) {
-                        continue;
-                    }
-                    $v = $row[$field] ?? null;
-                    if (is_string($v) && $v !== '' && $writer->has($ident, $v)) {
-                        return true;
-                    }
-                }
-                return false;
-            }
-            $container = $rows[(int)$seg['idx']] ?? [];
-        }
-        return false;
-    }
-
     /** Нормализует адрес в путь [{field,idx},…] (из path либо parentField+idx). */
     private function addressPath(array $address): array
     {
@@ -666,6 +719,23 @@ class FieldWriter
             $this->lexWriterInstance = new LexiconWriter($this->modx, $this->lexProps);
         }
         return $this->lexWriterInstance;
+    }
+
+    /**
+     * Карта лексикона уровня {key:value} для показа ЗНАЧЕНИЙ (не ключей) в панели
+     * скрытых полей. Пусто, если лексиконы выключены или файла/секции нет.
+     */
+    public function readLexicons(string $level, int $resourceId): array
+    {
+        if (!$this->useLexicons) {
+            return [];
+        }
+        $resource = $this->resolveLevelResource($level, $resourceId);
+        if (!$resource) {
+            return [];
+        }
+        $writer = $this->lexiconWriter();
+        return $writer->all($writer->identifier((int)$resource->get('id')));
     }
 
     /** Значение — migx-запись (массив строк-объектов `[{...}]`)? */

@@ -70,6 +70,26 @@ class LexiconManager
     }
 
     /**
+     * Content-type по HTML-тегу маркера — ЕДИНЫЙ для каттера, грабера (rfield/TV
+     * и медиа): img/source/picture → image, video → video, audio → audio, иначе
+     * text (текст/ссылка). Чтобы решение shouldLexiconize совпадало у всех.
+     */
+    public static function contentTypeForTag(string $tag): string
+    {
+        $tag = strtolower($tag);
+        if (in_array($tag, ['img', 'source', 'picture'], true)) {
+            return 'image';
+        }
+        if ($tag === 'video') {
+            return 'video';
+        }
+        if ($tag === 'audio') {
+            return 'audio';
+        }
+        return 'text';
+    }
+
+    /**
      * Включён ли лексикон для указанного content-type.
      * Используется и грабером (нужно ли заводить ключ), и каттером (нужно ли
      * добавлять `| lexicon` к плейсхолдеру) — единый источник решения.
@@ -344,6 +364,47 @@ class LexiconManager
             : "{$prefix}_$fieldName";
 
         return $idx ? "{$lexiconKey}_$idx" : $lexiconKey;
+    }
+
+    /**
+     * ЕДИНЫЙ источник КОНСТРУКЦИИ parentFieldName: добавляет один сегмент цепочки.
+     * Вложенный список вносит "{field}" (idx 0) либо "{field}_{idx}" (idx > 0).
+     * Грабер (ContentParser) зовёт инкрементально при рекурсии, редактор
+     * (FieldWriter) — сворачивая путь. Меняешь схему вложенных ключей — ЗДЕСЬ.
+     */
+    public static function appendLexiconParent(string $parent, string $field, int $idx): string
+    {
+        $segment = $idx ? "{$field}_{$idx}" : $field;
+        return $parent !== '' ? "{$parent}_{$segment}" : $segment;
+    }
+
+    /**
+     * Полный лексикон-ключ поля по ПУТИ строк [{field,idx},…] + имя поля. Сворачивает
+     * путь через appendLexiconParent (parentFieldName) и форматирует листом через
+     * getLexiconKey (idx листа = idx последнего сегмента). Пустой путь → top-level
+     * поле ({prefix}_{field}). Та же схема, что грабер строит при нарезке.
+     */
+    public static function getLexiconKeyForPath(string $prefix, array $path, string $fieldName): string
+    {
+        if ($prefix === '' || $fieldName === '') {
+            return '';
+        }
+        $parent  = '';
+        $leafIdx = 0;
+        foreach ($path as $seg) {
+            $field = (string)($seg['field'] ?? '');
+            if ($field === '') {
+                continue;
+            }
+            $leafIdx = (int)($seg['idx'] ?? 0);
+            $parent  = self::appendLexiconParent($parent, $field, $leafIdx);
+        }
+        return self::getLexiconKey([
+            'prefix'          => $prefix,
+            'parentFieldName' => $parent,
+            'fieldName'       => $fieldName,
+            'idx'             => $leafIdx,
+        ]);
     }
 
     /**
