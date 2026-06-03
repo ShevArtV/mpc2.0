@@ -425,7 +425,23 @@ body:not(.mpcve-on) .mpcve-media-badge {
     border-color: #16a34a;
 }
 
-/* richtext-контрол в панели скрытых полей */
+/* richtext-контрол в панели скрытых полей: тулбар + область столбиком */
+.mpcve-hpanel__rtebox {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.mpcve-hpanel__rtebox .mpcve-rte__toolbar {
+    border-radius: 6px 6px 0 0;
+}
+
+.mpcve-hpanel__rtebox .mpcve-hpanel__rte {
+    border-top: 0;
+    border-radius: 0 0 6px 6px;
+}
+
 .mpcve-hpanel__rte {
     flex: 1 1 auto;
     min-height: 64px;
