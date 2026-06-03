@@ -21,6 +21,7 @@ function unmarkEditable() {
     document.querySelectorAll('.mpcve-editable').forEach(function (el) {
         el.classList.remove('mpcve-editable', 'mpcve-editable--media', 'mpcve-editing');
         el.removeAttribute('data-mpcve-type');
+        el.removeAttribute('data-mpcve-ph');
         el.removeAttribute('contenteditable');
         el.removeAttribute('title');
         // Снять временные controls, добавленные на <audio> в markEl.

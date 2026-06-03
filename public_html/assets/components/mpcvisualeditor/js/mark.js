@@ -4,7 +4,7 @@
  * только что вставленной JS-строки) использовали одну логику без циклов импорта.
  */
 import { SELECTOR, TYPE_HINT } from './constants.js';
-import { isMedia } from './dom.js';
+import { isMedia, fieldLabel } from './dom.js';
 import { resolveAddress, editorTypeFor } from './address.js';
 
 // Пометить один элемент-маркер редактируемым (класс + тип + подсказка).
@@ -15,6 +15,8 @@ export function markEl(el) {
     el.classList.add('mpcve-editable');
     el.setAttribute('data-mpcve-type', type);
     el.setAttribute('title', TYPE_HINT[type] || 'клик — редактировать');
+    // Плейсхолдер пустого поля = его подпись (caption из конфигуратора, иначе имя).
+    el.setAttribute('data-mpcve-ph', fieldLabel(addr.fieldName));
     if (isMedia(el)) {
         el.classList.add('mpcve-editable--media');
     }

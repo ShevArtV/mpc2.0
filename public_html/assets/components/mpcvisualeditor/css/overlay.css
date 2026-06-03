@@ -90,14 +90,14 @@ body.mpcve-active {
    схлопываются в ноль → по ним нельзя кликнуть. В edit-mode даём минимальный
    размер и подсказку-плейсхолдер, чтобы поле можно было заполнить. */
 body.mpcve-on .mpcve-editable:empty {
-    display: inline-block;
+    display: block;
     min-width: 90px;
     min-height: 1.3em;
-    vertical-align: middle;
 }
 
+/* Плейсхолдер пустого поля — его ПОДПИСЬ (caption), из data-mpcve-ph (markEl). */
 body.mpcve-on .mpcve-editable:empty::before {
-    content: "клик — заполнить";
+    content: attr(data-mpcve-ph);
     color: #94a3b8;
     font-size: 11px;
     font-style: italic;
