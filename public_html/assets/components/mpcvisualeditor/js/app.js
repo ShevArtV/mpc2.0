@@ -41,8 +41,13 @@ function attachAudioBadges() {
         if (!parent || (parent.classList && parent.classList.contains('mpcve-audio-wrap'))) {
             return; // нет родителя или уже обёрнут
         }
+        // Обёртка shrink-to-fit (inline-block) схлопнула бы аудио с темовым
+        // width:100% до своей мин-ширины. Замеряем реальную ширину аудио ДО
+        // оборачивания и задаём её обёртке — аудио сохраняет вид.
+        var w = Math.round(el.getBoundingClientRect().width);
         var wrap = document.createElement('span');
         wrap.className = 'mpcve-audio-wrap';
+        if (w > 0) { wrap.style.width = w + 'px'; }
         parent.insertBefore(wrap, el);
         wrap.appendChild(el);
         var badge = document.createElement('button');

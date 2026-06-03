@@ -318,12 +318,18 @@ body:not(.mpcve-on) .mpcve-hidden-trigger {
     display: none;
 }
 
-/* Аффорданс правки для <audio> (клик по нативному бару не доходит до нас). */
+/* Аффорданс правки для <audio> (клик по нативному бару не доходит до нас).
+   Ширину обёртки задаёт JS (замер аудио), чтобы тема с width:100% не схлопнула
+   бар; само аудио растягиваем на обёртку. */
 .mpcve-audio-wrap {
     position: relative;
     display: inline-block;
-    min-width: 60px;
-    min-height: 28px;
+    max-width: 100%;
+    vertical-align: middle;
+}
+
+.mpcve-audio-wrap > audio {
+    width: 100%;
 }
 
 .mpcve-media-badge {
