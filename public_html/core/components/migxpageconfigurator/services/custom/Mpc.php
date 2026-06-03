@@ -108,6 +108,34 @@ class Mpc
         } else {
             $this->handleFile($fileName);
         }
+
+        $this->refreshSiteCache();
+    }
+
+    /**
+     * Инвалидация кэша после нарезки. Грабер уже сбрасывает lexicon_topics
+     * (LexiconManager::createLexicons), но НЕ resource-кэш: закэшированные
+     * страницы держат СТАРЫЕ значения лексикона (рендер резолвит `{key|lexicon}`
+     * и кэширует результат) → переводы не подхватываются на сайте до ручной
+     * очистки кэша из админки. Сбрасываем то же, что точечная запись редактора
+     * (FieldWriter::afterSave): lexicon_topics + resource-кэш текущего контекста.
+     */
+    private function refreshSiteCache(): void
+    {
+        $cm = null;
+        if (method_exists($this->modx, 'getCacheManager')) {
+            $cm = $this->modx->getCacheManager();
+        } elseif (isset($this->modx->cacheManager)) {
+            $cm = $this->modx->cacheManager;
+        }
+        if (!$cm || !method_exists($cm, 'refresh')) {
+            return;
+        }
+        $context = (string)($this->modx->context ? $this->modx->context->get('key') : '') ?: 'web';
+        $cm->refresh([
+            'lexicon_topics' => [],
+            'resource' => ['contexts' => [$context]],
+        ]);
     }
 
     /**
