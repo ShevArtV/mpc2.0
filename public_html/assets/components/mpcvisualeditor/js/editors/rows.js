@@ -71,6 +71,7 @@ export function openRowsEditor(listEl) {
     overlay.innerHTML =
         '<div class="mpcve-modal__card mpcve-modal__card--wide">' +
             '<div class="mpcve-modal__head">Строки списка · ' + esc(addr.parentField) + '</div>' +
+            '<div class="mpcve-rows__hint">Перетащите строку за ⋮⋮ (или в любом месте), чтобы изменить порядок</div>' +
             '<div class="mpcve-rows"></div>' +
             '<div class="mpcve-modal__actions">' +
                 '<button type="button" class="mpcve-btn mpcve-btn--primary" data-act="add">+ Добавить строку</button>' +
@@ -135,7 +136,7 @@ export function openRowsEditor(listEl) {
                     ? '<button type="button" class="mpcve-rows__btn" data-op="img" title="Загрузить/заменить картинку">📷</button>'
                     : '';
                 return '<div class="mpcve-rows__row" data-idx="' + idx + '" draggable="true">' +
-                    '<span class="mpcve-rows__grip" title="Перетащите, чтобы переставить">⠿</span>' +
+                    '<span class="mpcve-rows__grip" title="Перетащите, чтобы переставить">⋮⋮</span>' +
                     '<span class="mpcve-rows__num">' + (idx + 1) + '</span>' +
                     '<span class="mpcve-rows__prev">' + esc(rowPreview(it)) + '</span>' +
                     '<span class="mpcve-rows__act">' + upload +

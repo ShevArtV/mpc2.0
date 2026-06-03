@@ -513,25 +513,50 @@ body:not(.mpcve-on) .mpcve-media-badge {
     border-top: 0;
 }
 
+.mpcve-rows__row {
+    cursor: grab;
+}
+
+.mpcve-rows__row:hover {
+    background: #f8fafc;
+}
+
 .mpcve-rows__row--drag {
     opacity: .4;
 }
 
 .mpcve-rows__row--over {
     border-top: 2px solid #2563eb;
+    background: #eff6ff;
+}
+
+.mpcve-rows__hint {
+    margin: 4px 0 2px;
+    font-size: 12px;
+    color: #64748b;
 }
 
 .mpcve-rows__grip {
     flex: 0 0 auto;
     cursor: grab;
-    color: #94a3b8;
-    font-size: 15px;
+    letter-spacing: -3px;
+    padding: 2px 6px;
+    border-radius: 5px;
+    background: #e2e8f0;
+    color: #475569;
+    font-size: 17px;
+    font-weight: 700;
     line-height: 1;
     user-select: none;
 }
 
+.mpcve-rows__row:active .mpcve-rows__grip,
 .mpcve-rows__grip:active {
     cursor: grabbing;
+}
+
+.mpcve-rows__btn {
+    cursor: pointer;
 }
 
 .mpcve-rows__num {
