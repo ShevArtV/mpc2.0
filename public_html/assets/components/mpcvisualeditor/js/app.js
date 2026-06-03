@@ -97,7 +97,7 @@ function buildToolbar() {
     bar.innerHTML =
         '<span class="mpcve-toolbar__title">mpcVisualEditor</span>' +
         '<span class="mpcve-toolbar__hint">клик по полю — править; Enter или уход — сохранить</span>' +
-        (S.editing ? '<button type="button" class="mpcve-btn" data-mpcve="sections">☰ Секции</button>' : '') +
+        (S.editing ? '<button type="button" data-mpcve="sections">☰ Секции</button>' : '') +
         '<button type="button" data-mpcve="toggle"></button>';
     document.body.appendChild(bar);
     document.body.classList.add('mpcve-active');
