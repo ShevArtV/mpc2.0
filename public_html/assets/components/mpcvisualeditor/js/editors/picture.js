@@ -6,16 +6,19 @@ import { api, uploadAndProbe } from '../api.js';
 import { toast, parseRecord } from '../dom.js';
 import { fieldAddress, fieldConfigRecord } from '../address.js';
 
-export function openPictureEditor(el) {
+// override = {addr} → value-based режим (панель скрытых полей: el=null, адрес и
+// запись из конфига; превью пустые — DOM нет). Иначе обычный режим (адрес/превью
+// из el на странице).
+export function openPictureEditor(el, override) {
     if (document.querySelector('.mpcve-modal')) { return; }
-    var addr = fieldAddress(el);
+    var addr = (override && override.addr) || fieldAddress(el);
     if (!addr || !addr.section || !addr.fieldName) { toast('Нет адреса картинки', true); return; }
     // Конфиг — источник правды (ключи лексикона); DOM — для превью (готовые url).
     var rec = fieldConfigRecord(addr) || {};
     var imgRec = (parseRecord(rec.img) || [{}])[0] || {};
     var cfgSources = Array.isArray(rec.sources) ? rec.sources : [];
-    var domMain = el.querySelector('img');
-    var domSources = Array.prototype.slice.call(el.querySelectorAll('source'));
+    var domMain = el ? el.querySelector('img') : null;
+    var domSources = el ? Array.prototype.slice.call(el.querySelectorAll('source')) : [];
 
     var main = {
         src: imgRec.src || '',                 // ключ из конфига (если не меняли)

@@ -10,6 +10,8 @@ import { esc, parseRecord, isScalar, fieldLabel, toast } from './dom.js';
 import { SECTION_STYLE_FIELDS, STRUCTURAL } from './constants.js';
 import { findSectionInLevel, sectionConfig } from './address.js';
 import { createRte, sanitizeHtml } from './editors/rte.js';
+import { openPictureEditor } from './editors/picture.js';
+import { openMediaEditor } from './editors/media.js';
 
 // Значение лексикона по ключу (в режиме лексиконов конфиг хранит КЛЮЧ, перевод —
 // в файле). Показываем перевод, а не ключ. Если v не ключ (или лексиконы выкл) —
@@ -34,6 +36,20 @@ function isSettingsField(fname) {
 function isImgRecord(rec) {
     return !!(rec && rec.length === 1 && rec[0] &&
         rec[0].src !== undefined && rec[0].sources === undefined && rec[0].img === undefined);
+}
+
+// Тип media-ЗАПИСИ (picture/video/audio) по форме первой строки — для открытия
+// нужного редактора value-based из панели. null — не такая запись.
+function recordKind(rec) {
+    if (!Array.isArray(rec) || !rec.length || !rec[0] || typeof rec[0] !== 'object') { return null; }
+    var r = rec[0];
+    var src0 = (Array.isArray(r.sources) && r.sources.length) ? r.sources[0] : null;
+    if (r.img !== undefined) { return 'picture'; }                 // вложенный <img>
+    if (src0 && src0.srcset !== undefined) { return 'picture'; }   // <source srcset>
+    if (src0 && src0.src !== undefined) {                          // <source src> → video/audio
+        return (r.poster !== undefined || r.width !== undefined || r.height !== undefined) ? 'video' : 'audio';
+    }
+    return null;
 }
 
 // Стилевые поля секции (вкладка «Стили» mpc_base, кроме css_file_path).
@@ -93,6 +109,16 @@ function sectionHidden(sectionEl) {
                     level: sc.level, section: sc.section, fieldName: fname,
                     type: 'image', record: rec, label: fieldLabel(fname),
                     value: lexValue(rec[0].src == null ? '' : String(rec[0].src), sc.level)
+                });
+                return;
+            }
+            var kind = recordKind(rec);
+            if (kind) {
+                // picture/video/audio-запись → кнопка-открыватель полного редактора.
+                out.push({
+                    level: sc.level, section: sc.section, fieldName: fname,
+                    type: (kind === 'picture') ? 'picture' : 'media',
+                    isVideo: (kind === 'video'), recordEditor: true, label: fieldLabel(fname)
                 });
                 return;
             }
@@ -230,6 +256,11 @@ export function removeHiddenTriggers() {
 //   richtext — contenteditable (форматирование видно), значение = innerHTML;
 //   иначе    — input / textarea (длинное/многострочное → textarea).
 function controlHtml(f) {
+    if (f.recordEditor) {
+        // picture/video/audio-запись — кнопка открытия полного редактора (value-based).
+        return '<button type="button" class="mpcve-btn" data-rec-edit="1">✎ Редактировать ' +
+            (f.type === 'picture' ? 'картинку' : 'медиа') + '</button>';
+    }
     if (f.type === 'image') {
         return '<div class="mpcve-hpanel__img">' +
                  '<div class="mpcve-hpanel__thumb"></div>' +
@@ -250,7 +281,8 @@ function rowHtml(f, idx) {
     return '<div class="mpcve-hpanel__row" data-i="' + idx + '">' +
         '<div class="mpcve-hpanel__label">' + esc(f.label) + '</div>' +
         '<div class="mpcve-hpanel__ctrl">' + controlHtml(f) +
-        '<button type="button" class="mpcve-btn mpcve-btn--primary" data-act="save">Сохранить</button>' +
+        // У record-редактора своя кнопка-открыватель; общий «Сохранить» не нужен.
+        (f.recordEditor ? '' : '<button type="button" class="mpcve-btn mpcve-btn--primary" data-act="save">Сохранить</button>') +
         '</div></div>';
 }
 
@@ -325,6 +357,21 @@ function openBlockPanel(title, descriptors) {
 
     overlay.querySelectorAll('.mpcve-hpanel__row').forEach(function (rowEl) {
         var f = descriptors[parseInt(rowEl.getAttribute('data-i'), 10)];
+        // picture/video/audio-ЗАПИСЬ → открываем полноценный редактор value-based.
+        // Панель — сама .mpcve-modal, поэтому СНАЧАЛА закрываем её (иначе guard
+        // редактора заблокирует открытие), затем открываем редактор.
+        if (f.recordEditor) {
+            rowEl.querySelector('[data-rec-edit]').addEventListener('click', function () {
+                close();
+                var raddr = {
+                    type: 'field', level: f.level, section: f.section,
+                    fieldName: f.fieldName, resourceId: S.cfg.resourceId || 0
+                };
+                if (f.type === 'picture') { openPictureEditor(null, { addr: raddr }); }
+                else { openMediaEditor(null, { addr: raddr, isVideo: !!f.isVideo }); }
+            });
+            return;
+        }
         var btn = rowEl.querySelector('[data-act=save]');
         var getValue = wireControl(rowEl, f, btn);
         btn.addEventListener('click', function () {

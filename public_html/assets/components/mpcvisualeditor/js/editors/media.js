@@ -21,24 +21,26 @@ import { fieldAddress, fieldConfigRecord } from '../address.js';
 function boolOf(v) { return v === true || v === 1 || v === '1' || v === 'true'; }
 function fileName(path) { return (String(path || '').split('?')[0].split('/').pop()) || ''; }
 
-export function openMediaEditor(el) {
+// override = {addr, isVideo} → value-based режим (панель скрытых полей: el=null,
+// тип video/audio передаётся явно, превью пустые). Иначе из el на странице.
+export function openMediaEditor(el, override) {
     if (document.querySelector('.mpcve-modal')) { return; }
-    var addr = fieldAddress(el);
+    var addr = (override && override.addr) || fieldAddress(el);
     if (!addr || !addr.section || !addr.fieldName) { toast('Нет адреса медиа', true); return; }
 
-    var isVideo = el.tagName.toLowerCase() === 'video';
+    var isVideo = override ? !!override.isVideo : (el.tagName.toLowerCase() === 'video');
     var rec = fieldConfigRecord(addr) || {};
-    var domSources = Array.prototype.slice.call(el.querySelectorAll('source'));
+    var domSources = el ? Array.prototype.slice.call(el.querySelectorAll('source')) : [];
 
     // основной файл: ключ из конфига + превью-путь из DOM
     var main = {
         src: rec.src || '',
-        preview: el.getAttribute('src') || el.currentSrc || '',
+        preview: el ? (el.getAttribute('src') || el.currentSrc || '') : '',
         file: null
     };
     var poster = {
         src: rec.poster || '',
-        preview: el.getAttribute('poster') || '',
+        preview: el ? (el.getAttribute('poster') || '') : '',
         file: null
     };
     var sources = (Array.isArray(rec.sources) ? rec.sources : []).map(function (cs, k) {
@@ -51,8 +53,8 @@ export function openMediaEditor(el) {
             file: null
         };
     });
-    var attrInit = function (k) { return (k in rec) ? boolOf(rec[k]) : el.hasAttribute(k); };
-    var preloadInit = rec.preload || el.getAttribute('preload') || 'metadata';
+    var attrInit = function (k) { return (k in rec) ? boolOf(rec[k]) : (el ? el.hasAttribute(k) : false); };
+    var preloadInit = rec.preload || (el ? el.getAttribute('preload') : '') || 'metadata';
 
     var overlay = document.createElement('div');
     overlay.className = 'mpcve-modal';
