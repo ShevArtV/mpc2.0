@@ -12,6 +12,7 @@ import { markEl } from './mark.js';
 import { editors } from './editors/index.js';
 import { buildHiddenTriggers, removeHiddenTriggers } from './panels.js';
 import { toggleSidebar } from './sidebar.js';
+import { acquireLock, startLockLifecycle, showLockBanner, releaseOnExit, markActivity } from './lock.js';
 
 // --- разметка / снятие разметки полей ----------------------------------
 function markEditable() {
@@ -134,6 +135,7 @@ function buildToolbar() {
     btn.addEventListener('click', function () {
         // Переключение режима меняет отображение → перезагружаем страницу.
         // Тулбар не пропадёт: плагин инжектит его авторизованному всегда.
+        if (S.editing) { releaseOnExit(); } // выходим из правки — снять блокировку
         setCookie('mpcve_editing', S.editing ? '0' : '1');
         window.location.reload();
     });
@@ -158,6 +160,7 @@ function bindClicks() {
             var type = el.getAttribute('data-mpcve-type') || 'text';
             var ed = editors[type];
             if (ed && ed.open) {
+                markActivity(); // открытие редактора = активность (для idle-лока)
                 ed.open(el);
             } else {
                 toast('Редактор «' + type + '» ещё в разработке', true);
@@ -189,5 +192,19 @@ export function init() {
         }).catch(function () {}),
         // Конфиг нужен только в режиме правки (тумблер перезагружает страницу).
         S.editing ? loadConfig() : Promise.resolve()
-    ]).then(applyEditingState).catch(applyEditingState);
+    ]).then(function () {
+        if (!S.editing) { applyEditingState(); return; }
+        // В режиме правки сперва берём блокировку ресурса.
+        return acquireLock().then(function (lock) {
+            if (lock && lock.mine === false) {
+                // Занято другим → правку НЕ включаем, показываем баннер.
+                S.lockedByOther = lock.by;
+                showLockBanner(lock.by);
+                document.body.classList.add('mpcve-active');
+                return;
+            }
+            startLockLifecycle(lock ? lock.ttl : 600);
+            applyEditingState();
+        });
+    }).catch(applyEditingState);
 }

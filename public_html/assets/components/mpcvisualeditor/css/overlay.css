@@ -961,3 +961,18 @@ body:not(.mpcve-on) .mpcve-media-badge {
 .mpcve-sec__btn:hover {
     opacity: 1;
 }
+
+/* --- баннер блокировки ресурса (занято другим) ---------------------- */
+.mpcve-lockbanner {
+    position: fixed;
+    z-index: 99998;
+    top: 44px;
+    left: 0;
+    right: 0;
+    padding: 10px 16px;
+    background: #b45309;
+    color: #fff;
+    font: 600 13px/1.4 -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    text-align: center;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, .25);
+}

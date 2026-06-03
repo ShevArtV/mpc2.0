@@ -61,6 +61,12 @@ class Connector
             case 'cache/clear':
                 // Полная очистка кэша MODX (кнопка тулбара).
                 return (new Handlers\CacheClearHandler($this->modx, $this->mpcve))->handle($request);
+            case 'lock/acquire':
+                // Взять/продлить блокировку ресурса на время редактирования.
+                return (new Handlers\LockHandler($this->modx, $this->mpcve))->acquire($request);
+            case 'lock/release':
+                // Снять блокировку (явный выход / закрытие вкладки — beacon).
+                return (new Handlers\LockHandler($this->modx, $this->mpcve))->release($request);
             case 'image/upload':
                 // Загрузка картинки в media source mpc → возврат URL (фронт пишет
                 // его в поле через field/save). См. ImageUploadHandler.
