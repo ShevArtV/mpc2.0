@@ -318,6 +318,42 @@ body:not(.mpcve-on) .mpcve-hidden-trigger {
     display: none;
 }
 
+/* Аффорданс правки для <audio> (клик по нативному бару не доходит до нас). */
+.mpcve-audio-wrap {
+    position: relative;
+    display: inline-block;
+    min-width: 60px;
+    min-height: 28px;
+}
+
+.mpcve-media-badge {
+    position: absolute;
+    top: -10px;
+    right: -10px;
+    z-index: 99991;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    border: 0;
+    border-radius: 999px;
+    background: #2563eb;
+    color: #fff;
+    font: 600 13px/24px -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    text-align: center;
+    cursor: pointer;
+    opacity: .9;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, .3);
+}
+
+.mpcve-media-badge:hover {
+    opacity: 1;
+    background: #1d4ed8;
+}
+
+body:not(.mpcve-on) .mpcve-media-badge {
+    display: none;
+}
+
 .mpcve-modal__card--wide {
     width: min(620px, 94vw);
 }

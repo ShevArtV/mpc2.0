@@ -31,13 +31,53 @@ function unmarkEditable() {
     });
 }
 
+// <audio> целиком занят нативным контрол-баром: UA глотает клики по нему и НЕ
+// шлёт click на host-элемент → наш bindClicks не срабатывает (в отличие от video,
+// где есть кликабельный кадр над баром). Поэтому вешаем на аудио явный аффорданс
+// «✎» в обёртке-контейнере; клик по нему открывает медиа-редактор.
+function attachAudioBadges() {
+    document.querySelectorAll('audio.mpcve-editable').forEach(function (el) {
+        var parent = el.parentNode;
+        if (!parent || (parent.classList && parent.classList.contains('mpcve-audio-wrap'))) {
+            return; // нет родителя или уже обёрнут
+        }
+        var wrap = document.createElement('span');
+        wrap.className = 'mpcve-audio-wrap';
+        parent.insertBefore(wrap, el);
+        wrap.appendChild(el);
+        var badge = document.createElement('button');
+        badge.type = 'button';
+        badge.className = 'mpcve-media-badge';
+        badge.textContent = '✎';
+        badge.title = 'Редактировать аудио';
+        badge.addEventListener('click', function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            if (editors.media && editors.media.open) { editors.media.open(el); }
+        });
+        wrap.appendChild(badge);
+    });
+}
+
+function removeAudioBadges() {
+    document.querySelectorAll('.mpcve-audio-wrap').forEach(function (wrap) {
+        var audio = wrap.querySelector('audio');
+        if (audio && wrap.parentNode) {
+            wrap.parentNode.insertBefore(audio, wrap);
+        }
+        wrap.remove();
+    });
+}
+
 function applyEditingState() {
     if (S.editing) {
         markEditable();
+        attachAudioBadges();
         buildHiddenTriggers();
         document.body.classList.add('mpcve-on');
     } else {
         unmarkEditable();
+        removeAudioBadges();
         removeHiddenTriggers();
         document.body.classList.remove('mpcve-on');
     }
