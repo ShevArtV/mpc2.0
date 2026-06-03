@@ -6,7 +6,7 @@
  */
 import { S } from './state.js';
 import { api } from './api.js';
-import { esc, toast } from './dom.js';
+import { esc, toast, confirmDialog } from './dom.js';
 
 var panel = null;
 
@@ -68,17 +68,21 @@ function load() {
         }).join('');
         box.querySelectorAll('.mpcve-clog__revert').forEach(function (b) {
             b.addEventListener('click', function () {
-                if (!window.confirm('Вернуть прежнее значение этого поля?')) { return; }
-                b.disabled = true;
-                api.post('log/revert', { id: b.getAttribute('data-id') }).then(function (r) {
-                    if (r && r.success) {
-                        toast('Откат выполнен — обновляю…');
-                        setTimeout(function () { window.location.reload(); }, 1000);
-                    } else {
-                        toast((r && r.message) || 'Ошибка отката', true);
-                        b.disabled = false;
-                    }
-                }).catch(function () { toast('Сетевая ошибка', true); b.disabled = false; });
+                confirmDialog('Вернуть прежнее значение этого поля?', {
+                    title: 'Откат правки', okLabel: '↩ Вернуть', cancelLabel: 'Отмена'
+                }).then(function (ok) {
+                    if (!ok) { return; }
+                    b.disabled = true;
+                    api.post('log/revert', { id: b.getAttribute('data-id') }).then(function (r) {
+                        if (r && r.success) {
+                            toast('Откат выполнен — обновляю…');
+                            setTimeout(function () { window.location.reload(); }, 1000);
+                        } else {
+                            toast((r && r.message) || 'Ошибка отката', true);
+                            b.disabled = false;
+                        }
+                    }).catch(function () { toast('Сетевая ошибка', true); b.disabled = false; });
+                });
             });
         });
     }).catch(function () {

@@ -55,3 +55,40 @@ export function toast(message, isError) {
         setTimeout(function () { node.remove(); }, 250);
     }, 2400);
 }
+
+// Модальное подтверждение в стиле редактора (замена window.confirm).
+// opts: { title, okLabel, cancelLabel, danger }. Возвращает Promise<boolean>.
+// Enter = OK, Esc / клик по фону / Отмена = false.
+export function confirmDialog(message, opts) {
+    opts = opts || {};
+    return new Promise(function (resolve) {
+        if (document.querySelector('.mpcve-confirm')) { resolve(false); return; }
+        var ov = document.createElement('div');
+        ov.className = 'mpcve-modal mpcve-confirm';
+        ov.innerHTML =
+            '<div class="mpcve-modal__card mpcve-confirm__card">' +
+                (opts.title ? '<div class="mpcve-modal__head"></div>' : '') +
+                '<div class="mpcve-confirm__msg"></div>' +
+                '<div class="mpcve-modal__actions">' +
+                    '<button type="button" class="mpcve-btn" data-act="cancel"></button>' +
+                    '<button type="button" class="mpcve-btn mpcve-btn--primary' + (opts.danger ? ' mpcve-btn--danger' : '') + '" data-act="ok"></button>' +
+                '</div>' +
+            '</div>';
+        document.body.appendChild(ov);
+        if (opts.title) { ov.querySelector('.mpcve-modal__head').textContent = opts.title; }
+        ov.querySelector('.mpcve-confirm__msg').textContent = message;
+        ov.querySelector('[data-act=cancel]').textContent = opts.cancelLabel || 'Отмена';
+        ov.querySelector('[data-act=ok]').textContent = opts.okLabel || 'OK';
+
+        function done(v) { ov.remove(); document.removeEventListener('keydown', onKey); resolve(v); }
+        function onKey(e) {
+            if (e.key === 'Escape') { done(false); }
+            else if (e.key === 'Enter') { e.preventDefault(); done(true); }
+        }
+        document.addEventListener('keydown', onKey);
+        ov.addEventListener('click', function (e) { if (e.target === ov) { done(false); } });
+        ov.querySelector('[data-act=cancel]').addEventListener('click', function () { done(false); });
+        ov.querySelector('[data-act=ok]').addEventListener('click', function () { done(true); });
+        ov.querySelector('[data-act=ok]').focus();
+    });
+}

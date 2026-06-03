@@ -12,7 +12,7 @@
  * Img-список даёт 📷 на строку (открывает редактор картинки rows[idx].img).
  */
 import { api } from '../api.js';
-import { toast, esc, isMedia } from '../dom.js';
+import { toast, esc, isMedia, confirmDialog } from '../dom.js';
 import { listAddress, listRows, configRowCount, rowPreview, isListEl } from '../address.js';
 import { markFieldsWithin } from '../mark.js';
 import { openImageEditor } from './image.js';
@@ -163,8 +163,13 @@ export function openRowsEditor(listEl) {
                         if (addr.path) { imgAddr.path = addr.path.concat([{ field: addr.parentField, idx: idx }]); imgAddr.fieldName = sub; }
                         openImageEditor(items[idx], imgAddr);
                     } else if (op === 'del') {
-                        serverOp({ op: 'delete', idx: idx }, btn).then(function (ok) {
-                            if (ok) { items[idx].remove(); renderRows(); }
+                        confirmDialog('Удалить строку #' + (idx + 1) + '? Откат удаления не предусмотрен.', {
+                            title: 'Удаление строки', okLabel: 'Удалить', cancelLabel: 'Отмена', danger: true
+                        }).then(function (yes) {
+                            if (!yes) { return; }
+                            serverOp({ op: 'delete', idx: idx }, btn).then(function (ok) {
+                                if (ok) { items[idx].remove(); renderRows(); }
+                            });
                         });
                     }
                 });

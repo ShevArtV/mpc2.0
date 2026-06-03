@@ -1033,3 +1033,25 @@ body:not(.mpcve-on) .mpcve-media-badge {
     color: #94a3b8;
     font-style: italic;
 }
+
+/* --- модальное подтверждение (confirmDialog) ------------------------- */
+.mpcve-confirm .mpcve-confirm__card {
+    width: min(380px, 92vw);
+}
+
+.mpcve-confirm__msg {
+    font-size: 14px;
+    line-height: 1.5;
+    color: #1e293b;
+    margin: 4px 0 6px;
+}
+
+.mpcve-btn--danger {
+    background: #dc2626;
+    border-color: #dc2626;
+    color: #fff;
+}
+
+.mpcve-btn--danger:hover {
+    background: #b91c1c;
+}
