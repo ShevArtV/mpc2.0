@@ -397,6 +397,7 @@ body:not(.mpcve-on) .mpcve-media-badge {
 
 .mpcve-hpanel__label {
     font-size: 13px;
+    font-weight: 600;
     color: #475569;
     word-break: break-word;
 }
