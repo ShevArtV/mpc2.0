@@ -80,6 +80,7 @@ export function openRowsEditor(listEl) {
         '</div>';
     document.body.appendChild(overlay);
     var rowsBox = overlay.querySelector('.mpcve-rows');
+    var dragFrom = null; // индекс перетаскиваемой строки (drag-drop переупорядочивание)
 
     function close() { overlay.remove(); document.removeEventListener('keydown', onKey); }
     function onKey(e) { if (e.key === 'Escape') { close(); } }
@@ -133,12 +134,11 @@ export function openRowsEditor(listEl) {
                 var upload = sub
                     ? '<button type="button" class="mpcve-rows__btn" data-op="img" title="Загрузить/заменить картинку">📷</button>'
                     : '';
-                return '<div class="mpcve-rows__row" data-idx="' + idx + '">' +
+                return '<div class="mpcve-rows__row" data-idx="' + idx + '" draggable="true">' +
+                    '<span class="mpcve-rows__grip" title="Перетащите, чтобы переставить">⠿</span>' +
                     '<span class="mpcve-rows__num">' + (idx + 1) + '</span>' +
                     '<span class="mpcve-rows__prev">' + esc(rowPreview(it)) + '</span>' +
                     '<span class="mpcve-rows__act">' + upload +
-                        '<button type="button" class="mpcve-rows__btn" data-op="up" title="Вверх">↑</button>' +
-                        '<button type="button" class="mpcve-rows__btn" data-op="down" title="Вниз">↓</button>' +
                         '<button type="button" class="mpcve-rows__btn mpcve-rows__btn--del" data-op="del" title="Удалить">✕</button>' +
                     '</span></div>';
             }).join('')
@@ -147,9 +147,9 @@ export function openRowsEditor(listEl) {
     }
 
     function wireRows(items, sub) {
-        var n = items.length;
         rowsBox.querySelectorAll('.mpcve-rows__row').forEach(function (rowEl) {
             var idx = parseInt(rowEl.getAttribute('data-idx'), 10);
+            wireDrag(rowEl, idx, items);
             rowEl.querySelectorAll('[data-op]').forEach(function (btn) {
                 btn.addEventListener('click', function () {
                     var op = btn.getAttribute('data-op');
@@ -165,24 +165,51 @@ export function openRowsEditor(listEl) {
                         serverOp({ op: 'delete', idx: idx }, btn).then(function (ok) {
                             if (ok) { items[idx].remove(); renderRows(); }
                         });
-                    } else if (op === 'up' && idx > 0) {
-                        serverOp({ op: 'move', fromIdx: idx, toIdx: idx - 1 }, btn).then(function (ok) {
-                            if (ok) {
-                                var a = items[idx], b = items[idx - 1];
-                                b.parentNode.insertBefore(a, b);
-                                renderRows();
-                            }
-                        });
-                    } else if (op === 'down' && idx < n - 1) {
-                        serverOp({ op: 'move', fromIdx: idx, toIdx: idx + 1 }, btn).then(function (ok) {
-                            if (ok) {
-                                var a = items[idx], b = items[idx + 1];
-                                b.parentNode.insertBefore(a, b.nextSibling);
-                                renderRows();
-                            }
-                        });
                     }
                 });
+            });
+        });
+    }
+
+    // Drag-drop переупорядочивание строки: серверный move(from→to) (array_splice,
+    // значения/лексикон-ключи едут со строкой) + перестановка узла страницы.
+    function wireDrag(rowEl, idx, items) {
+        rowEl.addEventListener('dragstart', function (e) {
+            dragFrom = idx;
+            rowEl.classList.add('mpcve-rows__row--drag');
+            if (e.dataTransfer) {
+                e.dataTransfer.effectAllowed = 'move';
+                try { e.dataTransfer.setData('text/plain', String(idx)); } catch (_) {}
+            }
+        });
+        rowEl.addEventListener('dragend', function () {
+            dragFrom = null;
+            rowsBox.querySelectorAll('.mpcve-rows__row--drag, .mpcve-rows__row--over').forEach(function (r) {
+                r.classList.remove('mpcve-rows__row--drag', 'mpcve-rows__row--over');
+            });
+        });
+        rowEl.addEventListener('dragover', function (e) {
+            if (dragFrom === null || dragFrom === idx) { return; }
+            e.preventDefault();
+            if (e.dataTransfer) { e.dataTransfer.dropEffect = 'move'; }
+            rowEl.classList.add('mpcve-rows__row--over');
+        });
+        rowEl.addEventListener('dragleave', function () {
+            rowEl.classList.remove('mpcve-rows__row--over');
+        });
+        rowEl.addEventListener('drop', function (e) {
+            e.preventDefault();
+            rowEl.classList.remove('mpcve-rows__row--over');
+            var from = dragFrom, to = idx;
+            dragFrom = null;
+            if (from === null || from === to) { return; }
+            serverOp({ op: 'move', fromIdx: from, toIdx: to }).then(function (ok) {
+                if (!ok) { return; }
+                var src = items[from], ref = items[to];
+                // splice-move: to>from → после ref; to<from → перед ref.
+                if (to > from) { ref.parentNode.insertBefore(src, ref.nextSibling); }
+                else { ref.parentNode.insertBefore(src, ref); }
+                renderRows();
             });
         });
     }
