@@ -98,6 +98,19 @@ class Mpcve
     }
 
     /**
+     * Записать ВЕСЬ массив секций уровня (RAW) — для структурных операций над
+     * секциями (порядок/видимость/статичность). Делегирует FieldWriter::saveConfig.
+     */
+    public function saveConfig(string $level, int $resourceId, array $config): array
+    {
+        if (!class_exists('\\MpcServices\\Handlers\\FieldWriter')) {
+            return ['success' => false, 'message' => 'migxpageconfigurator (mpc) 2.4.0+ is required'];
+        }
+        $writer = new \MpcServices\Handlers\FieldWriter($this->modx);
+        return $writer->saveConfig($level, $resourceId, $config);
+    }
+
+    /**
      * Карта лексикона уровня {key:value} — чтобы панель скрытых полей показывала
      * ЗНАЧЕНИЯ, а не ключи. Пусто, если лексиконы выключены.
      */

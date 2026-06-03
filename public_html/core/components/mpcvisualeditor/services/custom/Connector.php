@@ -54,6 +54,10 @@ class Connector
             case 'row/op':
                 // Структурная операция над строками списка (add|delete|move).
                 return (new Handlers\RowOpHandler($this->modx, $this->mpcve))->handle($request);
+            case 'section/op':
+                // Структурная операция над секциями (move|visibility|static) —
+                // RAW-запись массива конфига, не через лексикон-aware field/save.
+                return (new Handlers\SectionOpHandler($this->modx, $this->mpcve))->handle($request);
             case 'image/upload':
                 // Загрузка картинки в media source mpc → возврат URL (фронт пишет
                 // его в поле через field/save). См. ImageUploadHandler.

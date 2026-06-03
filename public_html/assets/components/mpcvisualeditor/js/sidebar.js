@@ -22,14 +22,11 @@ function sectionList() {
         .sort(function (a, b) { return ((parseInt(a.position, 10) || 0) - (parseInt(b.position, 10) || 0)); });
 }
 
-function saveSectionField(section, fieldName, value) {
-    return api.post('field/save', {
-        address: {
-            type: 'field', level: 'resource', section: section,
-            fieldName: fieldName, resourceId: S.cfg.resourceId || 0
-        },
-        value: value
-    });
+// Структурные операции над секциями — отдельный экшен section/op (RAW-запись
+// массива конфига; field/save сюда не годится — лексиконизировал бы 0/1).
+function sectionOp(payload) {
+    payload.resourceId = S.cfg.resourceId || 0;
+    return api.post('section/op', payload);
 }
 
 var panel = null;
@@ -88,14 +85,14 @@ function wire(items) {
         wireDrag(row, i, items);
         row.querySelector('[data-op=vis]').addEventListener('click', function () {
             var nv = boolOf(s.hide_section) ? 0 : 1;
-            saveSectionField(s.section_name, 'hide_section', nv).then(function (r) {
-                if (r && r.success) { s.hide_section = nv; render(); toast('Сохранено'); }
+            sectionOp({ op: 'visibility', section: s.section_name, value: nv }).then(function (r) {
+                if (r && r.success) { s.hide_section = nv; render(); toast('Сохранено — «Обновить» для рендера'); }
                 else { toast((r && r.message) || 'Ошибка', true); }
             }).catch(function () { toast('Сетевая ошибка', true); });
         });
         row.querySelector('[data-op=stat]').addEventListener('click', function () {
             var nv = boolOf(s.is_static) ? 0 : 1;
-            saveSectionField(s.section_name, 'is_static', nv).then(function (r) {
+            sectionOp({ op: 'static', section: s.section_name, value: nv }).then(function (r) {
                 if (r && r.success) { s.is_static = nv; render(); toast('Сохранено — «Обновить» для рендера'); }
                 else { toast((r && r.message) || 'Ошибка', true); }
             }).catch(function () { toast('Сетевая ошибка', true); });
@@ -132,17 +129,14 @@ function wireDrag(row, idx, items) {
         if (from === null || from === to) { return; }
         var moved = items.splice(from, 1)[0];
         items.splice(to, 0, moved);
-        // Последовательные позиции 1..N; пишем там, где position изменилась.
-        var jobs = [];
-        items.forEach(function (s, i) {
-            var pos = i + 1;
-            if ((parseInt(s.position, 10) || 0) !== pos) {
-                s.position = pos;
-                jobs.push(saveSectionField(s.section_name, 'position', pos));
-            }
-        });
+        // Локально проставляем position для немедленной перерисовки; на бэк шлём
+        // новый ПОРЯДОК имён одним запросом (section/op move переназначит position).
+        items.forEach(function (s, i) { s.position = i + 1; });
+        var order = items.map(function (s) { return s.section_name; });
         render();
-        Promise.all(jobs).then(function () { toast('Порядок сохранён — «Обновить» для рендера'); })
-            .catch(function () { toast('Ошибка сохранения порядка', true); });
+        sectionOp({ op: 'move', order: order }).then(function (r) {
+            if (r && r.success) { toast('Порядок сохранён — «Обновить» для рендера'); }
+            else { toast((r && r.message) || 'Ошибка сохранения порядка', true); }
+        }).catch(function () { toast('Сетевая ошибка', true); });
     });
 }

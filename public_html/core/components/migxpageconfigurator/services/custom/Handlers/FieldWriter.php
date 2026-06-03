@@ -713,6 +713,30 @@ class FieldWriter
         return $this->result(true, 'ok', ['config' => $config]);
     }
 
+    /**
+     * Записать ВЕСЬ массив секций уровня (RAW, без лексикон-логики). Нужен для
+     * структурных операций над секциями (порядок/видимость/статичность): эти
+     * поля — служебные (position/hide_section/is_static), их НЕЛЬЗЯ гонять через
+     * writeConfigField (он бы лексиконизировал значение в ключ). Сбрасывает кэш
+     * как точечная запись (afterSave).
+     *
+     * @param array $config список секций (numeric array объектов)
+     */
+    public function saveConfig(string $level, int $resourceId, array $config): array
+    {
+        $resource = $this->resolveLevelResource($level, $resourceId);
+        if (!$resource) {
+            return $this->result(false, 'target resource for level "' . $level . '" not found');
+        }
+        if (!method_exists($resource, 'setTVValue')) {
+            return $this->result(false, 'setTVValue unavailable on resource');
+        }
+        $json = json_encode(array_values($config), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        $resource->setTVValue($this->configTvName, $json);
+        $this->afterSave($resource, ['type' => 'config', 'level' => $level]);
+        return $this->result(true, 'saved', ['level' => $level]);
+    }
+
     private function lexiconWriter(): LexiconWriter
     {
         if ($this->lexWriterInstance === null) {
