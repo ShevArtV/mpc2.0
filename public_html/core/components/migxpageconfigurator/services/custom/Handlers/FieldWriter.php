@@ -299,13 +299,60 @@ class FieldWriter
      */
     private function writeConfigField(array $address, $value): array
     {
-        $level = (string)($address['level'] ?? 'resource');
-        $resource = $this->resolveLevelResource($level, (int)($address['resourceId'] ?? 0));
-        if (!$resource) {
-            return $this->result(false, 'target resource for level "' . $level . '" not found');
+        $level   = (string)($address['level'] ?? 'resource');
+        $inherit = (string)($address['inherit'] ?? '');
+        $rid     = (int)($address['resourceId'] ?? 0);
+        $section = (string)($address['section'] ?? '');
+
+        // Наследование уровней: если секции НЕТ в конфиге РЕСУРСА — она наследуется
+        // от типа (Render мёржит type+resource, лексиконы тоже global→type→resource).
+        // Решаем по выбору пользователя ($address['inherit']):
+        //   'type' — пишем в конфиг/лексикон ТИПА (глобально для шаблона);
+        //   'copy' — сидируем секцию + её лексикон-ключи в РЕСУРС, пишем локально;
+        //   ''     — возвращаем code=inherit_choice (фронт спросит, что делать).
+        // global/type сюда не попадают: static-секции адресуются global (у
+        // staticBlocksPage свой конфиг), type приходит уже разрешённым.
+        if ($level === 'resource') {
+            $resource = $this->resolveLevelResource('resource', $rid);
+            if (!$resource) {
+                return $this->result(false, 'target resource for level "resource" not found');
+            }
+            $configJson = (string)$resource->getTVValue($this->configTvName);
+            if (!$this->configHasSection($configJson, $section)) {
+                if ($inherit === 'type') {
+                    $level = 'type';
+                    $resource = $this->resolveLevelResource('type', $rid);
+                    if (!$resource) {
+                        return $this->result(false, 'type resource not found for level "type"');
+                    }
+                    $configJson = (string)$resource->getTVValue($this->configTvName);
+                } elseif ($inherit === 'copy') {
+                    $seed = $this->seedSectionIntoResource($resource, $rid, $section);
+                    if (empty($seed['success'])) {
+                        return $seed;
+                    }
+                    $configJson = (string)($seed['data']['json'] ?? '');
+                } else {
+                    // Нет выбора → фронт спросит: скопировать секцию в ресурс ИЛИ
+                    // открыть страницу-источник (тип) и править там. Отдаём id+URL
+                    // type-ресурса, чтобы фронт мог сделать редирект.
+                    $data = ['code' => 'inherit_choice', 'section' => $section];
+                    $typeRes = $this->resolveLevelResource('type', $rid);
+                    if ($typeRes) {
+                        $data['typeResourceId'] = (int)$typeRes->get('id');
+                        $data['typeUrl'] = $this->modx->makeUrl((int)$typeRes->get('id'), '', '', 'full');
+                    }
+                    return $this->result(false, 'section inherited from type', $data);
+                }
+            }
+        } else {
+            $resource = $this->resolveLevelResource($level, $rid);
+            if (!$resource) {
+                return $this->result(false, 'target resource for level "' . $level . '" not found');
+            }
+            $configJson = (string)$resource->getTVValue($this->configTvName);
         }
 
-        $configJson = (string)$resource->getTVValue($this->configTvName);
         if ($configJson === '') {
             return $this->result(false, 'empty mpc_config for level "' . $level . '"');
         }
@@ -314,7 +361,9 @@ class FieldWriter
 
         // Лексикон-aware: значение-ключ → пишем в лексикон, конфиг не трогаем;
         // медиа-запись → мерж по под-полям (ключи остаются, лексикон обновляется).
-        if ($this->useLexicons) {
+        // raw=1 (listbox): значение — сырой ключ опции, лексикон НЕ трогаем (капшены
+        // опций пишет грабер при нарезке) — пишем значение прямо в конфиг.
+        if ($this->useLexicons && empty($address['raw'])) {
             $writer  = $this->lexiconWriter();
             $ident   = $writer->identifier((int)$resource->get('id'));
             $current = $cfw->getValue($configJson, $address)['data']['value'] ?? null;
@@ -423,6 +472,89 @@ class FieldWriter
             }
         }
         return '';
+    }
+
+    /** Есть ли секция в конфиге (по section_name/MIGX_formname). Пустой конфиг → нет. */
+    private function configHasSection(string $configJson, string $section): bool
+    {
+        if ($configJson === '' || $section === '') {
+            return false;
+        }
+        $config = json_decode($configJson, true);
+        if (!is_array($config)) {
+            return false;
+        }
+        foreach ($config as $s) {
+            if (is_array($s) && (($s['section_name'] ?? null) === $section || ($s['MIGX_formname'] ?? null) === $section)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * «Скопировать секцию» (per-resource override наследуемой секции): берём
+     * объект секции из конфига ТИПА, вписываем тем же ключом в mpc_config РЕСУРСА
+     * и копируем лексикон-ключи секции (по lexicon_prefix) из файла типа в файл
+     * ресурса. После этого правка идёт обычным resource-путём, а при рендере
+     * мердж global→type→resource отдаёт ресурсные значения (чанк не трогаем —
+     * ключ тот же, ресурсный лексикон перекрывает типовой). setTVValue здесь же,
+     * т.к. лексиконная ветка writeConfigField может вернуться до записи конфига.
+     *
+     * @return array result(); при успехе data.json — новый конфиг ресурса.
+     */
+    private function seedSectionIntoResource($resource, int $rid, string $section): array
+    {
+        $typeRes = $this->resolveLevelResource('type', $rid);
+        if (!$typeRes) {
+            return $this->result(false, 'type resource not found for copy');
+        }
+        $typeConfig = json_decode((string)$typeRes->getTVValue($this->configTvName), true);
+        if (!is_array($typeConfig)) {
+            return $this->result(false, 'empty type config for copy');
+        }
+
+        $sectionKey = null;
+        $sectionObj = null;
+        foreach ($typeConfig as $k => $s) {
+            if (is_array($s) && (($s['section_name'] ?? null) === $section || ($s['MIGX_formname'] ?? null) === $section)) {
+                $sectionKey = $k;
+                $sectionObj = $s;
+                break;
+            }
+        }
+        if ($sectionObj === null) {
+            return $this->result(false, 'section "' . $section . '" not found in type config');
+        }
+
+        $resourceJson = (string)$resource->getTVValue($this->configTvName);
+        $resourceConfig = $resourceJson !== '' ? json_decode($resourceJson, true) : [];
+        if (!is_array($resourceConfig)) {
+            $resourceConfig = [];
+        }
+        $resourceConfig[$sectionKey] = $sectionObj;
+        $newJson = json_encode($resourceConfig, JSON_UNESCAPED_UNICODE);
+        if (!method_exists($resource, 'setTVValue')) {
+            return $this->result(false, 'setTVValue unavailable on resource');
+        }
+        $resource->setTVValue($this->configTvName, $newJson);
+
+        // Лексикон-ключи секции: тот же ключ в файле ресурса перекроет типовой.
+        if ($this->useLexicons) {
+            $writer    = $this->lexiconWriter();
+            $typeIdent = $writer->identifier((int)$typeRes->get('id'));
+            $resIdent  = $writer->identifier($rid);
+            $prefix    = (string)($sectionObj['lexicon_prefix'] ?? '');
+            if ($prefix !== '' && $typeIdent !== '' && $resIdent !== '' && $typeIdent !== $resIdent) {
+                foreach ($writer->all($typeIdent) as $key => $val) {
+                    if (strpos((string)$key, $prefix) === 0) {
+                        $writer->set($resIdent, (string)$key, (string)$val);
+                    }
+                }
+            }
+        }
+
+        return $this->result(true, 'seeded', ['json' => $newJson]);
     }
 
     /** Есть ли в media-записи лексикон-ключи (существующая запись vs новая). */
@@ -831,6 +963,43 @@ class FieldWriter
         if ($cm && method_exists($cm, 'refresh')) {
             $context = (string)($resource->get('context_key') ?: 'web');
             $cm->refresh(['resource' => ['contexts' => [$context]]]);
+        }
+
+        // parsed/<rid>.tpl держит ЗАПЕЧЁННЫЕ значения нестатичных секций
+        // (регенерится только при отсутствии файла). После правки значения сносим
+        // его → пересоберётся при следующем заходе с новым значением.
+        $this->invalidateParsed($resource, (string)($address['level'] ?? 'resource'));
+    }
+
+    /**
+     * Удаляет parsed-файл(ы) после правки значения. Обычно — файл самого ресурса.
+     * Но правка на уровне global (статичные блоки) ИЛИ правка ресурса-ТИПА (донор,
+     * parent = staticBlocksPage) влияет на ВСЕ наследующие страницы → сносим весь
+     * parsed (каждый регенерится лениво при заходе).
+     */
+    private function invalidateParsed(object $resource, string $level): void
+    {
+        $elements = (string)$this->modx->getOption('pdotools_elements_path', null, MODX_CORE_PATH . 'elements/');
+        $elements = str_replace('{core_path}', MODX_CORE_PATH, $elements);
+        $dist = $elements . (string)$this->modx->getOption('mpc_path_to_dist', null, 'parsed/');
+        if (!is_dir($dist)) {
+            return;
+        }
+        $ext = (string)$this->modx->getOption('mpc_tpl_file_extension', null, '.tpl');
+        $sbp = (int)$this->modx->getOption('mpc_static_block_page_id', null, 1);
+        $isDonor = (int)$resource->get('parent') === $sbp;
+
+        if ($level === 'global' || $isDonor) {
+            foreach ((array)@scandir($dist) as $f) {
+                if ($f !== '.' && $f !== '..' && is_file($dist . $f)) {
+                    @unlink($dist . $f);
+                }
+            }
+            return;
+        }
+        $file = $dist . (int)$resource->get('id') . $ext;
+        if (is_file($file)) {
+            @unlink($file);
         }
     }
 

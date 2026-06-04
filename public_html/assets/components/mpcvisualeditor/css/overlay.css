@@ -732,6 +732,28 @@ body:not(.mpcve-on) .mpcve-media-badge {
     resize: vertical;
 }
 
+/* Распорка в actions: кнопка переключения слева, Отмена/Сохранить справа. */
+.mpcve-modal__spacer {
+    flex: 1 1 auto;
+}
+
+/* Source-режим richtext: сырой HTML — моноширинным, нагляднее теги. */
+.mpcve-rte__source {
+    font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    white-space: pre-wrap;
+}
+
+/* Редактор listbox: select на всю ширину карточки. */
+.mpcve-lb__sel {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 8px 10px;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    font: 14px/1.4 -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    background: #fff;
+}
+
 .mpcve-rte__toolbar {
     display: flex;
     flex-wrap: wrap;
@@ -1046,6 +1068,11 @@ body:not(.mpcve-on) .mpcve-media-badge {
     margin: 4px 0 6px;
 }
 
+/* Диалог выбора (наследуемая секция) — 3 кнопки, разрешаем перенос. */
+.mpcve-confirm__actions {
+    flex-wrap: wrap;
+}
+
 .mpcve-btn--danger {
     background: #dc2626;
     border-color: #dc2626;
@@ -1054,4 +1081,123 @@ body:not(.mpcve-on) .mpcve-media-badge {
 
 .mpcve-btn--danger:hover {
     background: #b91c1c;
+}
+
+/* ---- Модалка истории изменений (changelog) ---- */
+.mpcve-clogm__card {
+    width: min(1100px, 96vw);
+    max-height: 88vh;
+    display: flex;
+    flex-direction: column;
+}
+.mpcve-clogm__x {
+    float: right;
+    border: 0;
+    background: none;
+    font-size: 18px;
+    line-height: 1;
+    cursor: pointer;
+    color: #64748b;
+}
+.mpcve-clogm__filters {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    margin: 6px 0 10px;
+    font-size: 13px;
+    color: #334155;
+}
+.mpcve-clogm__filters select {
+    margin-left: 4px;
+    padding: 4px 6px;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    font: inherit;
+}
+.mpcve-clogm__filters .mpcve-btn {
+    padding: 5px 10px;
+}
+.mpcve-clogm__count {
+    margin-left: auto;
+    color: #94a3b8;
+}
+.mpcve-clogm__wrap {
+    overflow: auto;
+    flex: 1;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+}
+.mpcve-clogm__table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+.mpcve-clogm__table th,
+.mpcve-clogm__table td {
+    text-align: left;
+    padding: 7px 10px;
+    border-bottom: 1px solid #eef2f7;
+    vertical-align: top;
+}
+.mpcve-clogm__table th {
+    position: sticky;
+    top: 0;
+    background: #f8fafc;
+    color: #64748b;
+    font-weight: 600;
+    z-index: 1;
+}
+.mpcve-clogm__t {
+    white-space: nowrap;
+    color: #475569;
+}
+.mpcve-clogm__lvl {
+    text-align: center;
+    color: #94a3b8;
+    font-weight: 600;
+}
+.mpcve-clogm__src {
+    cursor: help;
+}
+.mpcve-clogm__diff {
+    max-height: 3.2em;
+    overflow: hidden;
+    cursor: pointer;
+    line-height: 1.5;
+    word-break: break-word;
+}
+.mpcve-clogm__diff--full {
+    max-height: none;
+}
+.mpcve-clogm__diff del {
+    background: #fee2e2;
+    color: #b91c1c;
+    text-decoration: line-through;
+}
+.mpcve-clogm__diff ins {
+    background: #dcfce7;
+    color: #15803d;
+    text-decoration: none;
+}
+.mpcve-clogm__old { color: #b91c1c; }
+.mpcve-clogm__new { color: #15803d; }
+.mpcve-clogm__muted { color: #94a3b8; }
+.mpcve-clogm__act {
+    white-space: nowrap;
+    text-align: center;
+}
+.mpcve-clogm__revert {
+    border: 1px solid #cbd5e1;
+    background: #fff;
+    border-radius: 6px;
+    padding: 3px 8px;
+    cursor: pointer;
+}
+.mpcve-clogm__revert:hover { background: #f1f5f9; }
+.mpcve-clogm__rev { color: #94a3b8; font-size: 12px; }
+.mpcve-clogm__empty {
+    text-align: center;
+    color: #94a3b8;
+    padding: 24px;
 }

@@ -65,6 +65,10 @@ export function openRowsEditor(listEl) {
         toast('Не удалось определить адрес списка', true);
         return;
     }
+    // data-mpc-max на контейнере списка → лимит числа строк. Фронт не даёт
+    // добавлять сверх лимита (migx тоже ограничивает через extended.maxRecords).
+    // 0 / нет атрибута = без лимита.
+    var maxRows = parseInt(listEl.getAttribute('data-mpc-max'), 10) || 0;
 
     var overlay = document.createElement('div');
     overlay.className = 'mpcve-modal';
@@ -145,6 +149,17 @@ export function openRowsEditor(listEl) {
             }).join('')
             : '<div class="mpcve-hpanel__empty">Строк пока нет — добавьте первую.</div>';
         wireRows(items, sub);
+        updateAddState(items.length);
+    }
+
+    // Блокируем «+ Добавить» при достижении data-mpc-max (с подсказкой-причиной).
+    function updateAddState(count) {
+        if (!maxRows) { return; }
+        var addBtn = overlay.querySelector('[data-act=add]');
+        if (!addBtn) { return; }
+        var atMax = count >= maxRows;
+        addBtn.disabled = atMax;
+        addBtn.title = atMax ? ('Достигнут максимум строк: ' + maxRows) : '';
     }
 
     function wireRows(items, sub) {
@@ -223,6 +238,10 @@ export function openRowsEditor(listEl) {
     overlay.querySelector('[data-act=add]').addEventListener('click', function (e) {
         var btn = e.currentTarget;
         var items = listRows(listEl, addr.parentField);
+        if (maxRows && items.length >= maxRows) {
+            toast('Достигнут максимум строк: ' + maxRows, true);
+            return;
+        }
         serverOp({ op: 'add' }, btn).then(function (ok) {
             btn.disabled = false;
             if (!ok) { return; }

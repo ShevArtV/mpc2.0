@@ -22,11 +22,21 @@ function lexValue(v, level) {
     return (map && Object.prototype.hasOwnProperty.call(map, v)) ? map[v] : v;
 }
 
-// Поле принадлежит табу «Настройки секции» (или служебное/стилевое) → не в панель
-// контентных скрытых. STRUCTURAL — служебные + css_file_path + стили (стили
-// показываем отдельной веткой); S.settingsFields — таб «Настройки» из mpc_base.
-function isSettingsField(fname) {
-    return STRUCTURAL.indexOf(fname) !== -1 || S.settingsFields.indexOf(fname) !== -1;
+// migx-служебка секции (вне табов mpc_base) — никогда не редактируем.
+var MIGX_SERVICE = ['MIGX_id', 'MIGX_formname', 'limit'];
+
+// ЯВНЫЙ список исключений скрытых полей СЕКЦИИ: «Настройки секции» (таб mpc_base,
+// S.settingsFields — id/section_name/file_name/hide_section/copy_from_origin/
+// is_static/position/lexicon_prefix) + путь к файлу стилей (css_file_path) +
+// migx-служебка. Стилевые (inline_styles/class_names/props) исключаем здесь, но
+// показываем ОТДЕЛЬНОЙ веткой (sectionStyleFields) — у них каскад-уровень
+// (resource перекрывает global на static-секциях). ВСЁ прочее из конфига, чего
+// нет в DOM (data-mpc-field), попадает в скрытые — включая кастомные поля.
+function isSectionExcluded(fname) {
+    return S.settingsFields.indexOf(fname) !== -1
+        || fname === 'css_file_path'
+        || MIGX_SERVICE.indexOf(fname) !== -1
+        || SECTION_STYLE_FIELDS.indexOf(fname) !== -1;
 }
 
 // Одиночная img-ЗАПИСЬ [{MIGX_id,src,alt,title,width,height}] — есть src, НЕТ
@@ -101,7 +111,7 @@ function sectionHidden(sectionEl) {
     if (sc) {
         var visible = visibleSectionFields(sectionEl);
         Object.keys(sc.obj).forEach(function (fname) {
-            if (isSettingsField(fname) || visible[fname]) { return; }
+            if (isSectionExcluded(fname) || visible[fname]) { return; }
             var v = sc.obj[fname];
             var rec = parseRecord(v);
             if (isImgRecord(rec)) {

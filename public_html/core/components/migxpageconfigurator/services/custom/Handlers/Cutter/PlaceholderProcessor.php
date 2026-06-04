@@ -444,12 +444,20 @@ class PlaceholderProcessor
         $parentFieldName = $properties['parentFieldName'] ?? '';
         $deferVar = $this->deferLexiconVar($properties);
 
+        $listValues = (string)$row->getAttribute('data-mpc-values');
         if ($row->hasAttribute('href')) {
             // href — это URL/id ресурса. Не локализуется.
             $pls = (int)$row->getAttribute('href')
                 ? "{$firstSymbol}{$complexName} | url}"
                 : "{$firstSymbol}{$complexName}}";
             $row->setAttribute('href', $pls);
+        } elseif ($listValues !== '') {
+            // listbox: значение — ключ опции, не переводимый текст. Плейсхолдер —
+            // listboxPlaceholder (лексикон по {prefix}_{field}_{$value} либо сырое
+            // {$value}, симметрично грабу).
+            $row->setInnerHtml($this->listboxPlaceholder(
+                $row, $fieldName, $firstSymbol, $complexName, $parentFieldName, $deferVar, $listValues
+            ));
         } else {
             // Внутренний текст элемента — content-type `text`.
             $row->setInnerHtml($this->lex($firstSymbol, $complexName, 'text', $fieldName, $parentFieldName, $deferVar));
@@ -711,6 +719,49 @@ class PlaceholderProcessor
             return "##" . $expr . " | lexicon}";
         }
         return "##'{" . $expr . "}' | lexicon}";
+    }
+
+    /**
+     * Плейсхолдер listbox-значения. Если список keyed ("Caption==key||..."),
+     * текущее значение элемента входит в список ключей и лексиконы включены —
+     * ключ {prefix}_{field}_{$value}: `##'{prefix}_{field}_{$value}' | lexicon}`
+     * (капшены опций пишет грабер, см. LexiconManager::writeListboxOptions). Иначе
+     * (неключевой список / значение не из списка / лексиконы off) — сырое значение
+     * `{$value}`. Решение симметрично грабу (оба видят элемент и значение).
+     */
+    private function listboxPlaceholder(Element $row, string $fieldName, string $firstSymbol, string $expr, string $parentFieldName, bool $deferVar, string $rawValues): string
+    {
+        $opts      = LexiconManager::parseListboxOptions($rawValues);
+        $keyPrefix = $this->lexiconManager->getSectionPrefix() . '_' . $fieldName . '_';
+
+        // МУЛЬТИВЫБОР: значение — массив ключей. Лексиконы вкл (keyed список + поле
+        // лексиконится) → вывод через foreach (каждый ключ → капшен по лексикону,
+        // ключи запекаются eager, `| lexicon` отложен); иначе → join ключей.
+        if ((string)$row->getAttribute('data-mpc-ftype') === 'listbox-multiple') {
+            // Значение — строка ключей через "||" (migx-формат). Итерируем через split.
+            $lex = $opts !== null && $this->shouldLexiconize('text', $fieldName, $parentFieldName);
+            if ($lex) {
+                return '{set $mpcItems = ' . $expr . ' | split: \'||\'}'
+                     . '{foreach $mpcItems as $item}'
+                     . '##(\'' . $keyPrefix . '{$item}\') | lexicon}'
+                     . '{if !$item@last}, {/if}{/foreach}';
+            }
+            return "{$firstSymbol}{$expr} | split: '||' | join: ','}";
+        }
+
+        // ОДИНОЧНЫЙ listbox: ключ {prefix}_{field}_{$value} | lexicon, если значение
+        // из списка и лексиконы вкл; иначе сырое {$value}.
+        $current = trim($row->innerHtml());
+        $lexize  = $opts !== null
+            && $this->shouldLexiconize('text', $fieldName, $parentFieldName)
+            && in_array($current, array_column($opts, 'key'), true);
+        if (!$lexize) {
+            return "{$firstSymbol}{$expr}}";
+        }
+        if ($deferVar) {
+            return "##'" . $keyPrefix . "' ~ " . $expr . " | lexicon}";
+        }
+        return "##'" . $keyPrefix . "{" . $expr . "}' | lexicon}";
     }
 
     private function findByAttr(string $html, string $selector): ?array

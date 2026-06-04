@@ -126,7 +126,7 @@ class SectionProcessor
             }
 
             $values = $this->grabSection($section, $properties, $i);
-            $existing = $existingResourceSections[$values['MIGX_formname'] ?? ''] ?? [];
+            $existing = $existingResourceSections[$this->sectionMergeKey($values)] ?? [];
             $sectionValues[$i] = $this->mergeSectionFields(
                 $values, $existing, $this->reservedFieldNames, !empty($this->properties['updContent'])
             );
@@ -193,7 +193,63 @@ class SectionProcessor
             );
         }
 
+        $this->rebuildTrackedFields($html);
+
         $this->response->success(__METHOD__, 'Section processing is complete.');
+    }
+
+    /**
+     * Собирает манифест трекаемых полей шаблона из data-mpc-* маркеров и
+     * перезаписывает строки этого шаблона в таблице mpc_tracked_fields (источник
+     * для админ-лога и фильтров модалки истории). Глобальный союз — по template_id.
+     * field — верхний уровень секции (вложенные списки помечаем kind=list, дифф
+     * строк делает лог); rfield/tv — по всему html. Уровень тут не храним.
+     */
+    private function rebuildTrackedFields(string $html): void
+    {
+        $templateId = (int)$this->properties['resource']->get('template');
+        if ($templateId <= 0) {
+            return;
+        }
+        $rows = [];
+
+        foreach ($this->parser->findByAttribute($html, '[data-mpc-section]') as $section) {
+            $sectionName = trim((string)$section->getAttribute('data-mpc-section'));
+            $prefix = trim((string)$section->getAttribute('data-mpc-lexicon')) ?: $sectionName;
+            $seen = [];
+            foreach ($this->parser->findByAttribute($this->parser->getHTMLString($section), '[data-mpc-field]') as $e) {
+                $name = trim((string)$e->getAttribute('data-mpc-field'));
+                if ($name === '' || isset($seen[$name]) || isset($this->reservedFieldNames[$name])) {
+                    continue;
+                }
+                $seen[$name] = true;
+                $kind = trim((string)$e->getAttribute('data-mpc-ftype'));
+                if ($kind === '' && $this->parser->findByAttribute($this->parser->getHTMLString($e), '[data-mpc-item]')) {
+                    $kind = 'list';
+                }
+                $rows[] = [
+                    'type' => 'field', 'section' => $sectionName,
+                    'lexicon_prefix' => $prefix, 'field' => $name, 'kind' => $kind,
+                ];
+            }
+        }
+
+        foreach (['rfield' => 'data-mpc-rfield', 'tv' => 'data-mpc-tv'] as $type => $attr) {
+            $seen = [];
+            foreach ($this->parser->findByAttribute($html, '[' . $attr . ']') as $e) {
+                $name = trim((string)$e->getAttribute($attr));
+                if ($name === '' || isset($seen[$name])) {
+                    continue;
+                }
+                $seen[$name] = true;
+                $rows[] = [
+                    'type' => $type, 'section' => '', 'lexicon_prefix' => '',
+                    'field' => $name, 'kind' => trim((string)$e->getAttribute('data-mpc-ftype')),
+                ];
+            }
+        }
+
+        (new \MpcServices\Handlers\TrackedFields($this->modx))->replaceForTemplate($templateId, $rows);
     }
 
     private function createSectionConfig(Element $section, array $properties): array
@@ -283,13 +339,28 @@ class SectionProcessor
         $map = [];
         foreach ($config as $sec) {
             if (is_array($sec)) {
-                $key = (string)($sec['MIGX_formname'] ?? ($sec['section_name'] ?? ''));
-                if ($key !== '') {
+                $key = $this->sectionMergeKey($sec);
+                if (trim($key, '|') !== '') {
                     $map[$key] = $sec;
                 }
             }
         }
         return $map;
+    }
+
+    /**
+     * Ключ секции для умного мержа при перенарезке. = MIGX_formname + lexicon_prefix.
+     * Префикс ОБЯЗАТЕЛЕН: две секции с одинаковым data-mpc-section различаются
+     * data-mpc-lexicon (оригинал "features" vs копия "features_copy"). Без префикса
+     * в ключе мерж путал их — правка/значение копии затирали оригинал (одинаковый
+     * MIGX_formname). lexicon_prefix всегда непуст (фоллбэк на sectionName, см.
+     * grabSection), поэтому однотипные секции по-прежнему матчатся стабильно.
+     */
+    private function sectionMergeKey(array $sec): string
+    {
+        $name = (string)($sec['MIGX_formname'] ?? ($sec['section_name'] ?? ''));
+        $lex  = (string)($sec['lexicon_prefix'] ?? '');
+        return $name . '|' . $lex;
     }
 
     /**
@@ -407,9 +478,14 @@ class SectionProcessor
     private function fieldAttrs(Element $el): array
     {
         return [
-            'ftype' => trim((string)$el->getAttribute('data-mpc-ftype')),
-            'fcap'  => (string)$el->getAttribute('data-mpc-fcap'),
-            'fdesc' => (string)$el->getAttribute('data-mpc-fdesc'),
+            'ftype'  => trim((string)$el->getAttribute('data-mpc-ftype')),
+            'fcap'   => (string)$el->getAttribute('data-mpc-fcap'),
+            'fdesc'  => (string)$el->getAttribute('data-mpc-fdesc'),
+            // Опции listbox (migx-формат "Caption==key||..." или "@SELECT ..."):
+            // вставляем КАК ЕСТЬ в inputOptionValues, migx сам разбирает. См. makeFieldDef.
+            'values' => trim((string)$el->getAttribute('data-mpc-values')),
+            // Лимит записей списочного поля → extended.maxRecords авто-конфига.
+            'max'    => trim((string)$el->getAttribute('data-mpc-max')),
         ];
     }
 
@@ -456,8 +532,11 @@ class SectionProcessor
             }
         }
 
+        // data-mpc-max на контейнере списка → лимит числа записей (extended.maxRecords).
+        $max = trim((string)$listEl->getAttribute('data-mpc-max'));
+
         $configName = $this->autoListName($namePath);
-        $this->saveListConfig($configName, $fields, $sectionName);
+        $this->saveListConfig($configName, $fields, $sectionName, $max);
         $this->createdAutoConfigs[] = $configName;
         return $configName;
     }
@@ -524,10 +603,13 @@ class SectionProcessor
     }
 
     /** Создаёт/обновляет migx-конфиг строки списка в БД. */
-    private function saveListConfig(string $name, array $fields, string $sectionName): void
+    private function saveListConfig(string $name, array $fields, string $sectionName, string $max = ''): void
     {
         $extended = $this->listExtendedDefault();
         $extended['mpc_owner'] = $sectionName; // владелец — для GC осиротевших конфигов
+        if ($max !== '') {
+            $extended['maxRecords'] = $max; // data-mpc-max → лимит записей migx
+        }
 
         $data = [
             'name'     => $name,
@@ -591,6 +673,19 @@ class SectionProcessor
         $def['MIGX_id']     = $pos;
         $def['pos']         = $pos;
 
+        // data-mpc-values → опции listbox. Вставляем значение КАК ЕСТЬ в
+        // inputOptionValues (migx сам разбирает "Caption==key||..." и "@SELECT ...").
+        // Тип: если автор не задал listbox* через ftype — переключаем на listbox
+        // (наличие опций подразумевает выпадайку).
+        $values = (string)($attrs['values'] ?? '');
+        if ($values !== '') {
+            $def['inputOptionValues'] = $values;
+            $it = (string)($def['inputTVtype'] ?? '');
+            if ($it !== 'listbox' && $it !== 'listbox-multiple') {
+                $def['inputTVtype'] = 'listbox';
+            }
+        }
+
         return $def;
     }
 
@@ -623,6 +718,10 @@ class SectionProcessor
             'richtext' => ['inputTVtype' => 'richtext', 'caption' => 'Форматированный текст'],
             'number'   => ['inputTVtype' => 'number',   'caption' => 'Число'],
             'checkbox' => ['inputTVtype' => 'checkbox', 'caption' => 'Флажок', 'inputOptionValues' => 'Да==1'],
+            // Выпадающий список / мультивыбор. Опции приходят из data-mpc-values
+            // (migx-формат), подставляются в inputOptionValues в makeFieldDef.
+            'listbox'          => ['inputTVtype' => 'listbox',          'caption' => 'Список (выбор)'],
+            'listbox-multiple' => ['inputTVtype' => 'listbox-multiple', 'caption' => 'Список (мультивыбор)'],
         ];
         if (isset($known[$type])) {
             $spec = $known[$type];

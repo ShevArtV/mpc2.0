@@ -114,6 +114,10 @@ class FieldTypesHandler
                 return 'rows';
             case 'textarea':
                 return 'textarea';
+            case 'listbox':
+                return 'listbox';
+            case 'listbox-multiple':
+                return 'listbox-multiple';
             case 'text':
             case '':
             default:

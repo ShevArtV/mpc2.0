@@ -32,6 +32,9 @@ class LogHandler
         }
         $rows = (new ChangeLog($this->modx))->listFor($rid, (int)($request['limit'] ?? 100));
         $entries = array_map(function ($r) {
+            // source (editor|admin) и level (resource|type|global) лежат в address.
+            $addr = json_decode((string)($r['address'] ?? ''), true);
+            $addr = is_array($addr) ? $addr : [];
             return [
                 'id'         => (int)$r['id'],
                 'user'       => (string)$r['username'],
@@ -40,6 +43,8 @@ class LogHandler
                 'field'      => (string)$r['field'],
                 'old'        => $r['old_value'],
                 'new'        => $r['new_value'],
+                'source'     => (string)($addr['source'] ?? 'editor'),
+                'level'      => (string)($addr['level'] ?? ''),
                 'revertable' => ((int)$r['revertable'] === 1 && (int)$r['reverted'] === 0),
                 'reverted'   => ((int)$r['reverted'] === 1),
                 'ts'         => (int)$r['created_on'],

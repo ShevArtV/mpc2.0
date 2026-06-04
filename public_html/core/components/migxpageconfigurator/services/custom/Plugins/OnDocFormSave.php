@@ -18,6 +18,16 @@ class OnDocFormSave extends PluginHandler
      */
     public function run(): void
     {
+        // Аудит правок из админки в лог изменений — ДО re-cut (handleFile его бы
+        // перетёр своим ре-грабом). Диффит со снимком OnBeforeDocFormSave.
+        $resource = $this->scriptProperties['resource'] ?? null;
+        if ($resource instanceof \modResource) {
+            (new \MpcServices\Handlers\AdminAudit($this->modx))->logChanges(
+                $resource,
+                (int)$this->modx->getOption('mpc_static_block_page_id', null, 1)
+            );
+        }
+
         $ctx = $this->scriptProperties['resource']->get('context_key');
         if ($this->modx->context->get('key') !== $ctx) {
             $this->modx->switchContext($ctx);
@@ -44,6 +54,17 @@ class OnDocFormSave extends PluginHandler
         }
         if ($this->scriptProperties['id'] === $Mpc->grabber->properties['contactsPageId']) {
             $this->filterContactsLexicons($Mpc);
+        }
+
+        // Сносим parsed: нестатичные секции держат ЗАПЕЧЁННЫЕ значения, а файл
+        // регенерится только при отсутствии. Правка ресурса-ТИПА (донор, parent =
+        // staticBlocksPage) влияет на наследующие → сносим весь parsed; иначе —
+        // файл этого ресурса.
+        $sbp = (int)$Mpc->cutter->properties['staticBlocksPageId'];
+        if ((int)$this->scriptProperties['resource']->get('parent') === $sbp) {
+            $Mpc->render->clearCache();
+        } else {
+            $Mpc->render->deleteParsedConfigFile((int)$this->scriptProperties['id']);
         }
     }
 

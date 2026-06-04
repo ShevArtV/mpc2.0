@@ -10,6 +10,7 @@ import { openPictureEditor } from './picture.js';
 import { openRowsEditor } from './rows.js';
 import { openLinkEditor } from './link.js';
 import { openMediaEditor } from './media.js';
+import { openListboxEditor } from './listbox.js';
 
 export var editors = {
     text: { open: openTextEditor },           // инлайн (простой текст)
@@ -19,5 +20,7 @@ export var editors = {
     picture: { open: openPictureEditor },
     rows: { open: openRowsEditor },
     link: { open: openLinkEditor },
-    media: { open: openMediaEditor }
+    media: { open: openMediaEditor },
+    listbox: { open: openListboxEditor },              // выпадающий список (data-mpc-values)
+    'listbox-multiple': { open: openListboxEditor }    // мультивыбор
 };

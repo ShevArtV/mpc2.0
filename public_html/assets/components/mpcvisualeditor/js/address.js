@@ -116,6 +116,8 @@ export function ftypeToEditor(ftype) {
     if (ftype === 'img' || ftype === 'bg_img') { return 'image'; }
     if (ftype === 'picture') { return 'picture'; }
     if (ftype === 'video' || ftype === 'audio') { return 'media'; }
+    if (ftype === 'listbox') { return 'listbox'; }
+    if (ftype === 'listbox-multiple') { return 'listbox-multiple'; }
     if (ftype.indexOf('list') === 0) { return 'rows'; }
     return 'text'; // text/number/checkbox — инлайн-текст
 }

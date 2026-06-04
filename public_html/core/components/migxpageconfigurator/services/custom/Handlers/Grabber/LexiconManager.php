@@ -294,6 +294,76 @@ class LexiconManager
         return $lexiconKey;
     }
 
+    /** Префикс лексиконов текущей секции (каттеру для listbox-ключа {prefix}_{field}_{value}). */
+    public function getSectionPrefix(): string
+    {
+        return $this->sectionLexiconPrefix;
+    }
+
+    /**
+     * Парсит data-mpc-values listbox-поля. Keyed-формат "Caption==key||..." (есть
+     * хотя бы один '==') → [['caption'=>..,'key'=>..],..]. Неключевой список
+     * ("A||B"), пустое или динамика ("@SELECT ...") → null (лексиконизация опций
+     * НЕ применяется). PURE.
+     */
+    public static function parseListboxOptions(?string $raw): ?array
+    {
+        $raw = trim((string)$raw);
+        if ($raw === '' || $raw[0] === '@' || strpos($raw, '==') === false) {
+            return null;
+        }
+        $opts = [];
+        foreach (explode('||', $raw) as $pair) {
+            $p = explode('==', $pair, 2);
+            $opts[] = [
+                'caption' => trim($p[0]),
+                'key'     => isset($p[1]) ? trim($p[1]) : trim($p[0]),
+            ];
+        }
+        return $opts;
+    }
+
+    /**
+     * Лексиконизация ОПЦИЙ listbox: капшены уезжают в лексикон под ключами
+     * {prefix}_{field}_{optionKey} (пустой key → {prefix}_{field}_). Значение поля
+     * остаётся СЫРЫМ ключом опции — резолв на рендере делает плейсхолдер
+     * ##'{prefix}_{field}_{$value}' | lexicon} (его ставит PlaceholderProcessor).
+     * Пишем только если shouldLexiconize('text',…), список keyed и текущее значение
+     * входит в список ключей (иначе лексикон не применяется — каттер ставит {$value}).
+     */
+    public function writeListboxOptions(string $fieldName, string $parentFieldName, string $rawValues, string $currentValue, bool $multiple = false): void
+    {
+        if (!$this->shouldLexiconize('text', $fieldName, $parentFieldName)) {
+            return;
+        }
+        $opts = self::parseListboxOptions($rawValues);
+        if ($opts === null) {
+            return;
+        }
+        // Одиночный: лексиконим только если значение из списка (иначе сырое).
+        // Мультивыбор: значение — набор; пишем все капшены опций (рендер сам
+        // резолвит выбранные через foreach).
+        if (!$multiple && !in_array($currentValue, array_column($opts, 'key'), true)) {
+            return;
+        }
+
+        if ($this->sectionIsStatic) {
+            $rid = $this->properties['staticBlocksPageLexiconFilename'];
+        } elseif ($this->sectionLexiconPrefix === 'contact') {
+            $rid = $this->properties['contactsPageLexiconFilename'];
+        } else {
+            $rid = $this->getResourceIdentifierById($this->properties['resource']->get('id'));
+        }
+
+        $base = $this->sectionLexiconPrefix . '_' . $fieldName . '_';
+        foreach ($opts as $opt) {
+            if ($opt['caption'] === '') {
+                continue; // пустой капшен нечего писать
+            }
+            $this->lexicons[$rid][$base . $opt['key']] = $this->sanitizeValue($opt['caption']);
+        }
+    }
+
     public function createLexicons(array $allLexicons, bool $overwrite = true): void
     {
         $basePathToLexiconFile   = $this->properties['basePathToLexiconFile'];

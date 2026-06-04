@@ -11,7 +11,11 @@ export function openTextareaEditor(el) {
     if (document.querySelector('.mpcve-modal')) { return; }
     var addr = fieldAddress(el);
     if (!addr) { toast('Нет адреса поля', true); return; }
-    var cur = el.innerText; // текущий многострочный текст (как видно на странице)
+    // Поле с разметкой (<b>/<a>/…): правим ИСХОДНЫЙ HTML (теги видны как текст,
+    // их можно удалить/заменить), на сохранении парсится обратно. Плоский текст —
+    // как обычно (multiline plain). Симметрично инлайн-редактору text.js.
+    var sourceMode = !!(el.querySelector && el.querySelector('*'));
+    var cur = sourceMode ? el.innerHTML : el.innerText;
 
     var overlay = document.createElement('div');
     overlay.className = 'mpcve-modal';
@@ -42,7 +46,8 @@ export function openTextareaEditor(el) {
         saveBtn.disabled = true; saveBtn.textContent = 'Сохранение…';
         api.post('field/save', { address: addr, value: value, old: cur }).then(function (r) {
             if (r && r.success) {
-                el.textContent = value; // обновляем страницу без перезагрузки
+                // source: сырой HTML → реальная разметка; plain: текст как есть.
+                if (sourceMode) { el.innerHTML = value; } else { el.textContent = value; }
                 toast('Сохранено');
                 close();
             } else {

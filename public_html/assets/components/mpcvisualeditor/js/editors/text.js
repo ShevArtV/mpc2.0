@@ -13,7 +13,13 @@ export function saveField(el, old) {
     if (!addr) {
         return;
     }
-    var value = el.getAttribute('data-mpcve-type') === 'richtext' ? el.innerHTML : el.innerText;
+    // richtext всегда HTML. Простой text-field тоже может содержать инлайн-
+    // разметку (<b>/<i>/<a>…) — грабер сохраняет её (FieldValueExtractor::getValue:
+    // есть дочерние теги → HTML детей). Если в поле есть разметка, отдаём innerHTML,
+    // чтобы не срезать её на innerText; чистый текст — innerText (без экранирования &/<).
+    var keepHtml = el.getAttribute('data-mpcve-type') === 'richtext'
+        || (el.querySelector && el.querySelector('*'));
+    var value = keepHtml ? el.innerHTML : el.innerText;
     api.post('field/save', { address: addr, value: value, old: old == null ? '' : old }).then(function (res) {
         if (res && res.success) {
             toast('Сохранено');
@@ -30,6 +36,14 @@ export function openTextEditor(el) {
         return;
     }
     var orig = el.innerHTML;
+    // Поле с разметкой (<b>/<i>/<a>…): правим ИСХОДНЫЙ HTML — показываем теги как
+    // редактируемый текст (`<b>Текст</b>`), чтобы их можно было удалить/заменить.
+    // Плоский текст правится как обычно (WYSIWYG, тегов нет). На закрытии сырой
+    // HTML парсится обратно в реальную разметку.
+    var sourceMode = !!(el.querySelector && el.querySelector('*'));
+    if (sourceMode) {
+        el.textContent = orig;
+    }
     el.setAttribute('contenteditable', 'true');
     el.setAttribute('spellcheck', 'false');
     el.classList.add('mpcve-editing');
@@ -38,6 +52,11 @@ export function openTextEditor(el) {
     if (sel && el.childNodes.length) {
         var range = document.createRange();
         range.selectNodeContents(el);
+        // В source-режиме НЕ выделяем всё — каретка в конец, иначе первый ввод
+        // затрёт весь сырой HTML. Плоский текст — select-all (удобно перепечатать).
+        if (sourceMode) {
+            range.collapse(false);
+        }
         sel.removeAllRanges();
         sel.addRange(range);
     }
@@ -55,13 +74,21 @@ export function openTextEditor(el) {
             el.blur();
         } else if (e.key === 'Escape') {
             e.preventDefault();
-            el.innerHTML = orig;
+            el.innerHTML = orig; // вернуть исходный рендер
             cleanup();
         }
     }
     function onBlur() {
         cleanup();
-        if (el.innerHTML !== orig) {
+        if (sourceMode) {
+            // Введённый сырой HTML → реальная разметка (парсинг браузером).
+            var src = el.innerText;
+            el.innerHTML = src;
+            // saveField прочитает el.innerHTML (теперь = реальная разметка).
+            if (el.innerHTML !== orig) {
+                saveField(el, orig);
+            }
+        } else if (el.innerHTML !== orig) {
             saveField(el, orig);
         }
     }

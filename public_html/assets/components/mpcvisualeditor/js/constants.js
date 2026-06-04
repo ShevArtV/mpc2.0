@@ -16,16 +16,20 @@ export var TYPE_HINT = {
     picture: 'Адаптивная картинка — клик: главное фото + источники',
     media: 'Видео/аудио — клик: файл, постер, источники, атрибуты',
     rows: 'Список — клик, чтобы добавить/удалить/переставить строки',
-    link: 'Ссылка — клик, чтобы изменить адрес (текст правится внутри)'
+    link: 'Ссылка — клик, чтобы изменить адрес (текст правится внутри)',
+    listbox: 'Выбор из списка — клик',
+    'listbox-multiple': 'Выбор нескольких значений — клик'
 };
 
-// Редактируемые поля СЕКЦИИ = вкладка «Стили секции», кроме css_file_path.
-export var SECTION_STYLE_FIELDS = ['inline_styles', 'class_names'];
+// Редактируемые поля СЕКЦИИ = вкладка «Стили секции», кроме css_file_path
+// (путь к файлу — не правим из фронта). props = «Дополнительные свойства».
+export var SECTION_STYLE_FIELDS = ['inline_styles', 'class_names', 'props'];
 
 // Структурные ключи (для скрытых под-полей СТРОК списков) — не редактируем.
+// Сюда же стилевые (показываем отдельной веткой) + css_file_path (вообще не правим).
 export var STRUCTURAL = ['section_name', 'MIGX_formname', 'MIGX_id', 'id', 'position',
     'is_static', 'file_name', 'limit', 'lexicon_prefix', 'css_file_path',
-    'inline_styles', 'class_names'];
+    'inline_styles', 'class_names', 'props'];
 
 // Понятные подписи известных полей (приоритетнее captions из конфигуратора).
 export var FIELD_LABELS = {

@@ -233,6 +233,26 @@ class FieldValueExtractor
 
     public function getValue(Element $element, ?array $options = []): string
     {
+        // listbox (data-mpc-values): значение поля — СЫРОЙ ключ опции; капшены
+        // опций уходят в лексикон ключами {prefix}_{field}_{optionKey}. Само
+        // значение НЕ лексиконим как text-ключ (enum, не переводимый текст).
+        $rawValues = (string)$element->getAttribute('data-mpc-values');
+        if ($rawValues !== '') {
+            $result = trim($element->innerHtml());
+            $multiple = (string)$element->getAttribute('data-mpc-ftype') === 'listbox-multiple';
+            // Капшены опций → лексикон (и одиночный, и мультивыбор). Значение поля
+            // остаётся сырым (для multiple ContentParser разобьёт его в массив ключей,
+            // чтобы $field был iterable в Fenom).
+            $this->lexiconManager->writeListboxOptions(
+                (string)($options['fieldName'] ?? ''),
+                (string)($options['parentFieldName'] ?? ''),
+                $rawValues,
+                $result,
+                $multiple
+            );
+            return $result;
+        }
+
         if ($href = $element->getAttribute('href')) {
             $result = $href;
         } elseif ($children = $element->children()) {

@@ -56,6 +56,50 @@ export function toast(message, isError) {
     }, 2400);
 }
 
+// Диалог выбора из нескольких вариантов (стиль редактора). Возвращает
+// Promise<key|null>: key выбранной кнопки, null — отмена (Esc / фон / Отмена).
+// opts: { title, choices:[{key,label,primary,danger}], cancelLabel }.
+export function choiceDialog(message, opts) {
+    opts = opts || {};
+    var choices = opts.choices || [];
+    return new Promise(function (resolve) {
+        if (document.querySelector('.mpcve-confirm')) { resolve(null); return; }
+        var ov = document.createElement('div');
+        ov.className = 'mpcve-modal mpcve-confirm';
+        var btns = choices.map(function (c, i) {
+            var cls = 'mpcve-btn' + (c.primary ? ' mpcve-btn--primary' : '') + (c.danger ? ' mpcve-btn--danger' : '');
+            return '<button type="button" class="' + cls + '" data-choice="' + i + '"></button>';
+        }).join('');
+        ov.innerHTML =
+            '<div class="mpcve-modal__card mpcve-confirm__card">' +
+                (opts.title ? '<div class="mpcve-modal__head"></div>' : '') +
+                '<div class="mpcve-confirm__msg"></div>' +
+                '<div class="mpcve-modal__actions mpcve-confirm__actions">' +
+                    '<button type="button" class="mpcve-btn" data-act="cancel"></button>' +
+                    btns +
+                '</div>' +
+            '</div>';
+        document.body.appendChild(ov);
+        if (opts.title) { ov.querySelector('.mpcve-modal__head').textContent = opts.title; }
+        ov.querySelector('.mpcve-confirm__msg').textContent = message;
+        ov.querySelector('[data-act=cancel]').textContent = opts.cancelLabel || 'Отмена';
+        choices.forEach(function (c, i) {
+            ov.querySelector('[data-choice="' + i + '"]').textContent = c.label;
+        });
+
+        function done(v) { ov.remove(); document.removeEventListener('keydown', onKey); resolve(v); }
+        function onKey(e) { if (e.key === 'Escape') { done(null); } }
+        document.addEventListener('keydown', onKey);
+        ov.addEventListener('click', function (e) { if (e.target === ov) { done(null); } });
+        ov.querySelector('[data-act=cancel]').addEventListener('click', function () { done(null); });
+        choices.forEach(function (c, i) {
+            ov.querySelector('[data-choice="' + i + '"]').addEventListener('click', function () { done(c.key); });
+        });
+        var first = ov.querySelector('[data-choice]');
+        if (first) { first.focus(); }
+    });
+}
+
 // Модальное подтверждение в стиле редактора (замена window.confirm).
 // opts: { title, okLabel, cancelLabel, danger }. Возвращает Promise<boolean>.
 // Enter = OK, Esc / клик по фону / Отмена = false.

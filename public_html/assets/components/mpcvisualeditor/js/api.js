@@ -2,20 +2,72 @@
  * mpcVisualEditor — связь с коннектором + загрузка конфига.
  */
 import { S } from './state.js';
+import { toast, choiceDialog } from './dom.js';
+
+function rawPost(action, payload) {
+    var body = new FormData();
+    body.append('action', action);
+    Object.keys(payload || {}).forEach(function (k) {
+        var v = payload[k];
+        body.append(k, typeof v === 'object' ? JSON.stringify(v) : v);
+    });
+    return fetch(S.cfg.connectorUrl, {
+        method: 'POST',
+        credentials: 'same-origin',
+        body: body
+    }).then(function (r) { return r.json(); });
+}
+
+// Наследование уровней при field/save. Бэк отвечает code=inherit_choice, если
+// секция отсутствует в конфиге ресурса (наследуется от типа) → спрашиваем юзера:
+//   • «Скопировать в эту страницу» — сидируем секцию в ресурс, правка локальна
+//     (повтор запроса с address.inherit='copy');
+//   • «Открыть страницу-источник» — редирект на ресурс-тип (data.typeUrl), где
+//     секция реально лежит, и правка идёт там обычным resource-путём.
+// Для статичной секции (level=global) диалога нет — предупреждаем, что глобально.
+// Централизовано здесь, чтобы все редакторы работали единообразно.
+function handleFieldSave(payload, res) {
+    var addr = (payload && payload.address) || {};
+    if (res && res.data && res.data.code === 'inherit_choice' && !addr.inherit) {
+        var name = (res.data.section || addr.section || '');
+        var typeUrl = res.data.typeUrl || '';
+        var choices = [{ key: 'copy', label: 'Скопировать в эту страницу', primary: true }];
+        if (typeUrl) { choices.push({ key: 'goto', label: 'Открыть страницу-источник и править там' }); }
+        return choiceDialog(
+            'Секция «' + name + '» наследуется от типа страницы. Скопировать её в эту страницу (править локально) или открыть страницу-источник?',
+            { title: 'Наследуемая секция', choices: choices, cancelLabel: 'Отмена' }
+        ).then(function (choice) {
+            if (!choice) { return res; } // отмена — отдаём исходный ответ
+            if (choice === 'goto') {
+                // Редирект на источник. Возвращаем «вечный» промис: страница всё
+                // равно уходит, а редактор не успеет мигнуть тостом 'section
+                // inherited...' (иначе .then показывал бы сообщение до навигации).
+                window.location.href = typeUrl;
+                return new Promise(function () {});
+            }
+            // copy: повтор запроса с inherit='copy'
+            var p2 = {};
+            Object.keys(payload).forEach(function (k) { p2[k] = payload[k]; });
+            p2.address = {};
+            Object.keys(addr).forEach(function (k) { p2.address[k] = addr[k]; });
+            p2.address.inherit = 'copy';
+            return rawPost('field/save', p2).then(function (r2) {
+                if (r2 && r2.success) { toast('Скопировано в эту страницу'); }
+                return r2;
+            });
+        });
+    }
+    if (res && res.success && addr.level === 'global') {
+        toast('Статичная секция: изменение глобально (для всех страниц)');
+    }
+    return res;
+}
 
 export var api = {
     post: function (action, payload) {
-        var body = new FormData();
-        body.append('action', action);
-        Object.keys(payload || {}).forEach(function (k) {
-            var v = payload[k];
-            body.append(k, typeof v === 'object' ? JSON.stringify(v) : v);
+        return rawPost(action, payload).then(function (res) {
+            return action === 'field/save' ? handleFieldSave(payload, res) : res;
         });
-        return fetch(S.cfg.connectorUrl, {
-            method: 'POST',
-            credentials: 'same-origin',
-            body: body
-        }).then(function (r) { return r.json(); });
     },
     // Загрузка файла (multipart): file под ключом 'file' + доп. поля.
     upload: function (action, file, extra) {

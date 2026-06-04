@@ -157,6 +157,13 @@ function bindClicks() {
         }
         var el = e.target.closest ? e.target.closest('.mpcve-editable') : null;
         if (el && el.getAttribute('contenteditable') === 'true') {
+            // Поле уже редактируется инлайн — НЕ переоткрываем редактор. Но если
+            // оно внутри <a>, повторный/двойной клик иначе уходит в навигацию по
+            // ссылке (перезагрузка). Гасим переход; каретка ставится на mousedown,
+            // поэтому preventDefault на click её не ломает.
+            if (e.target.closest && e.target.closest('a')) {
+                e.preventDefault();
+            }
             return;
         }
         if (el) {

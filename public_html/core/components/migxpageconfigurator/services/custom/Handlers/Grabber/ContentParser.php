@@ -85,7 +85,16 @@ class ContentParser
                     $fields[$fieldName][$k] = array_merge($fields[$fieldName][$k], $value);
                 }
             } else {
-                $fields[$fieldName] = $this->fieldValueExtractor->getValue($row, $lexiconOptions);
+                $val = $this->fieldValueExtractor->getValue($row, $lexiconOptions);
+                // listbox-multiple: значение — СТРОКА ключей через "||" (формат
+                // MODX/migx — admin-сетка корректно round-trip'ит; массив-объект
+                // она бы застрингифила). Нормализуем из шаблонного "tg,ph" / "tg||ph".
+                // Рендер итерирует через `| split:'||'` (см. PlaceholderProcessor).
+                if ($row->getAttribute('data-mpc-ftype') === 'listbox-multiple') {
+                    $keys = preg_split('/\s*(?:,|\|\|)\s*/', (string)$val, -1, PREG_SPLIT_NO_EMPTY);
+                    $val = implode('||', $keys ?: []);
+                }
+                $fields[$fieldName] = $val;
             }
         }
 
