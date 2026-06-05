@@ -425,8 +425,13 @@ class Cutter extends Base
                 $useLexicon = $lexiconize
                     && !empty($this->properties['useLexicons'])
                     && $this->lexiconManager->shouldLexiconize($contentType, $name);
+                // ОТЛОЖЕННАЯ форма `##…}`: на запекании НЕ резолвится Fenom'ом,
+                // convertStaticHashToBrace конвертит `##`→`{` → в parsed/ доезжает
+                // живой {'key' | lexicon}, который резолвится на КАЖДЫЙ запрос в
+                // текущем языке (переключение языка без перенарезки). Немедленная
+                // `{…}` запеклась бы в значение. Симметрично секционным полям (lex()).
                 $pls = $useLexicon
-                    ? "{'" . $lexiconKeyPrefix . $name . "' | lexicon}"
+                    ? "##'" . $lexiconKeyPrefix . $name . "' | lexicon}"
                     : '{' . $expr . '}';
             }
             $itemHtml    = $this->parser->getHTMLString($item);
