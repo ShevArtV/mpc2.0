@@ -259,7 +259,10 @@ class Cutter extends Base
             }
 
             $href  = $valueField->getAttribute('href');
-            $value = $href ?: trim($valueField->textContent);
+            // ->text() (метод), НЕ ->textContent (свойство): последнее в этой версии
+            // DiDom возвращает пусто для вложенного контента (<a><span>тел</span></a>)
+            // → ckey считался от md5('') и не совпадал с грабером. См. getContactKey.
+            $value = $href ?: trim($valueField->text());
 
             $key       = $item->getAttribute('data-mpc-key') ?: $this->getContactKey($value);
             $type      = $contactAttrValue[0];
@@ -267,7 +270,7 @@ class Cutter extends Base
 
             foreach ($fields as $field) {
                 $fieldName   = $field->getAttribute('data-mpc-cfield');
-                $complexName = "{\$contacts['$placement']['$key']['$fieldName']}";
+                $complexName = $this->contactFieldExpr($placement, $key, $fieldName);
                 $search[]    = $this->parser->getHTMLString($field);
 
                 if ($fieldName === 'value') {
@@ -280,7 +283,7 @@ class Cutter extends Base
                         }
                         $field->setAttribute('href', $complexName);
                     }
-                    $field->setInnerHtml("{\$contacts['$placement']['$key']['fvalue']}");
+                    $field->setInnerHtml($this->contactFieldExpr($placement, $key, 'fvalue'));
                     $replacement[] = $this->parser->getHTMLString($field);
                 } else {
                     if ($field->hasAttribute('src')) {
@@ -317,6 +320,24 @@ class Cutter extends Base
         if (!empty($replacement)) {
             $this->html = str_replace($search, $replacement, $this->html);
         }
+    }
+
+    /**
+     * Плейсхолдер под-поля контакта. Для переводимых полей (настройка
+     * mpc_contact_lexicon_fields) добавляет `| lexicon` — значение в TV хранит ключ,
+     * перевод резолвится на рендере. Для прочих — сырое чтение.
+     */
+    private function contactFieldExpr(string $placement, string $key, string $field): string
+    {
+        $expr = "\$contacts['$placement']['$key']['$field']";
+        $translatable = $this->properties['contactLexiconFields'] ?? [];
+        if (!empty($this->properties['useLexicons']) && in_array($field, $translatable, true)) {
+            // Отложенная форма: на запекании {$contacts…} интерполирует КЛЮЧ, а
+            // `##`→`{` (convertStaticHashToBrace) оставляет в parsed/ живой
+            // {'key' | lexicon} → язык переключается без перенарезки.
+            return "##'{" . $expr . "}' | lexicon}";
+        }
+        return "{{$expr}}";
     }
 
     /**

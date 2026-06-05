@@ -63,6 +63,14 @@ return [
         'value' => 'contacts',
         'area' => 'default',
     ],
+    // Какие под-поля контакта переводятся (лексиконятся): caption/value/fvalue/
+    // attributes через запятую. Пусто → контакты не лексиконятся. value/fvalue
+    // переводятся БЕЗ привязки к плейсменту (один перевод на все места).
+    'mpc_contact_lexicon_fields' => [
+        'xtype' => 'textfield',
+        'value' => 'caption',
+        'area' => 'default',
+    ],
     'mpc_copy_config_tv_name' => [
         'xtype' => 'textfield',
         'value' => 'copy_sections',

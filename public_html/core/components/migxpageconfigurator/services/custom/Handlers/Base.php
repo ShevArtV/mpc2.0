@@ -99,6 +99,12 @@ class Base
             'contactsPageId' => (int)$this->modx->getOption('mpc_contacts_page_id', null, 1),
             'contactsTvName' => $this->modx->getOption('mpc_contacts_tv_name', null, 'contacts'),
             'contactsTvId' => $this->modx->getOption('mpc_contacts_tv_id', null, 0),
+            // Какие под-поля контакта переводимы (лексиконятся). По умолчанию только
+            // caption; трансграничный сайт ставит "caption,value,fvalue,attributes".
+            'contactLexiconFields' => array_values(array_filter(array_map(
+                'trim',
+                explode(',', (string)$this->modx->getOption('mpc_contact_lexicon_fields', null, 'caption'))
+            ))),
             'assetsPath' => $this->modx->getOption('assets_path', null, ''),
             'useLexicons' => $this->modx->getOption('mpc_use_lexicons', '', false),
             'defaultLanguageKey' => $this->modx->getOption('mpc_default_language', '', 'ru'),
@@ -155,7 +161,11 @@ class Base
      */
     public function getContactKey(string $value): string
     {
-        return md5($value);
+        // strip_tags+trim — единая нормализация значения для ckey: грабер берёт
+        // значение через getValue (может прийти с дочерними тегами, напр.
+        // "<span>тел</span>"), каттер — textContent (без тегов). Без нормализации
+        // md5 расходился → контакты без data-mpc-key не резолвились на рендере.
+        return md5(trim(strip_tags($value)));
     }
 
     /**

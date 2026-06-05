@@ -74,7 +74,10 @@ class ContactUpdater
             }
 
             if (!$tmp['key']) {
-                $tmp['key'] = $item->getAttribute('data-mpc-key') ?: md5($tmp['value']);
+                // ckey = data-mpc-key, иначе md5 от НОРМАЛИЗОВАННОГО значения
+                // (strip_tags+trim) — единообразно с каттером (Base::getContactKey),
+                // иначе контакты без data-mpc-key не резолвятся на рендере.
+                $tmp['key'] = $item->getAttribute('data-mpc-key') ?: md5(trim(strip_tags($tmp['value'])));
             }
 
             if ($tmp['type'] === 'phone') {
@@ -95,19 +98,30 @@ class ContactUpdater
                 ? $this->modx->event->returnedValues['contact']
                 : $tmp;
 
-            if (in_array('contact', $this->properties['translatableContentTypes'])) {
-                foreach ($tmp as $k => $v) {
-                    if (in_array($k, ['placement', 'key', 'type'])) {
-                        continue;
-                    }
-                    $lexiconOptions = [
-                        'fieldName'       => $k,
-                        'parentFieldName' => "{$tmp['key']}_{$tmp['type']}_{$tmp['placement']}",
-                        'idx'             => 0,
-                        'prefix'          => 'contact',
-                    ];
-                    $tmp[$k] = $this->lexiconManager->setLexicons($v, $lexiconOptions);
+            // Лексиконим только переводимые под-поля (настройка mpc_contact_lexicon_fields).
+            // Ключ строится по РОЛИ поля (identity контакта = data-mpc-key / md5(value)):
+            //   value/fvalue — данные самого контакта (один телефон/email на все места)
+            //     → ключ БЕЗ плейсмента: contact_{ckey}_{type}_value (один перевод на все плейсменты);
+            //   caption/attributes — оформление (подпись/иконка зависят от места)
+            //     → ключ С плейсментом: contact_{ckey}_{type}_{placement}_caption.
+            $translatable = $this->properties['contactLexiconFields'] ?? ['caption'];
+            // Пер-маркер override: data-mpc-translate="caption,value" перекрывает настройку.
+            if ($override = trim((string)$item->getAttribute('data-mpc-translate'))) {
+                $translatable = array_values(array_filter(array_map('trim', explode(',', $override))));
+            }
+            foreach ($tmp as $k => $v) {
+                if (!in_array($k, $translatable, true)) {
+                    continue;
                 }
+                $parent = in_array($k, ['value', 'fvalue'], true)
+                    ? "{$tmp['key']}_{$tmp['type']}"
+                    : "{$tmp['key']}_{$tmp['type']}_{$tmp['placement']}";
+                $tmp[$k] = $this->lexiconManager->setLexicons($v, [
+                    'fieldName'       => $k,
+                    'parentFieldName' => $parent,
+                    'idx'             => 0,
+                    'prefix'          => 'contact',
+                ]);
             }
 
             $contacts[$tmp['value']]['type']   = $tmp['type'];
