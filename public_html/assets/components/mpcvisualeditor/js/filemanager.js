@@ -1,0 +1,211 @@
+/**
+ * mpcVisualEditor — мини-файловый менеджер поверх modMediaSource.
+ * Навигация по папкам + CRUD (создание/переименование/удаление папок и файлов)
+ * + загрузка в текущую папку + ВЫБОР существующего файла.
+ *
+ * openFileManager(opts) → Promise<{url,name,path}|null>
+ *   opts: { accept:'image'|'media'|'any', title, source }
+ * Промис резолвится выбранным файлом («Выбрать»/двойной клик) или null (отмена).
+ * Бэк — экшены files/* (FileManagerHandler). Пути — относительные базе источника.
+ */
+import { files } from './api.js';
+import { toast, esc, promptDialog, confirmDialog } from './dom.js';
+
+var EXT_ICON = { pdf: '📄', zip: '🗜', doc: '📃', docx: '📃', xls: '📊', xlsx: '📊', mp4: '🎬', webm: '🎬', mp3: '🎵', wav: '🎵' };
+
+export function openFileManager(opts) {
+    opts = opts || {};
+    if (document.querySelector('.mpcve-fm')) { return Promise.resolve(null); }
+    var accept = opts.accept || 'any';
+
+    return new Promise(function (resolve) {
+        var state = { source: opts.source || 0, path: '', selected: null, sources: [] };
+
+        var ov = document.createElement('div');
+        ov.className = 'mpcve-modal mpcve-fm';
+        ov.innerHTML =
+            '<div class="mpcve-modal__card mpcve-modal__card--wide mpcve-fm__card">' +
+                '<div class="mpcve-modal__head">' + esc(opts.title || 'Файлы') + '</div>' +
+                '<div class="mpcve-fm__bar">' +
+                    '<select class="mpcve-fm__source" hidden></select>' +
+                    '<button type="button" class="mpcve-btn mpcve-fm__up" title="Вверх">↑</button>' +
+                    '<div class="mpcve-fm__crumbs"></div>' +
+                    '<span class="mpcve-modal__spacer"></span>' +
+                    '<button type="button" class="mpcve-btn mpcve-fm__mkdir">📁 Папка</button>' +
+                    '<label class="mpcve-btn mpcve-fm__uploadlbl">⬆ Загрузить' +
+                        '<input type="file" class="mpcve-fm__upload" hidden></label>' +
+                '</div>' +
+                '<div class="mpcve-fm__grid"><div class="mpcve-fm__loading">Загрузка…</div></div>' +
+                '<div class="mpcve-modal__actions">' +
+                    '<span class="mpcve-fm__sel"></span>' +
+                    '<span class="mpcve-modal__spacer"></span>' +
+                    '<button type="button" class="mpcve-btn" data-act="cancel">Отмена</button>' +
+                    '<button type="button" class="mpcve-btn mpcve-btn--primary" data-act="pick" disabled>Выбрать</button>' +
+                '</div>' +
+            '</div>';
+        document.body.appendChild(ov);
+
+        var grid     = ov.querySelector('.mpcve-fm__grid');
+        var crumbs   = ov.querySelector('.mpcve-fm__crumbs');
+        var selLabel = ov.querySelector('.mpcve-fm__sel');
+        var pickBtn  = ov.querySelector('[data-act=pick]');
+        var srcSel   = ov.querySelector('.mpcve-fm__source');
+        var uploadEl = ov.querySelector('.mpcve-fm__upload');
+
+        function done(v) { ov.remove(); document.removeEventListener('keydown', onKey, true); resolve(v); }
+        // capture + stopImmediatePropagation: Escape закрывает ТОЛЬКО файловый
+        // менеджер, не подлежащий под ним модал-редактор (тоже слушает Escape).
+        function onKey(e) {
+            if (e.key !== 'Escape') { return; }
+            // Поверх файлового менеджера может быть prompt/confirm — Escape ему.
+            if (document.querySelector('.mpcve-confirm')) { return; }
+            e.stopImmediatePropagation();
+            done(null);
+        }
+        document.addEventListener('keydown', onKey, true);
+        ov.addEventListener('click', function (e) { if (e.target === ov) { done(null); } });
+        ov.querySelector('[data-act=cancel]').addEventListener('click', function () { done(null); });
+        pickBtn.addEventListener('click', function () { if (state.selected) { done(state.selected); } });
+
+        // Путь родителя: 'a/b/' → 'a/', 'a/' → ''.
+        function parentOf(p) {
+            var t = String(p || '').replace(/\/+$/, '');
+            var i = t.lastIndexOf('/');
+            return i < 0 ? '' : t.slice(0, i + 1);
+        }
+
+        function setSelected(file) {
+            state.selected = file;
+            pickBtn.disabled = !file;
+            selLabel.textContent = file ? ('Выбрано: ' + file.name) : '';
+            grid.querySelectorAll('.mpcve-fm__file').forEach(function (n) {
+                n.classList.toggle('mpcve-fm__file--sel', !!file && n.getAttribute('data-path') === file.path);
+            });
+        }
+
+        function renderCrumbs() {
+            var parts = state.path.replace(/\/+$/, '').split('/').filter(Boolean);
+            var html = '<a href="#" data-p="">🏠</a>';
+            var acc = '';
+            parts.forEach(function (seg) {
+                acc += seg + '/';
+                html += ' / <a href="#" data-p="' + esc(acc) + '">' + esc(seg) + '</a>';
+            });
+            crumbs.innerHTML = html;
+            crumbs.querySelectorAll('a').forEach(function (a) {
+                a.addEventListener('click', function (e) { e.preventDefault(); navigate(a.getAttribute('data-p')); });
+            });
+        }
+
+        function navigate(path) {
+            state.path = path || '';
+            setSelected(null);
+            grid.innerHTML = '<div class="mpcve-fm__loading">Загрузка…</div>';
+            files.list(state.source, state.path, accept).then(function (r) {
+                if (!r || !r.success) { grid.innerHTML = '<div class="mpcve-fm__loading">' + esc((r && r.message) || 'Ошибка') + '</div>'; return; }
+                var d = r.data || {};
+                state.source = d.sourceId || state.source;
+                if (d.sources && d.sources.length > 1) { renderSources(d.sources, d.sourceId); }
+                renderCrumbs();
+                renderGrid(d.dirs || [], d.files || []);
+            }).catch(function () { grid.innerHTML = '<div class="mpcve-fm__loading">Сетевая ошибка</div>'; });
+        }
+
+        function renderSources(list, current) {
+            srcSel.hidden = false;
+            srcSel.innerHTML = list.map(function (s) {
+                return '<option value="' + s.id + '"' + (s.id === current ? ' selected' : '') + '>' + esc(s.name) + '</option>';
+            }).join('');
+            srcSel.onchange = function () { state.source = parseInt(srcSel.value, 10) || 0; navigate(''); };
+        }
+
+        function renderGrid(dirs, fileList) {
+            grid.innerHTML = '';
+            if (!dirs.length && !fileList.length) {
+                grid.innerHTML = '<div class="mpcve-fm__loading">Папка пуста</div>';
+                return;
+            }
+            dirs.forEach(function (dir) { grid.appendChild(dirTile(dir)); });
+            fileList.forEach(function (f) { grid.appendChild(fileTile(f)); });
+        }
+
+        function actBtns(kind, item) {
+            var wrap = document.createElement('div');
+            wrap.className = 'mpcve-fm__acts';
+            wrap.innerHTML =
+                '<button type="button" class="mpcve-fm__act" data-a="rename" title="Переименовать">✎</button>' +
+                '<button type="button" class="mpcve-fm__act mpcve-fm__act--del" data-a="del" title="Удалить">✕</button>';
+            wrap.querySelector('[data-a=rename]').addEventListener('click', function (e) {
+                e.stopPropagation();
+                promptDialog('Новое имя:', { title: 'Переименовать', value: item.name, okLabel: 'Переименовать' }).then(function (name) {
+                    if (!name || name === item.name) { return; }
+                    files.rename(state.source, item.path, name, kind).then(function (r) {
+                        if (r && r.success) { toast(r.message || 'Переименовано'); navigate(state.path); }
+                        else { toast((r && r.message) || 'Ошибка', true); }
+                    });
+                });
+            });
+            wrap.querySelector('[data-a=del]').addEventListener('click', function (e) {
+                e.stopPropagation();
+                confirmDialog('Удалить «' + item.name + '»' + (kind === 'dir' ? ' со всем содержимым' : '') + '?', { title: 'Удаление', okLabel: 'Удалить', danger: true }).then(function (ok) {
+                    if (!ok) { return; }
+                    files.remove(state.source, item.path, kind).then(function (r) {
+                        if (r && r.success) { toast(r.message || 'Удалено'); navigate(state.path); }
+                        else { toast((r && r.message) || 'Ошибка', true); }
+                    });
+                });
+            });
+            return wrap;
+        }
+
+        function dirTile(dir) {
+            var tile = document.createElement('div');
+            tile.className = 'mpcve-fm__tile mpcve-fm__dir';
+            tile.innerHTML = '<div class="mpcve-fm__icon">📁</div><div class="mpcve-fm__name"></div>';
+            tile.querySelector('.mpcve-fm__name').textContent = dir.name;
+            tile.appendChild(actBtns('dir', dir));
+            tile.addEventListener('click', function () { navigate(dir.path); });
+            return tile;
+        }
+
+        function fileTile(f) {
+            var tile = document.createElement('div');
+            tile.className = 'mpcve-fm__tile mpcve-fm__file';
+            tile.setAttribute('data-path', f.path);
+            var thumb = f.image
+                ? '<div class="mpcve-fm__icon mpcve-fm__icon--img"><img alt="" src="' + esc(f.url) + '"></div>'
+                : '<div class="mpcve-fm__icon">' + (EXT_ICON[f.ext] || '📄') + '</div>';
+            tile.innerHTML = thumb + '<div class="mpcve-fm__name"></div>';
+            tile.querySelector('.mpcve-fm__name').textContent = f.name;
+            tile.appendChild(actBtns('file', f));
+            tile.addEventListener('click', function () { setSelected(f); });
+            tile.addEventListener('dblclick', function () { done(f); });
+            return tile;
+        }
+
+        ov.querySelector('.mpcve-fm__up').addEventListener('click', function () {
+            if (state.path) { navigate(parentOf(state.path)); }
+        });
+        ov.querySelector('.mpcve-fm__mkdir').addEventListener('click', function () {
+            promptDialog('Имя новой папки:', { title: 'Новая папка', okLabel: 'Создать', placeholder: 'folder' }).then(function (name) {
+                if (!name) { return; }
+                files.mkdir(state.source, state.path, name).then(function (r) {
+                    if (r && r.success) { toast(r.message || 'Создано'); navigate(state.path); }
+                    else { toast((r && r.message) || 'Ошибка', true); }
+                });
+            });
+        });
+        uploadEl.addEventListener('change', function () {
+            var f = uploadEl.files[0];
+            if (!f) { return; }
+            toast('Загрузка…');
+            files.upload(state.source, state.path, accept, f).then(function (r) {
+                uploadEl.value = '';
+                if (r && r.success) { toast('Загружено'); navigate(state.path); }
+                else { toast((r && r.message) || 'Ошибка загрузки', true); }
+            }).catch(function () { uploadEl.value = ''; toast('Сетевая ошибка', true); });
+        });
+
+        navigate('');
+    });
+}

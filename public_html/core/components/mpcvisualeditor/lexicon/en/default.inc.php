@@ -19,3 +19,8 @@ $_lang['mpcve_err_upload'] = 'File upload failed.';
 $_lang['mpcve_err_upload_ext'] = 'Invalid file type.';
 $_lang['mpcve_err_upload_size'] = 'File is too large.';
 $_lang['mpcve_err_source'] = 'Media source not found (mpc_media_source / default_media_source).';
+
+$_lang['mpcve_fm_created'] = 'Folder created';
+$_lang['mpcve_fm_renamed'] = 'Renamed';
+$_lang['mpcve_fm_removed'] = 'Removed';
+$_lang['mpcve_fm_err_name'] = 'Name is required.';

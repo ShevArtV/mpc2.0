@@ -5,6 +5,7 @@
 import { api } from '../api.js';
 import { toast, bgUrl, hasBg } from '../dom.js';
 import { fieldAddress } from '../address.js';
+import { openFileManager } from '../filemanager.js';
 
 function currentImageSrc(el) {
     if (el.tagName.toLowerCase() === 'img') {
@@ -68,6 +69,7 @@ export function openImageEditor(el, forcedAddr) {
                 '<span>Перетащите файл сюда или <b>выберите</b></span>' +
                 '<input type="file" accept="image/*" hidden>' +
             '</label>' +
+            '<button type="button" class="mpcve-pick-existing" data-act="browse">📁 Выбрать существующий</button>' +
             attrFields +
             '<div class="mpcve-modal__actions">' +
                 '<button type="button" class="mpcve-btn" data-act="cancel">Отмена</button>' +
@@ -86,6 +88,7 @@ export function openImageEditor(el, forcedAddr) {
     if (titleInput) { titleInput.value = curTitle; }
 
     var chosen = null;
+    var picked = '';            // url выбранного существующего файла
     var newW = '', newH = '';
 
     // В режиме пути (фон) без файла сохранять нечего; у записи можно править атрибуты.
@@ -133,6 +136,20 @@ export function openImageEditor(el, forcedAddr) {
     }
 
     input.addEventListener('change', function () { pick(input.files[0]); });
+
+    // Выбрать существующий файл через файловый менеджер (без загрузки).
+    overlay.querySelector('[data-act=browse]').addEventListener('click', function () {
+        openFileManager({ accept: 'image', title: 'Выбрать изображение' }).then(function (file) {
+            if (!file) { return; }
+            chosen = null;
+            picked = file.url;
+            renderPreview(file.url, true);
+            var probe = new Image();
+            probe.onload = function () { newW = String(probe.naturalWidth || ''); newH = String(probe.naturalHeight || ''); };
+            probe.src = file.url;
+            saveBtn.disabled = false;
+        });
+    });
     ['dragover', 'dragenter'].forEach(function (ev) {
         drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.add('mpcve-modal__drop--over'); });
     });
@@ -158,8 +175,8 @@ export function openImageEditor(el, forcedAddr) {
                 src: src,
                 alt: altInput ? altInput.value : curAlt,
                 title: titleInput ? titleInput.value : curTitle,
-                width: (chosen && newW) ? newW : curW,
-                height: (chosen && newH) ? newH : curH
+                width: ((chosen || picked) && newW) ? newW : curW,
+                height: ((chosen || picked) && newH) ? newH : curH
             }]);
         } else {
             value = src;
@@ -186,7 +203,7 @@ export function openImageEditor(el, forcedAddr) {
             toast('У элемента нет data-mpc-адреса — некуда сохранять', true);
             return;
         }
-        if (!asRecord && !chosen) {
+        if (!asRecord && !chosen && !picked) {
             return;
         }
         busy(true, 'Сохранение…');
@@ -200,8 +217,8 @@ export function openImageEditor(el, forcedAddr) {
                 persist(res.data.url, addr);
             }).catch(function () { toast('Сетевая ошибка', true); busy(false, 'Сохранить'); });
         } else {
-            // запись без нового файла — сохраняем текущий src + изменённые атрибуты
-            persist(cur, addr);
+            // без нового файла — сохраняем выбранный существующий ИЛИ текущий src
+            persist(picked || cur, addr);
         }
     });
 }

@@ -5,6 +5,7 @@
 import { api, uploadAndProbe } from '../api.js';
 import { toast, parseRecord } from '../dom.js';
 import { fieldAddress, fieldConfigRecord } from '../address.js';
+import { openFileManager } from '../filemanager.js';
 
 // override = {addr} → value-based режим (панель скрытых полей: el=null, адрес и
 // запись из конфига; превью пустые — DOM нет). Иначе обычный режим (адрес/превью
@@ -64,10 +65,12 @@ export function openPictureEditor(el, override) {
     overlay.addEventListener('click', function (e) { if (e.target === overlay) { close(); } });
     overlay.querySelector('[data-act=cancel]').addEventListener('click', close);
 
-    // мини-загрузчик: превью + file-input. onPick(file) кладёт файл в модель.
-    function mediaSlot(container, getPreview, onPick) {
+    // мини-загрузчик: превью + file-input + «Выбрать существующий». onPick(file)
+    // кладёт загружаемый файл в модель, onPickExisting(url) — готовый URL (без загрузки).
+    function mediaSlot(container, getPreview, onPick, onPickExisting) {
         container.innerHTML = '<div class="mpcve-pic__thumb"></div>' +
-            '<label class="mpcve-pic__pick">Заменить<input type="file" accept="image/*" hidden></label>';
+            '<label class="mpcve-pic__pick">Заменить<input type="file" accept="image/*" hidden></label>' +
+            '<button type="button" class="mpcve-pick-existing">📁 Выбрать существующий</button>';
         var thumb = container.querySelector('.mpcve-pic__thumb');
         function draw() {
             var p = getPreview();
@@ -79,6 +82,11 @@ export function openPictureEditor(el, override) {
             var f = this.files[0];
             if (f && f.type.indexOf('image/') === 0) { onPick(f, draw); }
         });
+        container.querySelector('.mpcve-pick-existing').addEventListener('click', function () {
+            openFileManager({ accept: 'image', title: 'Выбрать изображение' }).then(function (file) {
+                if (file) { onPickExisting(file.url, draw); }
+            });
+        });
     }
 
     // основная картинка
@@ -89,6 +97,13 @@ export function openPictureEditor(el, override) {
             var r = new FileReader();
             r.onload = function (ev) { main.preview = ev.target.result; draw(); };
             r.readAsDataURL(f);
+        },
+        function (url, draw) {
+            main.file = null; main.src = url; main.preview = url;
+            var probe = new Image();
+            probe.onload = function () { main.width = String(probe.naturalWidth || ''); main.height = String(probe.naturalHeight || ''); };
+            probe.src = url;
+            draw();
         });
 
     function renderSources() {
@@ -111,6 +126,10 @@ export function openPictureEditor(el, override) {
                     var r = new FileReader();
                     r.onload = function (ev) { s.preview = ev.target.result; draw(); };
                     r.readAsDataURL(f);
+                },
+                function (url, draw) {
+                    s.file = null; s.srcset = url; s.preview = url;
+                    draw();
                 });
         });
     }

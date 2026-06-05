@@ -19,3 +19,8 @@ $_lang['mpcve_err_upload'] = 'Не удалось загрузить файл.';
 $_lang['mpcve_err_upload_ext'] = 'Недопустимый тип файла.';
 $_lang['mpcve_err_upload_size'] = 'Файл слишком большой.';
 $_lang['mpcve_err_source'] = 'Источник медиа не найден (mpc_media_source / default_media_source).';
+
+$_lang['mpcve_fm_created'] = 'Папка создана';
+$_lang['mpcve_fm_renamed'] = 'Переименовано';
+$_lang['mpcve_fm_removed'] = 'Удалено';
+$_lang['mpcve_fm_err_name'] = 'Не указано имя.';

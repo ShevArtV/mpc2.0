@@ -1201,3 +1201,129 @@ body:not(.mpcve-on) .mpcve-media-badge {
     color: #94a3b8;
     padding: 24px;
 }
+
+/* ── Файловый менеджер ─────────────────────────────────────────────── */
+.mpcve-fm__card {
+    width: min(760px, 94vw);
+    display: flex;
+    flex-direction: column;
+}
+.mpcve-fm__bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 10px;
+}
+.mpcve-fm__source {
+    padding: 6px 8px;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    font: inherit;
+    max-width: 180px;
+}
+.mpcve-fm__crumbs {
+    font-size: 13px;
+    color: #475569;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.mpcve-fm__crumbs a {
+    color: #2563eb;
+    text-decoration: none;
+}
+.mpcve-fm__crumbs a:hover { text-decoration: underline; }
+.mpcve-fm__up { padding: 6px 10px; }
+.mpcve-fm__uploadlbl { display: inline-flex; align-items: center; }
+.mpcve-fm__grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 10px;
+    min-height: 200px;
+    max-height: 52vh;
+    overflow: auto;
+    padding: 4px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+}
+.mpcve-fm__loading {
+    grid-column: 1 / -1;
+    text-align: center;
+    color: #94a3b8;
+    padding: 40px 0;
+}
+.mpcve-fm__tile {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 6px;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    background: #fff;
+    cursor: pointer;
+    transition: border-color .12s ease, box-shadow .12s ease;
+}
+.mpcve-fm__tile:hover { border-color: #cbd5e1; box-shadow: 0 2px 8px rgba(0,0,0,.06); }
+.mpcve-fm__file--sel { border-color: #2563eb; box-shadow: 0 0 0 2px rgba(37,99,235,.25); }
+.mpcve-fm__icon {
+    width: 100%;
+    height: 76px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 36px;
+    background: #f1f5f9;
+    border-radius: 6px;
+    overflow: hidden;
+}
+.mpcve-fm__icon--img { background: #e2e8f0; }
+.mpcve-fm__icon--img img { width: 100%; height: 100%; object-fit: cover; }
+.mpcve-fm__name {
+    font-size: 12px;
+    color: #334155;
+    text-align: center;
+    word-break: break-word;
+    line-height: 1.25;
+    max-height: 2.5em;
+    overflow: hidden;
+}
+.mpcve-fm__acts {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    display: none;
+    gap: 4px;
+}
+.mpcve-fm__tile:hover .mpcve-fm__acts { display: flex; }
+.mpcve-fm__act {
+    width: 22px;
+    height: 22px;
+    line-height: 1;
+    padding: 0;
+    border: 1px solid #cbd5e1;
+    border-radius: 5px;
+    background: rgba(255,255,255,.95);
+    color: #475569;
+    cursor: pointer;
+    font-size: 12px;
+}
+.mpcve-fm__act:hover { background: #f1f5f9; }
+.mpcve-fm__act--del:hover { background: #fee2e2; border-color: #fca5a5; color: #b91c1c; }
+.mpcve-fm__sel { font-size: 13px; color: #475569; }
+
+/* Кнопка «Выбрать существующий» в слотах редакторов медиа. */
+.mpcve-pick-existing {
+    display: inline-block;
+    margin-top: 6px;
+    font-size: 12px;
+    color: #2563eb;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 2px 0;
+}
+.mpcve-pick-existing:hover { text-decoration: underline; }

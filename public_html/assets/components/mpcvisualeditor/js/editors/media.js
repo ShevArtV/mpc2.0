@@ -17,6 +17,7 @@
 import { api, uploadMedia } from '../api.js';
 import { toast, esc } from '../dom.js';
 import { fieldAddress, fieldConfigRecord } from '../address.js';
+import { openFileManager } from '../filemanager.js';
 
 function boolOf(v) { return v === true || v === 1 || v === '1' || v === 'true'; }
 function fileName(path) { return (String(path || '').split('?')[0].split('/').pop()) || ''; }
@@ -97,26 +98,36 @@ export function openMediaEditor(el, override) {
     overlay.addEventListener('click', function (e) { if (e.target === overlay) { close(); } });
     overlay.querySelector('[data-act=cancel]').addEventListener('click', close);
 
-    // Слот медиа-файла: показывает ИМЯ файла (видео/аудио не превьюим) + замена.
+    var fmAccept = isVideo ? 'video' : 'audio';
+
+    // Слот медиа-файла: показывает ИМЯ файла (видео/аудио не превьюим) + замена +
+    // выбор существующего через файловый менеджер (без загрузки).
     function fileSlot(container, model, acceptType) {
         function label() {
             return model.file ? model.file.name : (fileName(model.preview) || fileName(model.src) || 'нет файла');
         }
         container.classList.add('mpcve-media__slot');
         container.innerHTML = '<span class="mpcve-media__name"></span>' +
-            '<label class="mpcve-pic__pick">Заменить<input type="file" accept="' + acceptType + '" hidden></label>';
+            '<label class="mpcve-pic__pick">Заменить<input type="file" accept="' + acceptType + '" hidden></label>' +
+            '<button type="button" class="mpcve-pick-existing">📁 Выбрать существующий</button>';
         var name = container.querySelector('.mpcve-media__name');
         name.textContent = label();
         container.querySelector('input[type=file]').addEventListener('change', function () {
             var f = this.files[0];
             if (f) { model.file = f; name.textContent = label(); }
         });
+        container.querySelector('.mpcve-pick-existing').addEventListener('click', function () {
+            openFileManager({ accept: fmAccept, title: 'Выбрать файл' }).then(function (file) {
+                if (file) { model.file = null; model.src = file.url; model.preview = file.url; name.textContent = label(); }
+            });
+        });
     }
 
-    // Постер — картинка: превью-thumb + замена (как в picture).
+    // Постер — картинка: превью-thumb + замена + выбор существующего.
     function posterSlot(container) {
         container.innerHTML = '<div class="mpcve-pic__thumb"></div>' +
-            '<label class="mpcve-pic__pick">Заменить<input type="file" accept="image/*" hidden></label>';
+            '<label class="mpcve-pic__pick">Заменить<input type="file" accept="image/*" hidden></label>' +
+            '<button type="button" class="mpcve-pick-existing">📁 Выбрать существующий</button>';
         var thumb = container.querySelector('.mpcve-pic__thumb');
         function draw() {
             thumb.innerHTML = poster.preview ? '<img alt="">' : '<span class="mpcve-modal__empty">нет</span>';
@@ -131,6 +142,11 @@ export function openMediaEditor(el, override) {
                 r.onload = function (ev) { poster.preview = ev.target.result; draw(); };
                 r.readAsDataURL(f);
             }
+        });
+        container.querySelector('.mpcve-pick-existing').addEventListener('click', function () {
+            openFileManager({ accept: 'image', title: 'Выбрать постер' }).then(function (file) {
+                if (file) { poster.file = null; poster.src = file.url; poster.preview = file.url; draw(); }
+            });
         });
     }
 

@@ -86,6 +86,26 @@ export var api = {
     }
 };
 
+// Файловый менеджер: тонкие обёртки над экшенами files/*.
+export var files = {
+    list: function (source, path, accept) {
+        return rawPost('files/list', { source: source || 0, path: path || '', accept: accept || 'any' });
+    },
+    mkdir: function (source, path, name) {
+        return rawPost('files/mkdir', { source: source || 0, path: path || '', name: name });
+    },
+    rename: function (source, path, name, kind) {
+        return rawPost('files/rename', { source: source || 0, path: path, name: name, kind: kind || 'file' });
+    },
+    remove: function (source, path, kind) {
+        return rawPost('files/remove', { source: source || 0, path: path, kind: kind || 'file' });
+    },
+    // Загрузка в текущую папку (multipart) → ответ {success,data:{url,path}}.
+    upload: function (source, path, accept, file) {
+        return api.upload('files/upload', file, { source: source || 0, path: path || '', accept: accept || 'any' });
+    }
+};
+
 // Загрузка медиа-файла (video|audio|image) → Promise<url>. Без замера размеров
 // (для видео/аудио он не нужен). kind задаёт белый список/подпапку на бэке.
 export function uploadMedia(file, kind) {

@@ -16,6 +16,10 @@ $modx = new modX();
 $modx->initialize('web');
 $modx->getService('error', 'error.modError');
 $modx->getRequest();
+// Топик лексикона компонента — чтобы сообщения хендлеров (mpcve_*) резолвились
+// в текст, а не отдавались сырыми ключами в JSON-ответе.
+$modx->getService('lexicon', 'modLexicon');
+$modx->lexicon->load('mpcvisualeditor:default');
 
 header('Content-Type: application/json; charset=UTF-8');
 

@@ -77,6 +77,21 @@ class Connector
                 // Загрузка картинки в media source mpc → возврат URL (фронт пишет
                 // его в поле через field/save). См. ImageUploadHandler.
                 return (new Handlers\ImageUploadHandler($this->modx, $this->mpcve))->handle($request);
+            case 'files/list':
+                // Файловый менеджер: листинг папки источника (навигация + выбор).
+                return (new Handlers\FileManagerHandler($this->modx, $this->mpcve))->list($request);
+            case 'files/mkdir':
+                // Файловый менеджер: создать папку.
+                return (new Handlers\FileManagerHandler($this->modx, $this->mpcve))->mkdir($request);
+            case 'files/rename':
+                // Файловый менеджер: переименовать файл/папку.
+                return (new Handlers\FileManagerHandler($this->modx, $this->mpcve))->rename($request);
+            case 'files/remove':
+                // Файловый менеджер: удалить файл/папку.
+                return (new Handlers\FileManagerHandler($this->modx, $this->mpcve))->remove($request);
+            case 'files/upload':
+                // Файловый менеджер: загрузить файл в текущую папку.
+                return (new Handlers\FileManagerHandler($this->modx, $this->mpcve))->upload($request);
             default:
                 return $this->error('Unknown or not-yet-implemented action: ' . $action);
         }
