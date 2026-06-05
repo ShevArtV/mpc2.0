@@ -151,6 +151,13 @@ function bindClicks() {
         if (!S.editing) {
             return;
         }
+        // Клик внутри собственного UI редактора (модалки/файловый менеджер,
+        // сайдбар, тулбар) — не вмешиваемся: у этих элементов свои обработчики.
+        // Иначе глобальное гашение <a> (preventDefault+stopPropagation в capture)
+        // ломает их ссылки — например, хлебные крошки файлового менеджера.
+        if (e.target.closest && e.target.closest('.mpcve-modal, .mpcve-sidebar, .mpcve-toolbar')) {
+            return;
+        }
         // Клик по кнопке скрытых полей — её обрабатывает собственный listener.
         if (e.target.closest && e.target.closest('.mpcve-hidden-trigger')) {
             return;
