@@ -731,37 +731,51 @@ class PlaceholderProcessor
      */
     private function listboxPlaceholder(Element $row, string $fieldName, string $firstSymbol, string $expr, string $parentFieldName, bool $deferVar, string $rawValues): string
     {
-        $opts      = LexiconManager::parseListboxOptions($rawValues);
+        $parsed    = LexiconManager::classifyListboxOptions($rawValues);
+        $dynamic   = $parsed['mode'] === 'dynamic';
         $keyPrefix = $this->lexiconManager->getSectionPrefix() . '_' . $fieldName . '_';
 
-        // МУЛЬТИВЫБОР: значение — массив ключей. Лексиконы вкл (keyed список + поле
+        // МУЛЬТИВЫБОР: значение — массив ключей. Лексиконы вкл (keyed/list + поле
         // лексиконится) → вывод через foreach (каждый ключ → капшен по лексикону,
         // ключи запекаются eager, `| lexicon` отложен); иначе → join ключей.
-        if ((string)$row->getAttribute('data-mpc-ftype') === 'listbox-multiple') {
-            // Значение — строка ключей через "||" (migx-формат). Итерируем через split.
-            $lex = $opts !== null && $this->shouldLexiconize('text', $fieldName, $parentFieldName);
-            if ($lex) {
-                return '{set $mpcItems = ' . $expr . ' | split: \'||\'}'
-                     . '{foreach $mpcItems as $item}'
-                     . '##(\'' . $keyPrefix . '{$item}\') | lexicon}'
-                     . '{if !$item@last}, {/if}{/foreach}';
-            }
-            return "{$firstSymbol}{$expr} | split: '||' | join: ','}";
+        if (LexiconManager::isMultiOptionFtype((string)$row->getAttribute('data-mpc-ftype'))) {
+            // Значение — строка нормализованных ключей через "||". Итерируем через split.
+            $lex = !$dynamic && $this->shouldLexiconize('text', $fieldName, $parentFieldName);
+            return $lex
+                ? $this->optionPlaceholder($keyPrefix, $expr, true)
+                : "{$firstSymbol}{$expr} | split: '||' | join: ','}";
         }
 
-        // ОДИНОЧНЫЙ listbox: ключ {prefix}_{field}_{$value} | lexicon, если значение
-        // из списка и лексиконы вкл; иначе сырое {$value}.
-        $current = trim($row->innerHtml());
-        $lexize  = $opts !== null
+        // ОДИНОЧНЫЙ listbox/option: ключ {prefix}_{field}_{$value} | lexicon, если
+        // значение из списка опций и лексиконы вкл; иначе сырое {$value}. Значение
+        // в БД уже нормализовано (FieldValueExtractor), сравниваем по norm.
+        $current = LexiconManager::normalizeOptionKey(trim($row->innerHtml()));
+        $lexize  = !$dynamic
             && $this->shouldLexiconize('text', $fieldName, $parentFieldName)
-            && in_array($current, array_column($opts, 'key'), true);
+            && in_array($current, array_column($parsed['options'], 'value'), true);
         if (!$lexize) {
             return "{$firstSymbol}{$expr}}";
         }
         if ($deferVar) {
             return "##'" . $keyPrefix . "' ~ " . $expr . " | lexicon}";
         }
-        return "##'" . $keyPrefix . "{" . $expr . "}' | lexicon}";
+        return $this->optionPlaceholder($keyPrefix, $expr, false);
+    }
+
+    /**
+     * ЕДИНЫЙ плейсхолдер капшена опции (секции и TV — один вид рендера, разница лишь
+     * в $keyPrefix: <section>_<field>_ vs mpc_resource_tv_<tv>_). Одиночный — ключ
+     * {prefix}{$value} | lexicon; мультивыбор — foreach по "||" с join ", ".
+     */
+    public function optionPlaceholder(string $keyPrefix, string $valueExpr, bool $multiple): string
+    {
+        if ($multiple) {
+            return '{set $mpcItems = ' . $valueExpr . ' | split: \'||\'}'
+                 . '{foreach $mpcItems as $item}'
+                 . '##(\'' . $keyPrefix . '{$item}\') | lexicon}'
+                 . '{if !$item@last}, {/if}{/foreach}';
+        }
+        return "##'" . $keyPrefix . "{" . $valueExpr . "}' | lexicon}";
     }
 
     private function findByAttr(string $html, string $selector): ?array

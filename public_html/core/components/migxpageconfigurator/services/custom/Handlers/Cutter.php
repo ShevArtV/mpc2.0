@@ -383,15 +383,31 @@ class Cutter extends Base
             // (img→image и т.д.), prefix пуст (rfield/TV вне секции). Так image-TV
             // не получает `| lexicon`, если image не в mpc_translated_content.
             $this->lexiconManager->setContext('', false);
-            $useLexicon = $lexiconize
-                && !empty($this->properties['useLexicons'])
-                && $this->lexiconManager->shouldLexiconize(
-                    LexiconManager::contentTypeForTag($item->tagName()),
-                    $name
+            $tvObj  = ($attr === 'data-mpc-tv') ? $this->modx->getObject('modTemplateVar', ['name' => $name]) : null;
+            $tvType = $tvObj ? (string)$tvObj->get('type') : '';
+            // Опционная TV (есть парсящиеся опции) — ЕДИНЫЙ с секциями плейсхолдер
+            // капшена (префикс mpc_resource_tv_<tv>_), значение в БД нормализовано.
+            $tvOptions = $tvObj !== null && LexiconManager::isOptionTvType($tvType)
+                && LexiconManager::classifyListboxOptions((string)$tvObj->get('elements'))['mode'] !== 'dynamic';
+
+            if ($tvOptions && $lexiconize && !empty($this->properties['useLexicons'])
+                && $this->lexiconManager->shouldLexiconize('text', $name)) {
+                $pls = $this->placeholderProcessor->optionPlaceholder(
+                    'mpc_resource_tv_' . $name . '_', $expr, LexiconManager::isMultiOptionFtype($tvType)
                 );
-            $pls = $useLexicon
-                ? "{'" . $lexiconKeyPrefix . $name . "' | lexicon}"
-                : '{' . $expr . '}';
+            } else {
+                // content-type: для TV — по ТИПУ TV (number/date/email/url/file → без
+                // `| lexicon`, значение из колонки/TV); для rfield — по тегу маркера.
+                $contentType = ($attr === 'data-mpc-tv')
+                    ? LexiconManager::contentTypeForTvType($tvType)
+                    : LexiconManager::contentTypeForTag($item->tagName());
+                $useLexicon = $lexiconize
+                    && !empty($this->properties['useLexicons'])
+                    && $this->lexiconManager->shouldLexiconize($contentType, $name);
+                $pls = $useLexicon
+                    ? "{'" . $lexiconKeyPrefix . $name . "' | lexicon}"
+                    : '{' . $expr . '}';
+            }
             $itemHtml    = $this->parser->getHTMLString($item);
             $itemHtmlNew = '';
 

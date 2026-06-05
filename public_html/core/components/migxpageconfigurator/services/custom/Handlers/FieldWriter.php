@@ -153,8 +153,10 @@ class FieldWriter
 
     private function tvContentType(string $tvName): string
     {
+        // По ТИПУ TV через единый маппер (как грабёж data-mpc-tv): нетранслируемые
+        // типы (number/date/email/url/file/listbox/…) → 'raw' → не лексиконятся.
         $tv = $this->modx->getObject('modTemplateVar', ['name' => $tvName]);
-        return $this->mapInputToContentType($tv ? (string)$tv->get('type') : '');
+        return \MpcServices\Handlers\Grabber\LexiconManager::contentTypeForTvType($tv ? (string)$tv->get('type') : '');
     }
 
     /** inputTVtype поля из formtabs mpc_base (кэш по всем табам). '' если не найдено. */

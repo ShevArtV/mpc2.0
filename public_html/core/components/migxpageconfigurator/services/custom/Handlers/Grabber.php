@@ -14,6 +14,7 @@ use MpcServices\Handlers\Grabber\LexiconManager;
 use MpcServices\Handlers\Grabber\MediaDownloader;
 use MpcServices\Handlers\Grabber\SectionProcessor;
 use MpcServices\Handlers\Grabber\TemplateUpdater;
+use MpcServices\Handlers\Grabber\TvProvisioner;
 
 /**
  * @author Arthur Shevchenko (https://t.me/ShevArtV)
@@ -34,6 +35,7 @@ class Grabber extends Base
     private InformationUpdater  $informationUpdater;
     private ContactUpdater      $contactUpdater;
     private TemplateUpdater     $templateUpdater;
+    private TvProvisioner       $tvProvisioner;
 
     // -----------------------------------------------------------------------
     // Обратная совместимость: $grabber->lexicons
@@ -120,6 +122,7 @@ class Grabber extends Base
         $this->informationUpdater  = new InformationUpdater($this->modx, $this->properties, $this->parser);
         $this->contactUpdater      = new ContactUpdater($this->modx, $this->properties, $this->parser, $this->fieldValueExtractor, $this->lexiconManager);
         $this->templateUpdater     = new TemplateUpdater($this->modx, $this->properties);
+        $this->tvProvisioner       = new TvProvisioner($this->modx, $this->parser, $this->properties);
 
         if ($this->debug) {
             $this->logging->write(__METHOD__, 'Properties:', $this->properties);
@@ -151,6 +154,10 @@ class Grabber extends Base
                 $this->lexiconManager->updateProperties(['resource' => $newResource]);
                 $this->sectionProcessor->properties['resource'] = $newResource;
             }
+            // Автосоздание/синк TV из data-mpc-tv (шаблон — истина, владение по
+            // категории). id шаблона провижионер берёт из заголовка сам; вне
+            // вложенного if — чтобы шло и на ре-катах (handleTemplate может вернуть null).
+            $this->tvProvisioner->provision($html);
 
             $this->sectionProcessor->properties['updContent'] = $this->updContent;
             $this->sectionProcessor->properties['fromPlugin']  = $this->fromPlugin;

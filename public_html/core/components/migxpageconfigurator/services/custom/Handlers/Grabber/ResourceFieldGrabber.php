@@ -78,10 +78,32 @@ class ResourceFieldGrabber
                 continue;
             }
             if (method_exists($resource, 'setTVValue')) {
-                $value = $this->extractValue($el);
-                // TV лексиконятся отдельным неймспейсом mpc_resource_tv_<name>,
-                // чтобы НЕ коллизить с rfield того же имени (rfield → mpc_resource_<name>).
-                $key = $this->lexiconize($resource, $name, $value, LexiconManager::contentTypeForTag($el->tagName()), 'mpc_resource_tv_');
+                $value    = $this->extractValue($el);
+                $tv       = isset($resource->xpdo) ? $resource->xpdo->getObject('modTemplateVar', ['name' => $name]) : null;
+                $tvType   = $tv ? (string)$tv->get('type') : '';
+                $elements = $tv ? (string)$tv->get('elements') : '';
+
+                // Опционная TV (listbox/option/checkbox) с парсящимися опциями: капшены
+                // из elements TV (БД) → лексикон mpc_resource_tv_<tv>_<value>, значение —
+                // нормализованный ключ опции (совпадает с ключом лексикона и рендером).
+                if ($this->useLexicons && $this->lexiconManager !== null
+                    && LexiconManager::isOptionTvType($tvType)
+                    && LexiconManager::classifyListboxOptions($elements)['mode'] !== 'dynamic') {
+                    $this->lexiconManager->setContext('', false);
+                    if ($this->lexiconManager->shouldLexiconize('text', $name)) {
+                        $this->lexiconManager->writeTvOptionCaptions((int)$resource->get('id'), $name, $elements);
+                        $multiple = LexiconManager::isMultiOptionFtype($tvType);
+                        $resource->setTVValue($name, LexiconManager::normalizeListboxValue($value, $multiple));
+                        $written['tvs'][$name] = true;
+                        continue;
+                    }
+                }
+
+                // Прочие TV: content-type по ТИПУ TV. number/date/email/url/file → не
+                // переводимы → не лексиконятся (значение в колонке); text/textarea/
+                // richtext → лексикон mpc_resource_tv_<name>; @SELECT-listbox → raw.
+                $ct  = $this->useLexicons ? LexiconManager::contentTypeForTvType($tvType) : 'text';
+                $key = $this->lexiconize($resource, $name, $value, $ct, 'mpc_resource_tv_');
                 $resource->setTVValue($name, $key !== '' ? $key : $value);
                 $written['tvs'][$name] = true;
             }
@@ -100,6 +122,7 @@ class ResourceFieldGrabber
     {
         return $el->closest('[data-mpc-res]') !== null;
     }
+
 
     /**
      * Лексиконизация значения rfield: значение пишем в лексикон под ключом

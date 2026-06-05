@@ -679,9 +679,14 @@ class SectionProcessor
         // (наличие опций подразумевает выпадайку).
         $values = (string)($attrs['values'] ?? '');
         if ($values !== '') {
-            $def['inputOptionValues'] = $values;
+            // keyed → Caption==norm(value); list → norm(value) (транслит+lowercase);
+            // @SELECT — как есть. Значения совпадают с ключами лексикона опций.
+            $def['inputOptionValues'] = LexiconManager::normalizeInputOptionValues($values);
+            // Опции подразумевают тип-с-выбором. Если автор уже задал такой тип
+            // (listbox/-multiple/option/radio/checkbox) — сохраняем его; иначе
+            // (например ftype не задан) — дефолтим в listbox (выпадайку).
             $it = (string)($def['inputTVtype'] ?? '');
-            if ($it !== 'listbox' && $it !== 'listbox-multiple') {
+            if (!in_array($it, ['listbox', 'listbox-multiple', 'option', 'checkbox'], true)) {
                 $def['inputTVtype'] = 'listbox';
             }
         }
@@ -706,31 +711,41 @@ class SectionProcessor
     }
 
     /**
-     * Синтез определения скалярного типа, которого может не быть среди
-     * прототипов mpc_base (text/textarea/richtext/number/checkbox). Неизвестный
-     * тип фолбэчит по элементу: картинка → image, иначе → text.
+     * Синтез определения скалярного типа для поля, которого нет среди прототипов
+     * mpc_base. По конвенции `data-mpc-ftype` = имя input-типа MODX TV, поэтому
+     * прокидываем его в `inputTVtype` НАПРЯМУЮ — без отдельного белого списка
+     * типов (он лишь дублировал бы перечень типов MODX и требовал правки на каждый
+     * новый тип). Сверх identity нужны только: человекочитаемый caption (косметика)
+     * и спец-дефолты там, где тип их требует. Фолбэк: пустой/непонятный ftype на
+     * медиа-элементе → image (иначе сам тип/text).
      */
     private function synthesizeScalar(string $type, string $elKind): array
     {
-        $known = [
-            'text'     => ['inputTVtype' => 'text',     'caption' => 'Текстовое поле'],
-            'textarea' => ['inputTVtype' => 'textarea', 'caption' => 'Текстовая область'],
-            'richtext' => ['inputTVtype' => 'richtext', 'caption' => 'Форматированный текст'],
-            'number'   => ['inputTVtype' => 'number',   'caption' => 'Число'],
-            'checkbox' => ['inputTVtype' => 'checkbox', 'caption' => 'Флажок', 'inputOptionValues' => 'Да==1'],
-            // Выпадающий список / мультивыбор. Опции приходят из data-mpc-values
-            // (migx-формат), подставляются в inputOptionValues в makeFieldDef.
-            'listbox'          => ['inputTVtype' => 'listbox',          'caption' => 'Список (выбор)'],
-            'listbox-multiple' => ['inputTVtype' => 'listbox-multiple', 'caption' => 'Список (мультивыбор)'],
+        // Косметические подписи известных типов; для прочих — сам тип с заглавной.
+        $captions = [
+            'text' => 'Текстовое поле', 'textarea' => 'Текстовая область',
+            'richtext' => 'Форматированный текст', 'number' => 'Число', 'date' => 'Дата',
+            'email' => 'E-mail', 'url' => 'URL', 'file' => 'Файл', 'tag' => 'Теги',
+            'autotag' => 'Теги', 'checkbox' => 'Флажки', 'option' => 'Переключатель',
+            'listbox' => 'Список (выбор)', 'listbox-multiple' => 'Список (мультивыбор)',
+            'image' => 'Изображение',
         ];
-        if (isset($known[$type])) {
-            $spec = $known[$type];
-        } elseif (in_array($elKind, ['img', 'picture', 'bg'], true)) {
-            $spec = ['inputTVtype' => 'image', 'caption' => 'Изображение'];
-        } else {
-            $spec = ['inputTVtype' => 'text', 'caption' => 'Текстовое поле'];
-        }
 
+        $isMedia = in_array($elKind, ['img', 'picture', 'bg'], true);
+        if ($type === '') {
+            // ftype не задан → дефолт по элементу: медиа → image, прочее → text.
+            $type = $isMedia ? 'image' : 'text';
+        } elseif (!isset($captions[$type]) && $isMedia) {
+            // ftype не похож на тип картинки, но элемент медийный → image (защита).
+            $type = 'image';
+        }
+        // Иначе ftype идёт в inputTVtype как есть (пасс-тру, без белого списка типов).
+
+        $spec = ['inputTVtype' => $type, 'caption' => $captions[$type] ?? ucfirst($type)];
+        // checkbox без опций пуст — даём одну дефолтную (data-mpc-values переопределит).
+        if ($type === 'checkbox') {
+            $spec['inputOptionValues'] = 'Да==1';
+        }
         return array_merge($this->blankFieldDef(), $spec);
     }
 

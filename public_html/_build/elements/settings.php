@@ -6,6 +6,13 @@ return [
         'value' => 'mpc_base',
         'area' => 'default',
     ],
+    // Категория-владелец автосоздаваемых из шаблона TV (data-mpc-tv). Пусто →
+    // категория самого пакета mpc. Чужие (в др. категориях) TV нарезка не трогает.
+    'mpc_tv_category' => [
+        'xtype' => 'textfield',
+        'value' => '',
+        'area' => 'default',
+    ],
     'mpc_editable_resource_fields' => [
         'xtype' => 'textfield',
         'value' => 'pagetitle,longtitle,description,introtext,content,menutitle',

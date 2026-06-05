@@ -239,7 +239,7 @@ class FieldValueExtractor
         $rawValues = (string)$element->getAttribute('data-mpc-values');
         if ($rawValues !== '') {
             $result = trim($element->innerHtml());
-            $multiple = (string)$element->getAttribute('data-mpc-ftype') === 'listbox-multiple';
+            $multiple = LexiconManager::isMultiOptionFtype((string)$element->getAttribute('data-mpc-ftype'));
             // Капшены опций → лексикон (и одиночный, и мультивыбор). Значение поля
             // остаётся сырым (для multiple ContentParser разобьёт его в массив ключей,
             // чтобы $field был iterable в Fenom).
@@ -250,7 +250,9 @@ class FieldValueExtractor
                 $result,
                 $multiple
             );
-            return $result;
+            // Выбранное значение → нормализованная форма (совпадает с ключами опций
+            // и с inputOptionValues; рендер строит ключ лексикона из этого значения).
+            return LexiconManager::normalizeListboxValue($result, $multiple);
         }
 
         if ($href = $element->getAttribute('href')) {
