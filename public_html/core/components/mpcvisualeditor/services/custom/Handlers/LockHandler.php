@@ -42,10 +42,13 @@ class LockHandler
                 'by' => (string)($cur['username'] ?? 'другой пользователь'), 'ttl' => $ttl,
             ]);
         }
-        // свободно или моё — берём/продлеваем.
+        // свободно или моё — берём/продлеваем. xPDOCacheManager::set() принимает
+        // $var ПО ССЫЛКЕ — литерал-массив на PHP 7+ даёт fatal «Cannot pass
+        // parameter 2 by reference». Поэтому через переменную.
+        $payload = ['userId' => $me, 'username' => $myName, 'ts' => time()];
         $this->modx->cacheManager->set(
             $this->key($rid),
-            ['userId' => $me, 'username' => $myName, 'ts' => time()],
+            $payload,
             $ttl,
             $this->opts()
         );
