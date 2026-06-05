@@ -11,6 +11,9 @@ import { openRowsEditor } from './rows.js';
 import { openLinkEditor } from './link.js';
 import { openMediaEditor } from './media.js';
 import { openListboxEditor } from './listbox.js';
+import { openScalarEditor } from './scalar.js';
+import { openTagsEditor } from './tags.js';
+import { openFileEditor } from './file.js';
 
 export var editors = {
     text: { open: openTextEditor },           // инлайн (простой текст)
@@ -21,6 +24,12 @@ export var editors = {
     rows: { open: openRowsEditor },
     link: { open: openLinkEditor },
     media: { open: openMediaEditor },
-    listbox: { open: openListboxEditor },              // выпадающий список (data-mpc-values)
-    'listbox-multiple': { open: openListboxEditor }    // мультивыбор
+    listbox: { open: openListboxEditor },              // выпадающий список (data-mpc-values / TV elements)
+    'listbox-multiple': { open: openListboxEditor },   // мультивыбор (<select multiple>)
+    option: { open: openListboxEditor },               // TV option — радио (одиночный)
+    checkbox: { open: openListboxEditor },             // TV checkbox — чекбоксы (множественный)
+    number: { open: openScalarEditor },                // TV number — модалка input[number]
+    date: { open: openScalarEditor },                  // TV date — модалка datetime-local
+    tags: { open: openTagsEditor },                    // TV tag/autotag — чипсы
+    file: { open: openFileEditor }                     // TV file — файловый менеджер
 };

@@ -118,6 +118,26 @@ class FieldTypesHandler
                 return 'listbox';
             case 'listbox-multiple':
                 return 'listbox-multiple';
+            // option (radio) — одиночный выбор: тот же редактор-список, что и listbox,
+            // но рисует радио. checkbox — множественный (как listbox-multiple, но
+            // чекбоксы). Оба берут опции из elements TV (резолвер fields/options).
+            case 'option':
+                return 'option';
+            case 'checkbox':
+                return 'checkbox';
+            case 'number':
+                return 'number';
+            case 'date':
+                return 'date';
+            case 'tag':
+            case 'tags':
+            case 'autotag':
+                return 'tags';
+            case 'file':
+                return 'file';
+            // email/url — спец-валидация не нужна, правим как простой текст-инпут.
+            case 'email':
+            case 'url':
             case 'text':
             case '':
             default:

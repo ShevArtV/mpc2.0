@@ -118,8 +118,14 @@ export function ftypeToEditor(ftype) {
     if (ftype === 'video' || ftype === 'audio') { return 'media'; }
     if (ftype === 'listbox') { return 'listbox'; }
     if (ftype === 'listbox-multiple') { return 'listbox-multiple'; }
+    if (ftype === 'option') { return 'option'; }       // радио (одиночный)
+    if (ftype === 'checkbox') { return 'checkbox'; }   // чекбоксы (множественный)
+    if (ftype === 'number') { return 'number'; }
+    if (ftype === 'date') { return 'date'; }
+    if (ftype === 'tag' || ftype === 'tags' || ftype === 'autotag') { return 'tags'; }
+    if (ftype === 'file') { return 'file'; }
     if (ftype.indexOf('list') === 0) { return 'rows'; }
-    return 'text'; // text/number/checkbox — инлайн-текст
+    return 'text'; // text/email/url — инлайн-текст
 }
 
 // Атрибут-маркер списка + его уровень вложенности (0 = top-level data-mpc-field,

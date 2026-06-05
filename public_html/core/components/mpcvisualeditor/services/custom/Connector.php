@@ -38,6 +38,10 @@ class Connector
             case 'fields/types':
                 // Карта field→тип редактора из mpc_base (вариант B).
                 return (new Handlers\FieldTypesHandler($this->modx, $this->mpcve))->handle($request);
+            case 'fields/options':
+                // Опции listbox/option/checkbox-поля: TV (по имени) или сырой
+                // elements (@SELECT секционного listbox) → [{label,value}].
+                return (new Handlers\FieldOptionsHandler($this->modx, $this->mpcve))->handle($request);
             case 'config/get':
                 // Декодированный mpc_config (resource+global) для панели скрытых
                 // полей: те, что вырезаны data-mpc-remove или вспомогательные.

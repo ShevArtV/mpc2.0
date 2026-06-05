@@ -754,6 +754,76 @@ body:not(.mpcve-on) .mpcve-media-badge {
     background: #fff;
 }
 
+/* Однострочные input'ы (listbox manual / number / date / tags) — без 200px
+   min-height от .mpcve-ta__area. */
+input.mpcve-ta__area {
+    min-height: 0;
+    resize: none;
+}
+
+/* option (радио) / checkbox (чекбоксы) — список вариантов с переносами. */
+.mpcve-lb__list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 320px;
+    overflow: auto;
+    padding: 4px 2px;
+}
+
+.mpcve-lb__opt {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font: 14px/1.4 -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    cursor: pointer;
+}
+
+/* Редактор тегов: чипсы + поле ввода. */
+.mpcve-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 8px;
+    min-height: 24px;
+}
+
+.mpcve-tags__chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 6px 3px 10px;
+    border-radius: 14px;
+    background: #e2e8f0;
+    color: #1e293b;
+    font: 13px/1.2 -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+}
+
+.mpcve-tags__del {
+    border: 0;
+    background: transparent;
+    color: #64748b;
+    font-size: 16px;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0 2px;
+}
+
+.mpcve-tags__del:hover {
+    color: #ef4444;
+}
+
+.mpcve-tags__input {
+    width: 100%;
+    box-sizing: border-box;
+}
+
+/* Лоадер опций (короткая модалка-плашка). */
+.mpcve-modal--loader .mpcve-modal__card {
+    min-width: 220px;
+    text-align: center;
+}
+
 .mpcve-rte__toolbar {
     display: flex;
     flex-wrap: wrap;
