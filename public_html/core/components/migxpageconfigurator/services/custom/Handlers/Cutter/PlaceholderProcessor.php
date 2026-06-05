@@ -457,6 +457,18 @@ class PlaceholderProcessor
             // НОРМАЛИЗОВАННЫЕ значения (иначе правка Case B «Собака||Кошка» сохраняла
             // бы сырое «Собака» мимо ключа лексикона `_sobaka`). @SELECT не трогаем.
             $listValues = LexiconManager::normalizeInputOptionValues($listValues);
+            // @SELECT: резолвим [[+PREFIX]]/[[+DBASE]] в реальные значения прямо в
+            // атрибуте — иначе MODX гасит эти плейсхолдеры на рендере, и фронт-редактор
+            // получает SQL без префикса таблицы (`FROM site_content`) → 0 опций.
+            // Атрибут читает только редактор (fields/options), config с [[+PREFIX]]
+            // для migx не трогаем.
+            if (strpos($listValues, '[[+') !== false) {
+                $listValues = str_replace(
+                    ['[[+PREFIX]]', '[[+DBASE]]'],
+                    [(string)$this->modx->getOption('table_prefix'), (string)$this->modx->getOption('dbname')],
+                    $listValues
+                );
+            }
             $row->setAttribute('data-mpc-values', $listValues);
             // listbox: значение — ключ опции, не переводимый текст. Плейсхолдер —
             // listboxPlaceholder (лексикон по {prefix}_{field}_{$value} либо сырое
