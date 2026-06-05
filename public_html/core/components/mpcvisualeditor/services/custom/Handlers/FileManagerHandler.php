@@ -68,10 +68,15 @@ class FileManagerHandler
                 if (!$this->acceptExt($ext, $accept)) {
                     continue;
                 }
+                // URL — от КОРНЯ сайта (getObjectUrl: getBaseUrl=urlAbsolute + путь),
+                // ровно как пишет грабер. Поле getContainerList['url'] строится от
+                // «сырого» baseUrl (без ведущего слэша) → как src на вложенной
+                // странице резолвится относительно её URL и ломается. В поле всегда
+                // кладём root-anchored путь.
                 $files[] = [
                     'name'  => (string)$node['text'],
                     'path'  => (string)$node['id'],
-                    'url'   => (string)($node['url'] ?? ''),
+                    'url'   => (string)$source->getObjectUrl((string)$node['id']),
                     'ext'   => $ext,
                     'image' => in_array($ext, self::IMAGE_EXT, true),
                 ];
