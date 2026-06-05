@@ -418,34 +418,14 @@ class LexiconManager
     }
 
     /**
-     * inputOptionValues для migx-конфига по формату data-mpc-values:
-     *   keyed   → "Caption==norm(value)||…" (капшен виден в админке, значение нормализовано);
-     *   list    → "norm(v1)||norm(v2)" (транслит+lowercase, без капшенов — оригинал в лексиконе);
-     *   dynamic → как есть (@SELECT migx резолвит сам).
+     * Нормализованные опции в migx-формат — ВСЕГДА keyed "Caption==norm(value)"
+     * (и для списка без == тоже: каждое значение само себе капшен). Едино для
+     * секций (inputOptionValues / атрибут data-mpc-values в edit-mode) и TV
+     * (elements): капшен сохраняется (виден в админке/редакторе, источник
+     * лексикона), value нормализован (совпадает с ключом и хранимым значением).
+     * dynamic (@SELECT) — как есть, migx резолвит сам.
      */
     public static function normalizeInputOptionValues(string $raw): string
-    {
-        $parsed = self::classifyListboxOptions($raw);
-        if ($parsed['mode'] === 'dynamic') {
-            return $raw;
-        }
-        if ($parsed['mode'] === 'keyed') {
-            return implode('||', array_map(static function (array $o): string {
-                return $o['caption'] . '==' . $o['value'];
-            }, $parsed['options']));
-        }
-        return implode('||', array_map(static function (array $o): string {
-            return $o['value'];
-        }, $parsed['options']));
-    }
-
-    /**
-     * elements для TV — ВСЕГДА keyed-форма "Caption==norm(value)" (и для list тоже),
-     * чтобы СОХРАНИТЬ оригинальный капшен в самой TV (источник лексикона для TV — её
-     * elements в БД; для секций оригинал брался из шаблона, у TV его персистить негде).
-     * dynamic (@SELECT) — как есть.
-     */
-    public static function normalizeTvElements(string $raw): string
     {
         $parsed = self::classifyListboxOptions($raw);
         if ($parsed['mode'] === 'dynamic') {
@@ -465,7 +445,7 @@ class LexiconManager
     /**
      * Капшены опций TV → лексикон ресурса под ключами mpc_resource_tv_<tv>_<value>
      * (как секции, но per-resource неймспейс). Источник — elements TV из БД (keyed,
-     * капшен сохранён normalizeTvElements). value уже нормализован.
+     * капшен сохранён normalizeInputOptionValues). value уже нормализован.
      */
     public function writeTvOptionCaptions(int $resourceId, string $tvName, string $elements): void
     {

@@ -61,7 +61,7 @@ class TvProvisioner
         $values   = (string)$el->getAttribute('data-mpc-values');
         // keyed-форма (Caption==norm(value)) — сохраняет оригинальный капшен в TV
         // (источник лексикона), value нормализован (совпадает с ключом/рендером).
-        $elements = $values !== '' ? LexiconManager::normalizeTvElements($values) : '';
+        $elements = $values !== '' ? LexiconManager::normalizeInputOptionValues($values) : '';
 
         /** @var \modTemplateVar|null $tv */
         $tv = $this->modx->getObject('modTemplateVar', ['name' => $name]);

@@ -452,6 +452,12 @@ class PlaceholderProcessor
                 : "{$firstSymbol}{$complexName}}";
             $row->setAttribute('href', $pls);
         } elseif ($listValues !== '') {
+            // Атрибут переписываем в keyed-нормализованную форму "Caption==norm(value)":
+            // фронт-редактор берёт опции из data-mpc-values в DOM, и ему нужны
+            // НОРМАЛИЗОВАННЫЕ значения (иначе правка Case B «Собака||Кошка» сохраняла
+            // бы сырое «Собака» мимо ключа лексикона `_sobaka`). @SELECT не трогаем.
+            $listValues = LexiconManager::normalizeInputOptionValues($listValues);
+            $row->setAttribute('data-mpc-values', $listValues);
             // listbox: значение — ключ опции, не переводимый текст. Плейсхолдер —
             // listboxPlaceholder (лексикон по {prefix}_{field}_{$value} либо сырое
             // {$value}, симметрично грабу).
