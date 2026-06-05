@@ -86,23 +86,24 @@ export var api = {
     }
 };
 
-// Файловый менеджер: тонкие обёртки над экшенами files/*.
+// Файловый менеджер: тонкие обёртки над экшенами files/*. Источник всегда один
+// (выделенный источник mpc на бэке) — id не передаём.
 export var files = {
-    list: function (source, path, accept) {
-        return rawPost('files/list', { source: source || 0, path: path || '', accept: accept || 'any' });
+    list: function (path, accept) {
+        return rawPost('files/list', { path: path || '', accept: accept || 'any' });
     },
-    mkdir: function (source, path, name) {
-        return rawPost('files/mkdir', { source: source || 0, path: path || '', name: name });
+    mkdir: function (path, name) {
+        return rawPost('files/mkdir', { path: path || '', name: name });
     },
-    rename: function (source, path, name, kind) {
-        return rawPost('files/rename', { source: source || 0, path: path, name: name, kind: kind || 'file' });
+    rename: function (path, name, kind) {
+        return rawPost('files/rename', { path: path, name: name, kind: kind || 'file' });
     },
-    remove: function (source, path, kind) {
-        return rawPost('files/remove', { source: source || 0, path: path, kind: kind || 'file' });
+    remove: function (path, kind) {
+        return rawPost('files/remove', { path: path, kind: kind || 'file' });
     },
     // Загрузка в текущую папку (multipart) → ответ {success,data:{url,path}}.
-    upload: function (source, path, accept, file) {
-        return api.upload('files/upload', file, { source: source || 0, path: path || '', accept: accept || 'any' });
+    upload: function (path, accept, file) {
+        return api.upload('files/upload', file, { path: path || '', accept: accept || 'any' });
     }
 };
 

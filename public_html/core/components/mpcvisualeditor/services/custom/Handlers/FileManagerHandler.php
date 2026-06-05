@@ -6,9 +6,13 @@ use MpcVEServices\Mpcve;
 
 /**
  * Мини-файловый менеджер редактора поверх modMediaSource: навигация по папкам,
- * листинг, CRUD папок/файлов и загрузка в текущую папку. Source-aware
- * (можно переключать источник). Используется редакторами медиа/картинок
- * («Выбрать существующий» рядом с «Загрузить») и TV-полем file.
+ * листинг, CRUD папок/файлов и загрузка в текущую папку. Используется редакторами
+ * медиа/картинок («Выбрать существующий» рядом с «Загрузить») и TV-полем file.
+ *
+ * Работает РОВНО с одним источником — выделенным источником mpc (настройка
+ * `mpc_media_source`, тот же, что у грабера/ImageUploadHandler; fallback —
+ * `default_media_source`). Источник из запроса НЕ принимается: редактор
+ * ограничен медиа-папкой mpc, а не всей файловой системой сайта.
  *
  * Доступ уже проверен на уровне коннектора (право mpcve_edit). Поэтому файловые
  * права самого источника принудительно включаются (иначе getContainerList
@@ -45,7 +49,7 @@ class FileManagerHandler
     /** Листинг папки источника: подпапки + файлы (с фильтром по accept). */
     public function list(array $request): array
     {
-        $source = $this->getSource((int)($request['source'] ?? 0));
+        $source = $this->getSource();
         if (!$source) {
             return $this->err($this->modx->lexicon('mpcve_err_source'));
         }
@@ -81,7 +85,6 @@ class FileManagerHandler
                 'path'     => $path,
                 'dirs'     => $dirs,
                 'files'    => $files,
-                'sources'  => $this->sources(),
                 'sourceId' => (int)$source->get('id'),
             ],
         ];
@@ -90,7 +93,7 @@ class FileManagerHandler
     /** Создать папку в текущем каталоге. */
     public function mkdir(array $request): array
     {
-        $source = $this->getSource((int)($request['source'] ?? 0));
+        $source = $this->getSource();
         if (!$source) {
             return $this->err($this->modx->lexicon('mpcve_err_source'));
         }
@@ -108,7 +111,7 @@ class FileManagerHandler
     /** Переименовать файл или папку (kind=dir|file). */
     public function rename(array $request): array
     {
-        $source = $this->getSource((int)($request['source'] ?? 0));
+        $source = $this->getSource();
         if (!$source) {
             return $this->err($this->modx->lexicon('mpcve_err_source'));
         }
@@ -129,7 +132,7 @@ class FileManagerHandler
     /** Удалить файл или папку (kind=dir|file). */
     public function remove(array $request): array
     {
-        $source = $this->getSource((int)($request['source'] ?? 0));
+        $source = $this->getSource();
         if (!$source) {
             return $this->err($this->modx->lexicon('mpcve_err_source'));
         }
@@ -153,7 +156,7 @@ class FileManagerHandler
     /** Загрузить файл в текущую папку. accept ограничивает типы. */
     public function upload(array $request): array
     {
-        $source = $this->getSource((int)($request['source'] ?? 0));
+        $source = $this->getSource();
         if (!$source) {
             return $this->err($this->modx->lexicon('mpcve_err_source'));
         }
@@ -193,16 +196,16 @@ class FileManagerHandler
     }
 
     /**
-     * Инициализированный источник с принудительно включёнными файловыми правами
-     * и контекстом (нужен getContainerList для построения ссылок/превью).
+     * Выделенный источник mpc (mpc_media_source → default_media_source) с
+     * принудительно включёнными файловыми правами и контекстом (нужен
+     * getContainerList для построения ссылок/превью). Источник один и тот же
+     * для грабера, ImageUploadHandler и файлового менеджера.
      */
-    private function getSource(int $id): ?\modMediaSource
+    private function getSource(): ?\modMediaSource
     {
+        $id = (int)$this->modx->getOption('mpc_media_source', null, 0);
         if (!$id) {
-            $id = (int)$this->modx->getOption('mpc_media_source', null, 0);
-            if (!$id) {
-                $id = (int)$this->modx->getOption('default_media_source', null, 1);
-            }
+            $id = (int)$this->modx->getOption('default_media_source', null, 1);
         }
         $this->modx->loadClass('sources.modMediaSource');
         /** @var \modMediaSource|null $source */
@@ -218,18 +221,6 @@ class FileManagerHandler
             $source->permissions[$p] = true;
         }
         return $source;
-    }
-
-    /** Все медиа-источники для переключателя источника (id+name). */
-    private function sources(): array
-    {
-        $out = [];
-        $c = $this->modx->newQuery('sources.modMediaSource');
-        $c->sortby('name', 'ASC');
-        foreach ((array)$this->modx->getCollection('sources.modMediaSource', $c) as $s) {
-            $out[] = ['id' => (int)$s->get('id'), 'name' => (string)$s->get('name')];
-        }
-        return $out;
     }
 
     private function acceptExt(string $ext, string $accept): bool

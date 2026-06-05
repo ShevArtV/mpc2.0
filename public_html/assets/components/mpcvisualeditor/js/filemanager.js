@@ -4,9 +4,10 @@
  * + загрузка в текущую папку + ВЫБОР существующего файла.
  *
  * openFileManager(opts) → Promise<{url,name,path}|null>
- *   opts: { accept:'image'|'media'|'any', title, source }
+ *   opts: { accept:'image'|'media'|'any', title }
  * Промис резолвится выбранным файлом («Выбрать»/двойной клик) или null (отмена).
- * Бэк — экшены files/* (FileManagerHandler). Пути — относительные базе источника.
+ * Бэк — экшены files/* (FileManagerHandler). Источник один — выделенный источник
+ * mpc (mpc_media_source); фронт его не выбирает. Пути относительны базе источника.
  */
 import { files } from './api.js';
 import { toast, esc, promptDialog, confirmDialog } from './dom.js';
@@ -19,7 +20,7 @@ export function openFileManager(opts) {
     var accept = opts.accept || 'any';
 
     return new Promise(function (resolve) {
-        var state = { source: opts.source || 0, path: '', selected: null, sources: [] };
+        var state = { path: '', selected: null };
 
         var ov = document.createElement('div');
         ov.className = 'mpcve-modal mpcve-fm';
@@ -27,7 +28,6 @@ export function openFileManager(opts) {
             '<div class="mpcve-modal__card mpcve-modal__card--wide mpcve-fm__card">' +
                 '<div class="mpcve-modal__head">' + esc(opts.title || 'Файлы') + '</div>' +
                 '<div class="mpcve-fm__bar">' +
-                    '<select class="mpcve-fm__source" hidden></select>' +
                     '<button type="button" class="mpcve-btn mpcve-fm__up" title="Вверх">↑</button>' +
                     '<div class="mpcve-fm__crumbs"></div>' +
                     '<span class="mpcve-modal__spacer"></span>' +
@@ -49,7 +49,6 @@ export function openFileManager(opts) {
         var crumbs   = ov.querySelector('.mpcve-fm__crumbs');
         var selLabel = ov.querySelector('.mpcve-fm__sel');
         var pickBtn  = ov.querySelector('[data-act=pick]');
-        var srcSel   = ov.querySelector('.mpcve-fm__source');
         var uploadEl = ov.querySelector('.mpcve-fm__upload');
 
         function done(v) { ov.remove(); document.removeEventListener('keydown', onKey, true); resolve(v); }
@@ -101,22 +100,12 @@ export function openFileManager(opts) {
             state.path = path || '';
             setSelected(null);
             grid.innerHTML = '<div class="mpcve-fm__loading">Загрузка…</div>';
-            files.list(state.source, state.path, accept).then(function (r) {
+            files.list(state.path, accept).then(function (r) {
                 if (!r || !r.success) { grid.innerHTML = '<div class="mpcve-fm__loading">' + esc((r && r.message) || 'Ошибка') + '</div>'; return; }
                 var d = r.data || {};
-                state.source = d.sourceId || state.source;
-                if (d.sources && d.sources.length > 1) { renderSources(d.sources, d.sourceId); }
                 renderCrumbs();
                 renderGrid(d.dirs || [], d.files || []);
             }).catch(function () { grid.innerHTML = '<div class="mpcve-fm__loading">Сетевая ошибка</div>'; });
-        }
-
-        function renderSources(list, current) {
-            srcSel.hidden = false;
-            srcSel.innerHTML = list.map(function (s) {
-                return '<option value="' + s.id + '"' + (s.id === current ? ' selected' : '') + '>' + esc(s.name) + '</option>';
-            }).join('');
-            srcSel.onchange = function () { state.source = parseInt(srcSel.value, 10) || 0; navigate(''); };
         }
 
         function renderGrid(dirs, fileList) {
@@ -139,7 +128,7 @@ export function openFileManager(opts) {
                 e.stopPropagation();
                 promptDialog('Новое имя:', { title: 'Переименовать', value: item.name, okLabel: 'Переименовать' }).then(function (name) {
                     if (!name || name === item.name) { return; }
-                    files.rename(state.source, item.path, name, kind).then(function (r) {
+                    files.rename(item.path, name, kind).then(function (r) {
                         if (r && r.success) { toast(r.message || 'Переименовано'); navigate(state.path); }
                         else { toast((r && r.message) || 'Ошибка', true); }
                     });
@@ -149,7 +138,7 @@ export function openFileManager(opts) {
                 e.stopPropagation();
                 confirmDialog('Удалить «' + item.name + '»' + (kind === 'dir' ? ' со всем содержимым' : '') + '?', { title: 'Удаление', okLabel: 'Удалить', danger: true }).then(function (ok) {
                     if (!ok) { return; }
-                    files.remove(state.source, item.path, kind).then(function (r) {
+                    files.remove(item.path, kind).then(function (r) {
                         if (r && r.success) { toast(r.message || 'Удалено'); navigate(state.path); }
                         else { toast((r && r.message) || 'Ошибка', true); }
                     });
@@ -189,7 +178,7 @@ export function openFileManager(opts) {
         ov.querySelector('.mpcve-fm__mkdir').addEventListener('click', function () {
             promptDialog('Имя новой папки:', { title: 'Новая папка', okLabel: 'Создать', placeholder: 'folder' }).then(function (name) {
                 if (!name) { return; }
-                files.mkdir(state.source, state.path, name).then(function (r) {
+                files.mkdir(state.path, name).then(function (r) {
                     if (r && r.success) { toast(r.message || 'Создано'); navigate(state.path); }
                     else { toast((r && r.message) || 'Ошибка', true); }
                 });
@@ -199,7 +188,7 @@ export function openFileManager(opts) {
             var f = uploadEl.files[0];
             if (!f) { return; }
             toast('Загрузка…');
-            files.upload(state.source, state.path, accept, f).then(function (r) {
+            files.upload(state.path, accept, f).then(function (r) {
                 uploadEl.value = '';
                 if (r && r.success) { toast('Загружено'); navigate(state.path); }
                 else { toast((r && r.message) || 'Ошибка загрузки', true); }
