@@ -564,7 +564,81 @@ class LexiconManager
             }
         }
 
+        // Синк остальных языков (mpc_available_languages): набор ключей приводится
+        // к дефолтному, существующие переводы сохраняются, НОВЫЕ ключи получают
+        // значение дефолтного языка как плейсхолдер (страница не ломается до
+        // перевода), orphan-ключи (удалённые поля) выкидываются.
+        $this->syncOtherLanguages($allLexicons);
+
         $this->modx->cacheManager->refresh(['lexicon_topics' => []]);
+    }
+
+    /**
+     * Синхронизация непереведённых языков с дефолтным набором ключей. Для каждого
+     * языка из mpc_available_languages (кроме дефолтного) и каждого файла лексикона:
+     * существующий перевод сохраняется по ключу, новый ключ берёт значение
+     * дефолтного языка (плейсхолдер), удалённые из шаблона ключи выкидываются.
+     * Источник набора ключей и плейсхолдеров — текущая нарезка ($allLexicons).
+     */
+    private function syncOtherLanguages(array $allLexicons): void
+    {
+        $default = (string)$this->properties['defaultLanguageKey'];
+        $langs   = array_filter(array_map('trim', explode(',', (string)$this->modx->getOption('mpc_available_languages'))));
+        $langs   = array_diff($langs, [$default, '']);
+        if (empty($langs) || empty($allLexicons)) {
+            return;
+        }
+        $baseLexiconPath = $this->properties['corePath'] . $this->properties['lexiconPath'];
+        $defaultBase     = $baseLexiconPath . $default . '/';
+        foreach ($langs as $lang) {
+            $langBase = $baseLexiconPath . $lang . '/';
+            if (!is_dir($langBase)) {
+                mkdir($langBase, 0755, true);
+            }
+            foreach (array_keys($allLexicons) as $rid) {
+                // Источник истины — ТОЛЬКО ЧТО записанный файл дефолтного языка
+                // (в нём полный набор ключей, включая смерженные $_rlang — pagetitle/
+                // longtitle/description, которых нет в $allLexicons из-за пустых значений).
+                $_lang = [];
+                $defaultFile = $defaultBase . $rid . '.inc.php';
+                if (is_file($defaultFile)) {
+                    include $defaultFile;
+                }
+                $defaultLex = is_array($_lang) ? $_lang : [];
+                if (empty($defaultLex)) {
+                    continue;
+                }
+
+                $_lang = [];
+                $file = $langBase . $rid . '.inc.php';
+                if (is_file($file)) {
+                    include $file;
+                }
+                $existing = is_array($_lang) ? $_lang : [];
+
+                $out = [];
+                foreach ($defaultLex as $k => $defVal) {
+                    $out[$k] = array_key_exists($k, $existing) ? $existing[$k] : $defVal;
+                }
+                $this->writeLexiconFile($file, $out);
+            }
+        }
+    }
+
+    /** Записать лексиконы в файл (или удалить файл, если массив пуст). */
+    private function writeLexiconFile(string $path, array $lexicons): void
+    {
+        if (empty($lexicons)) {
+            if (is_file($path)) {
+                unlink($path);
+            }
+            return;
+        }
+        $content = '<?php' . PHP_EOL;
+        foreach ($lexicons as $k => $v) {
+            $content .= '$_lang[\'' . $k . '\'] = \'' . $this->sanitizeValue($v) . '\';' . PHP_EOL;
+        }
+        file_put_contents($path, $content);
     }
 
     /**
