@@ -17,8 +17,26 @@ class MigxpageconfiguratorIndexManagerController extends modExtraManagerControll
         $this->addHtml('<script>Ext.onReady(function() {
             var ct = Ext.get("mpc-lexicons-container");
             if (!ct) return;
-            ct.setHeight(Ext.getBody().getViewSize().height - 100);
-            new MPC.page.Lexicons({ renderTo: "mpc-lexicons-container", height: ct.getHeight() });
+            var vh = function () { return Ext.getBody().getViewSize().height - 100; };
+            ct.setHeight(vh());
+            var panel = new MPC.page.Lexicons({ renderTo: "mpc-lexicons-container", height: ct.getHeight() });
+
+            // Контейнер расширяется при сворачивании левого сайдбара MODX (это CSS,
+            // без window-resize), поэтому панель сама не релэйаутится. Следим за
+            // фактической шириной/высотой и подгоняем размер панели. Поллинг не
+            // зависит от внутренних id менеджера → работает при любом изменении.
+            var lastW = 0, lastH = 0;
+            var sync = function () {
+                var w = ct.getWidth(), h = vh();
+                if (w !== lastW || h !== lastH) {
+                    lastW = w; lastH = h;
+                    ct.setHeight(h);
+                    panel.setSize(w, h);
+                }
+            };
+            sync();
+            Ext.EventManager.onWindowResize(sync);
+            Ext.TaskMgr.start({ interval: 400, run: sync });
         });</script>');
     }
 
