@@ -1,0 +1,243 @@
+<?php
+/**
+ * Экспорт ВСЕХ лексиконов в ОДИН XLSX: вкладка-на-ресурс, колонки
+ * `Контекст | key | <язык1> | <язык2> | …`. «Контекст» = «Секция: Поле»
+ * (резолвится через LexiconContext: манифест mpc_tracked_fields + migx-конфиги),
+ * справочная колонка — на импорт не влияет.
+ *
+ * Старые режимы (per-resource XLSX / ZIP) остаются отдельными процессорами.
+ */
+class MigxpageconfiguratorLexiconsExportallinoneProcessor extends modProcessor
+{
+    /** Файлы лексиконов, не относящиеся к контенту ресурсов. */
+    private array $systemFiles = ['default', 'properties', 'setting'];
+
+    private ?\OpenSpout\Common\Entity\Style\Style $dataStyle = null;
+    private ?\OpenSpout\Common\Entity\Style\Style $headerStyle = null;
+
+    public function process()
+    {
+        $this->modx->lexicon->load('migxpageconfigurator:default');
+
+        $corePath = $this->modx->getOption('migxpageconfigurator_core_path', null,
+            $this->modx->getOption('core_path') . 'components/migxpageconfigurator/');
+        require_once $corePath . 'services/vendor/autoload.php';
+
+        $lexiconBase = $this->modx->getOption('core_path')
+            . $this->modx->getOption('mpc_lexicon_path', null, 'components/migxpageconfigurator/lexicon/');
+        $defaultLang = $this->modx->getOption('mpc_default_language', null, 'ru');
+
+        $languages = $this->resolveLanguages($lexiconBase, $defaultLang);
+
+        // Какие ресурсы (вкладки): явный список filenames или все нессистемные.
+        $files = $this->resolveFiles($lexiconBase, $defaultLang);
+        if (empty($files)) {
+            return $this->failure($this->modx->lexicon('mpc_err_no_lexicons'));
+        }
+
+        $context = new \MpcServices\Handlers\LexiconContext($this->modx);
+
+        $assetsPath = $this->modx->getOption('assets_path') . 'components/migxpageconfigurator/';
+        $exportDir  = $assetsPath . 'lexicons-export/';
+        if (!is_dir($exportDir)) {
+            mkdir($exportDir, 0777, true);
+        }
+
+        $exportFilename = 'lexicons_all-in-one_' . date('Y-m-d_His') . '.xlsx';
+        $exportPath     = $exportDir . $exportFilename;
+
+        $writer = \OpenSpout\Writer\Common\Creator\WriterEntityFactory::createXLSXWriter();
+        $writer->openToFile($exportPath);
+
+        // Ширины столбцов (на весь workbook — раскладка одинакова на всех вкладках):
+        // 1=Контекст, 2=lexicon_key, 3..=языки. Текст в ячейках переносится (wrap).
+        $writer->setColumnWidth(40, 1);
+        $writer->setColumnWidth(34, 2);
+        $langCount = count($languages);
+        if ($langCount > 0) {
+            $writer->setColumnWidthForRange(60, 3, 2 + $langCount);
+        }
+
+        $usedSheetNames = [];
+        $first          = true;
+        $wroteAny       = false;
+
+        foreach ($files as $rid) {
+            $rows = $this->loadRows($lexiconBase, $rid, $languages, $defaultLang, $context);
+            if (empty($rows)) {
+                continue;
+            }
+
+            $sheetName = $this->uniqueSheetName($rid, $usedSheetNames);
+            // Первый лист уже создан writer'ом, последующие добавляем.
+            $sheet = $first ? $writer->getCurrentSheet() : $writer->addNewSheetAndMakeItCurrent();
+            $sheet->setName($sheetName);
+            $first = false;
+
+            $this->writeSheet($writer, $rows, $languages);
+            $wroteAny = true;
+        }
+
+        if (!$wroteAny) {
+            $writer->close();
+            @unlink($exportPath);
+            return $this->success('', []);
+        }
+
+        $writer->close();
+
+        $assetsUrl = $this->modx->getOption('assets_url')
+            . 'components/migxpageconfigurator/lexicons-export/' . $exportFilename;
+
+        return $this->success('', [
+            'filePath' => $assetsUrl,
+            'fileName' => $exportFilename,
+        ]);
+    }
+
+    private function resolveLanguages(string $lexiconBase, string $defaultLang): array
+    {
+        $requested = $this->getProperty('languages', '');
+        if ($requested !== '') {
+            $languages = array_filter(array_map('trim', explode(',', $requested)));
+        } else {
+            $langDirs  = glob($lexiconBase . '*', GLOB_ONLYDIR) ?: [];
+            $languages = array_map('basename', $langDirs);
+        }
+        usort($languages, static function ($a, $b) use ($defaultLang) {
+            if ($a === $defaultLang) return -1;
+            if ($b === $defaultLang) return 1;
+            return strcmp($a, $b);
+        });
+        return $languages;
+    }
+
+    /** Список идентификаторов ресурсов (имена .inc.php без расширения) для вкладок. */
+    private function resolveFiles(string $lexiconBase, string $defaultLang): array
+    {
+        $requested = $this->getProperty('filenames', '');
+        $rids      = [];
+
+        if ($requested !== '') {
+            foreach (array_filter(array_map('trim', explode(',', $requested))) as $name) {
+                $name = basename($name); // strip path separators
+                if (!in_array($name, $this->systemFiles, true)
+                    && file_exists($lexiconBase . $defaultLang . '/' . $name . '.inc.php')) {
+                    $rids[] = $name;
+                }
+            }
+        } else {
+            foreach (glob($lexiconBase . $defaultLang . '/*.inc.php') ?: [] as $f) {
+                $name = basename($f, '.inc.php');
+                if (!in_array($name, $this->systemFiles, true)) {
+                    $rids[] = $name;
+                }
+            }
+        }
+        return $rids;
+    }
+
+    /** Строки одной вкладки: [Контекст, key, <по языкам>]. */
+    private function loadRows(
+        string $base,
+        string $rid,
+        array $languages,
+        string $defaultLang,
+        \MpcServices\Handlers\LexiconContext $context
+    ): array {
+        $incFile = $rid . '.inc.php';
+
+        $langData = [];
+        foreach ($languages as $lang) {
+            $_lang    = [];
+            $langFile = $base . $lang . '/' . $incFile;
+            if (file_exists($langFile)) {
+                include $langFile;
+            }
+            $langData[$lang] = is_array($_lang) ? $_lang : [];
+        }
+
+        $allKeys = array_keys($langData[$defaultLang] ?? []);
+        $rows    = [];
+        foreach ($allKeys as $key) {
+            $row = [
+                'context' => $context->contextFor((string)$key),
+                'key'     => $key,
+            ];
+            foreach ($languages as $lang) {
+                $row[$lang] = $langData[$lang][$key] ?? '';
+            }
+            $rows[] = $row;
+        }
+        return $rows;
+    }
+
+    private function writeSheet(\OpenSpout\Writer\XLSX\Writer $writer, array $rows, array $languages): void
+    {
+        if (empty($rows)) {
+            return;
+        }
+        $header = array_merge(['Контекст', 'lexicon_key'], $languages);
+        $writer->addRow($this->createRow($header, $this->headerStyle()));
+
+        foreach ($rows as $row) {
+            $values = [$row['context'] ?? '', $row['key']];
+            foreach ($languages as $lang) {
+                $values[] = $row[$lang] ?? '';
+            }
+            $writer->addRow($this->createRow($values, $this->dataStyle()));
+        }
+    }
+
+    /** Стиль данных: перенос текста (длинные значения не налазят на соседние ячейки). */
+    private function dataStyle(): \OpenSpout\Common\Entity\Style\Style
+    {
+        if ($this->dataStyle === null) {
+            $this->dataStyle = (new \OpenSpout\Writer\Common\Creator\Style\StyleBuilder())
+                ->setShouldWrapText(true)
+                ->build();
+        }
+        return $this->dataStyle;
+    }
+
+    /** Стиль шапки: жирный + перенос. */
+    private function headerStyle(): \OpenSpout\Common\Entity\Style\Style
+    {
+        if ($this->headerStyle === null) {
+            $this->headerStyle = (new \OpenSpout\Writer\Common\Creator\Style\StyleBuilder())
+                ->setFontBold()
+                ->setShouldWrapText(true)
+                ->build();
+        }
+        return $this->headerStyle;
+    }
+
+    private function createRow(array $values, ?\OpenSpout\Common\Entity\Style\Style $style = null): \OpenSpout\Common\Entity\Row
+    {
+        return \OpenSpout\Writer\Common\Creator\WriterEntityFactory::createRowFromArray($values, $style);
+    }
+
+    /**
+     * Имя вкладки Excel: запрещены : \ / ? * [ ], длина ≤ 31, уникальность.
+     * При коллизии/обрезке добавляем числовой суффикс.
+     */
+    private function uniqueSheetName(string $rid, array &$used): string
+    {
+        $name = preg_replace('#[:\\\\/?*\[\]]+#', '_', $rid);
+        $name = trim((string)$name);
+        if ($name === '') {
+            $name = 'sheet';
+        }
+        $name = mb_substr($name, 0, 31);
+
+        $base = $name;
+        $i    = 1;
+        while (isset($used[mb_strtolower($name)])) {
+            $suffix = '_' . $i++;
+            $name   = mb_substr($base, 0, 31 - mb_strlen($suffix)) . $suffix;
+        }
+        $used[mb_strtolower($name)] = true;
+        return $name;
+    }
+}
+return 'MigxpageconfiguratorLexiconsExportallinoneProcessor';

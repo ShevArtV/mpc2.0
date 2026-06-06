@@ -8,6 +8,10 @@ class MigxpageconfiguratorLexiconsGetProcessor extends modProcessor
     {
         $this->modx->lexicon->load('migxpageconfigurator:default');
 
+        $corePath = $this->modx->getOption('migxpageconfigurator_core_path', null,
+            $this->modx->getOption('core_path') . 'components/migxpageconfigurator/');
+        require_once $corePath . 'services/vendor/autoload.php';
+
         $filename = basename($this->getProperty('filename', ''));
         if (!$filename) {
             return $this->failure($this->modx->lexicon('mpc_err_no_filename'));
@@ -41,9 +45,11 @@ class MigxpageconfiguratorLexiconsGetProcessor extends modProcessor
         // All keys come from the default language file
         $allKeys = array_keys($langData[$defaultLang] ?? []);
 
+        $context = new \MpcServices\Handlers\LexiconContext($this->modx);
+
         $rows = [];
         foreach ($allKeys as $key) {
-            $row = ['key' => $key];
+            $row = ['key' => $key, 'context' => $context->contextFor((string)$key)];
             foreach ($languages as $lang) {
                 $row[$lang] = $langData[$lang][$key] ?? '';
             }

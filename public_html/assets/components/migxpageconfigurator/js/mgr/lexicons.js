@@ -251,6 +251,12 @@ MPC.grid.LexiconKeys = Ext.extend(Ext.grid.EditorGridPanel, {
             tbar: [
                 '->',
                 {
+                    text:    'Экспорт всё одним файлом',
+                    tooltip: 'Один XLSX: вкладка-на-ресурс, колонка «Контекст» (секция: поле)',
+                    handler: this.exportAllInOne,
+                    scope:   this,
+                },
+                {
                     text:    'Экспорт выбранных (ZIP)',
                     handler: this.exportSelected,
                     scope:   this,
@@ -316,11 +322,17 @@ MPC.grid.LexiconKeys = Ext.extend(Ext.grid.EditorGridPanel, {
     },
 
     rebuildGrid: function (languages, rows) {
-        var fields  = ['key'];
+        var fields  = ['context', 'key'];
         var columns = [{
+            header:    'Контекст',
+            dataIndex: 'context',
+            width:     260,
+            sortable:  true,
+            renderer:  Ext.util.Format.htmlEncode,
+        }, {
             header:    'Ключ',
             dataIndex: 'key',
-            width:     280,
+            width:     260,
             sortable:  true,
         }];
 
@@ -353,7 +365,7 @@ MPC.grid.LexiconKeys = Ext.extend(Ext.grid.EditorGridPanel, {
     onAfterEdit: function (e) {
         var rec  = e.record;
         var lang = e.field;
-        if (lang === 'key') { return; }
+        if (lang === 'key' || lang === 'context') { return; }
 
         Ext.Ajax.request({
             url:    MPC.config.connector_url,
@@ -366,6 +378,43 @@ MPC.grid.LexiconKeys = Ext.extend(Ext.grid.EditorGridPanel, {
             },
             failure: function () {
                 MODx.msg.alert('Ошибка', 'Не удалось сохранить значение');
+            },
+        });
+    },
+
+    exportAllInOne: function () {
+        // Если ресурсы выделены — экспортируем их, иначе все. Языки — активные.
+        var filenames = [];
+        if (this.resourcesGrid) {
+            var sel = this.resourcesGrid.getSelectionModel().getSelections();
+            for (var i = 0; i < sel.length; i++) {
+                filenames.push(sel[i].get('filename'));
+            }
+        }
+        var langs = (this.activeLanguages || []);
+        Ext.Ajax.request({
+            url:     MPC.config.connector_url,
+            params:  {
+                action:    'lexicons/exportallinone',
+                filenames: filenames.join(','),
+                languages: langs.join(','),
+            },
+            timeout: 120000,
+            scope:   this,
+            success: function (resp) {
+                var obj = Ext.decode(resp.responseText);
+                if (obj.success) {
+                    if (!obj.object || !obj.object.filePath) {
+                        MODx.msg.alert('Готово', 'Лексиконов для экспорта не найдено');
+                        return;
+                    }
+                    window.location.href = obj.object.filePath;
+                } else {
+                    MODx.msg.alert('Ошибка', obj.message);
+                }
+            },
+            failure: function () {
+                MODx.msg.alert('Ошибка', 'Запрос не выполнен');
             },
         });
     },
