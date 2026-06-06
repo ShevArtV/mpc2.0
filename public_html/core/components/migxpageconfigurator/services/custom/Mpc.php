@@ -292,76 +292,16 @@ class Mpc
      */
     private function runResourceProcessor($resources)
     {
+        // Делегируем в ЕДИНЫЙ движок (тот же, что и проектный CLI `resources apply`),
+        // чтобы не было двух реализаций. Seed-формат ['context' => [items…]]
+        // приводим к формату манифеста; дети — в ключе 'resources' (движок его
+        // поддерживает). render передаём для copyConfig (наследование конфига типа).
+        $engine = new \MpcServices\Cli\Apply\ResourcesApply($this->modx, $this->render);
         foreach ($resources as $context => $items) {
-            $menuindex = 0;
-            foreach ($items as $item) {
-                if (!$item['pagetitle']) {
-                    continue;
-                }
-                $item['context_key'] = $context;
-                $item['menuindex'] = $menuindex++;
-                $this->manageResource($item);
+            if (!is_array($items)) {
+                continue;
             }
-        }
-    }
-
-    /**
-     * @param array $data
-     * @param $uri
-     * @param $parent
-     * @return void
-     */
-    private function manageResource(array $data, $uri = '', $parent = 0)
-    {
-        /** @var \modResource $resource */
-        if (!$resource = $this->modx->getObject('modResource', ['pagetitle' => $data['pagetitle']])) {
-            $resource = $this->modx->newObject('modResource');
-        }
-        unset($data['uri']);
-        $alias = $data['alias'] ?: $resource->cleanAlias($data['pagetitle']);
-        $uri .= $alias;
-
-        $resource->fromArray(array_merge([
-            'alias' => $alias,
-            'parent' => $parent,
-            'published' => true,
-            'deleted' => false,
-            'hidemenu' => false,
-            'createdon' => time(),
-            'isfolder' => !empty($data['isfolder']) || !empty($data['resources']),
-            'uri' => $uri,
-            'uri_override' => false,
-            'richtext' => false,
-            'searchable' => true,
-        ], $data), '', true, true);
-
-        if (!empty($data['groups'])) {
-            foreach ($data['groups'] as $group) {
-                $resource->joinGroup($group);
-            }
-        }
-        if (!$resource->save()) {
-            $this->logging->write(__METHOD__, "Failed to save resource with the following data:", $data);
-        }
-
-        $this->render->copyConfig($resource);
-
-        if ($data['tvs'] && !empty($data['tvs'])) {
-            foreach ($data['tvs'] as $k => $v) {
-                $resource->setTVValue($k, $v);
-            }
-        }
-
-        if (!empty($data['resources'])) {
-            $menuindex = 0;
-            foreach ($data['resources'] as $item) {
-                if (!$item['pagetitle']) {
-                    continue;
-                }
-                $item['context_key'] = $data['context_key'];
-                $item['menuindex'] = $menuindex++;
-                $this->manageResource($item, $uri . '/', $resource->get('id'));
-            }
+            $engine->apply(['context' => (string)$context, 'resources' => $items], false);
         }
     }
 
