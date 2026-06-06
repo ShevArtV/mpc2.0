@@ -582,14 +582,18 @@ class LexiconManager
      */
     private function syncOtherLanguages(array $allLexicons): void
     {
-        $default = (string)$this->properties['defaultLanguageKey'];
+        $default = (string)($this->properties['defaultLanguageKey'] ?? '');
         $langs   = array_filter(array_map('trim', explode(',', (string)$this->modx->getOption('mpc_available_languages'))));
         $langs   = array_diff($langs, [$default, '']);
         if (empty($langs) || empty($allLexicons)) {
             return;
         }
-        $baseLexiconPath = $this->properties['corePath'] . $this->properties['lexiconPath'];
+        $baseLexiconPath = ($this->properties['corePath'] ?? '') . ($this->properties['lexiconPath'] ?? '');
+        if ($baseLexiconPath === '') {
+            return;
+        }
         $defaultBase     = $baseLexiconPath . $default . '/';
+        $pending         = new \MpcServices\Handlers\PendingTranslations($baseLexiconPath);
         foreach ($langs as $lang) {
             $langBase = $baseLexiconPath . $lang . '/';
             if (!is_dir($langBase)) {
@@ -621,6 +625,17 @@ class LexiconManager
                     $out[$k] = array_key_exists($k, $existing) ? $existing[$k] : $defVal;
                 }
                 $this->writeLexiconFile($file, $out);
+
+                // Реестр непереведённых: новые ключи (не было в файле языка) →
+                // pending; переведённые ранее остаются вне; orphan выкидывается.
+                // (string)$k — ключи лексикона числовыми не бывают, но array_keys
+                // мог бы вернуть int для «12»-подобных — приводим к строке.
+                $pending->sync(
+                    $lang,
+                    (string)$rid,
+                    array_map('strval', array_keys($defaultLex)),
+                    array_map('strval', array_keys($existing))
+                );
             }
         }
     }

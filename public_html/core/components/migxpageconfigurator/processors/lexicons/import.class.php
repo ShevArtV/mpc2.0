@@ -7,6 +7,10 @@
  */
 class MigxpageconfiguratorLexiconsImportProcessor extends modProcessor
 {
+    /** База лексиконов и дефолтный язык — для снятия ключей с pending-реестра. */
+    private string $lexiconBase = '';
+    private string $defaultLang = 'ru';
+
     public function process()
     {
         $this->modx->lexicon->load('migxpageconfigurator:default');
@@ -29,6 +33,8 @@ class MigxpageconfiguratorLexiconsImportProcessor extends modProcessor
         $allowModxTags  = (bool)$this->modx->getOption('mpc_allow_modx_tags', null, false);
 
         $defaultLang = $this->modx->getOption('mpc_default_language', null, 'ru');
+        $this->lexiconBase = $lexiconBase;
+        $this->defaultLang = $defaultLang;
 
         if (preg_match('/\.zip$/i', $originalName)) {
             $result = $this->importZip($tmpFile, $lexiconBase, $staticFile, $defaultLang, $allowedTags, $allowModxTags);
@@ -204,6 +210,18 @@ class MigxpageconfiguratorLexiconsImportProcessor extends modProcessor
                 $content .= '$_lang[\'' . $k . '\'] = \'' . $v . '\';' . PHP_EOL;
             }
             file_put_contents($filePath, $content);
+
+            // Импортированные переводы неосновного языка снимают ключи с
+            // pending-реестра (непустые значения = переведено).
+            if ($lang !== $this->defaultLang && $this->lexiconBase !== '') {
+                $rid     = preg_replace('/\.inc\.php$/', '', $targetFilename);
+                $pending = new \MpcServices\Handlers\PendingTranslations($this->lexiconBase);
+                foreach ($data as $k => $v) {
+                    if ((string)$v !== '') {
+                        $pending->remove($lang, (string)$rid, (string)$k);
+                    }
+                }
+            }
         }
     }
 }

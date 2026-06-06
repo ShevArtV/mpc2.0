@@ -46,6 +46,17 @@ class MigxpageconfiguratorLexiconsUpdatekeyProcessor extends modProcessor
         }
         file_put_contents($filePath, $content);
 
+        // Ввод перевода для неосновного языка снимает ключ с реестра
+        // непереведённых (подход «явный pending-list» для экспорта). Пустое
+        // значение = ещё не переведено → оставляем в pending.
+        $defaultLang = $this->modx->getOption('mpc_default_language', null, 'ru');
+        if ($lang !== $defaultLang && $value !== '') {
+            $corePath = $this->modx->getOption('migxpageconfigurator_core_path', null,
+                $this->modx->getOption('core_path') . 'components/migxpageconfigurator/');
+            require_once $corePath . 'services/vendor/autoload.php';
+            (new \MpcServices\Handlers\PendingTranslations($lexiconBase))->remove($lang, $filename, $key);
+        }
+
         $this->modx->cacheManager->refresh(['lexicon_topics' => []]);
 
         return $this->success('');

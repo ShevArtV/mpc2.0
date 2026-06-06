@@ -874,4 +874,69 @@ class LexiconManagerTest extends TestCase
         include $file;
         $this->assertSame('из шаблона', $_lang['k_shared']); // overwrite → шаблон
     }
+
+    /**
+     * Интеграция: createLexicons → syncOtherLanguages наполняет pending-реестр
+     * непереведённых ключей для неосновного языка (НОВЫЕ ключи), а уже
+     * переведённый ключ туда не попадает.
+     */
+    public function testSyncWritesPendingForNewKeys(): void
+    {
+        $modx = new \MpcTests\Stubs\ModxStub(null, ['mpc_available_languages' => 'en']);
+
+        $base = $this->tmpDir . '/lex/';
+        mkdir($base . 'ru', 0777, true);
+        mkdir($base . 'en', 0777, true);
+        // en уже содержит перевод title → title НЕ должен стать pending
+        file_put_contents($base . 'en/7.inc.php', "<?php\n\$_lang['title'] = 'Title EN';\n");
+
+        $resource = new class {
+            public function get(string $k): mixed { return $k === 'id' ? 7 : null; }
+        };
+
+        $lm = new LexiconManager($modx, [
+            'useLexicons'             => true,
+            'excludeLexiconFields'    => [],
+            'allowModxTags'           => false,
+            'allowedTags'             => '',
+            'lexiconFilenameField'    => 'id',
+            'staticBlocksPageLexiconFilename' => 'static',
+            'contactsPageLexiconFilename'     => 'contacts',
+            'basePathToLexiconFile'   => $base . 'ru/',
+            'corePath'                => $this->tmpDir . '/',
+            'lexiconPath'             => 'lex/',
+            'defaultLanguageKey'      => 'ru',
+            'resourceLexiconKeysPath' => 'nonexistent_rlang.php',
+            'resource'                => $resource,
+        ]);
+
+        $lm->createLexicons(['7' => ['title' => 'Заголовок', 'lead' => 'Лид', 'cta' => 'Кнопка']], true);
+
+        $pending = new \MpcServices\Handlers\PendingTranslations($base);
+        // lead/cta — новые (не было в en) → pending; title уже переведён → нет
+        $this->assertSame(['lead', 'cta'], $pending->load('en', '7'));
+        // en-файл получил все ключи (новые — плейсхолдер дефолта)
+        $_lang = [];
+        include $base . 'en/7.inc.php';
+        $this->assertSame('Title EN', $_lang['title']);   // существующий перевод цел
+        $this->assertSame('Лид', $_lang['lead']);          // новый ключ = дефолт-плейсхолдер
+
+        // Плоский tearDown класса не умеет в подпапки — чистим дерево сами.
+        $this->rrmdir($base);
+    }
+
+    private function rrmdir(string $dir): void
+    {
+        if (!is_dir($dir)) {
+            return;
+        }
+        foreach (scandir($dir) as $f) {
+            if ($f === '.' || $f === '..') {
+                continue;
+            }
+            $p = $dir . '/' . $f;
+            is_dir($p) ? $this->rrmdir($p) : unlink($p);
+        }
+        rmdir($dir);
+    }
 }

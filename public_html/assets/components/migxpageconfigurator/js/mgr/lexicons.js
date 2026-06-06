@@ -261,6 +261,12 @@ MPC.grid.LexiconKeys = Ext.extend(Ext.grid.EditorGridPanel, {
                     scope:   this,
                 },
                 {
+                    text:    'Экспорт непереведённых',
+                    tooltip: 'Только ключи, ещё не переведённые в выбранных языках',
+                    handler: this.exportUntranslated,
+                    scope:   this,
+                },
+                {
                     text:    'Импорт',
                     handler: this.importFile,
                     scope:   this,
@@ -396,6 +402,14 @@ MPC.grid.LexiconKeys = Ext.extend(Ext.grid.EditorGridPanel, {
     },
 
     exportFile: function () {
+        this.doExport(false);
+    },
+
+    exportUntranslated: function () {
+        this.doExport(true);
+    },
+
+    doExport: function (untranslated) {
         if (!this.currentFile) {
             MODx.msg.alert('Внимание', 'Выберите ресурс');
             return;
@@ -403,14 +417,19 @@ MPC.grid.LexiconKeys = Ext.extend(Ext.grid.EditorGridPanel, {
         Ext.Ajax.request({
             url:    MPC.config.connector_url,
             params: {
-                action:    'lexicons/export',
-                filename:  this.currentFile,
-                languages: (this.activeLanguages || []).join(','),
+                action:       'lexicons/export',
+                filename:     this.currentFile,
+                languages:    (this.activeLanguages || []).join(','),
+                untranslated: untranslated ? 1 : 0,
             },
             scope:  this,
             success: function (resp) {
                 var obj = Ext.decode(resp.responseText);
                 if (obj.success) {
+                    if (!obj.object || !obj.object.filePath) {
+                        MODx.msg.alert('Готово', 'Непереведённых ключей не найдено');
+                        return;
+                    }
                     window.location.href = obj.object.filePath;
                 } else {
                     MODx.msg.alert('Ошибка', obj.message);

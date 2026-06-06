@@ -4,6 +4,10 @@
  */
 class MigxpageconfiguratorLexiconsExportProcessor extends modProcessor
 {
+    private bool $onlyUntranslated = false;
+    private string $defaultLang = 'ru';
+    private ?\MpcServices\Handlers\PendingTranslations $pending = null;
+
     public function process()
     {
         $corePath = $this->modx->getOption('migxpageconfigurator_core_path', null,
@@ -22,6 +26,13 @@ class MigxpageconfiguratorLexiconsExportProcessor extends modProcessor
             . $this->modx->getOption('mpc_lexicon_path', null, 'components/migxpageconfigurator/lexicon/');
         $defaultLang   = $this->modx->getOption('mpc_default_language', null, 'ru');
         $staticFile    = $this->modx->getOption('mpc_static_blocks_page_lexicon_filename', null, 'static');
+
+        // Режим «только непереведённые»: оставляем строки, чьи ключи лежат в
+        // pending-реестре хотя бы одного из экспортируемых неосновных языков
+        // (явный pending-list, без эвристики lang==default).
+        $this->onlyUntranslated = (bool)$this->getProperty('untranslated', false);
+        $this->defaultLang      = $defaultLang;
+        $this->pending          = new \MpcServices\Handlers\PendingTranslations($lexiconBase);
 
         $requested = $this->getProperty('languages', '');
         if ($requested !== '') {
@@ -46,16 +57,23 @@ class MigxpageconfiguratorLexiconsExportProcessor extends modProcessor
         $exportFilename = $filename . '_lexicons.xlsx';
         $exportPath     = $exportDir . $exportFilename;
 
+        // Строки считаем ДО открытия writer: в режиме «непереведённых» при пустом
+        // результате файл не плодим (UI покажет «ничего не найдено»).
+        $resourceRows = $this->loadRows($lexiconBase, $filename, $languages);
+        $staticRows   = $this->loadRows($lexiconBase, $staticFile, $languages);
+
+        if ($this->onlyUntranslated && empty($resourceRows) && empty($staticRows)) {
+            return $this->success('', []);
+        }
+
         $writer = \OpenSpout\Writer\Common\Creator\WriterEntityFactory::createXLSXWriter();
         $writer->openToFile($exportPath);
 
         // Sheet 1: resource lexicons
-        $resourceRows = $this->loadRows($lexiconBase, $filename, $languages);
         $writer->getCurrentSheet()->setName('Resource');
         $this->writeSheet($writer, $resourceRows, $languages);
 
         // Sheet 2: static section lexicons (if they exist)
-        $staticRows = $this->loadRows($lexiconBase, $staticFile, $languages);
         if (!empty($staticRows)) {
             $writer->addNewSheetAndMakeItCurrent()->setName('Static');
             $this->writeSheet($writer, $staticRows, $languages);
@@ -88,6 +106,20 @@ class MigxpageconfiguratorLexiconsExportProcessor extends modProcessor
         }
 
         $allKeys = array_keys($langData[$defaultLang] ?? []);
+
+        if ($this->onlyUntranslated && $this->pending !== null) {
+            $pendingKeys = [];
+            foreach ($languages as $lang) {
+                if ($lang === $this->defaultLang) {
+                    continue;
+                }
+                foreach ($this->pending->load($lang, $filename) as $pk) {
+                    $pendingKeys[$pk] = true;
+                }
+            }
+            $allKeys = array_values(array_filter($allKeys, static fn($k) => isset($pendingKeys[$k])));
+        }
+
         $rows    = [];
         foreach ($allKeys as $key) {
             $row = ['lexicon_key' => $key];
