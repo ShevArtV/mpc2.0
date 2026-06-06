@@ -578,94 +578,9 @@ class LexiconManagerTest extends TestCase
     }
 
     // ---------------------------------------------------------------
-    // getResourceIdentifierById() — uri mode
+    // getResourceIdentifierById()
     // ---------------------------------------------------------------
 
-    /**
-     * Создаёт LexiconManager с modX-заглушкой, чья newQuery() вернёт заданный uri.
-     */
-    private function makeManagerWithUri(string $uri): LexiconManager
-    {
-        $modx = new class($uri) extends \MpcTests\Stubs\ModxStub {
-            private string $fakeUri;
-            public function __construct(string $uri) {
-                parent::__construct();
-                $this->fakeUri = $uri;
-            }
-            public function newQuery(string $class): object {
-                $uri = $this->fakeUri;
-                return new class($uri) {
-                    private string $uri;
-                    public object $stmt;
-                    public function __construct(string $uri) {
-                        $this->uri = $uri;
-                        $u = $uri;
-                        $this->stmt = new class($u) {
-                            private string $v;
-                            public function __construct(string $v) { $this->v = $v; }
-                            public function execute(): bool { return true; }
-                            public function fetchColumn(): mixed { return $this->v; }
-                        };
-                    }
-                    public function select(string $f): void {}
-                    public function where(array $c): void {}
-                    public function prepare(): void {}
-                };
-            }
-        };
-
-        $props = [
-            'useLexicons'                    => true,
-            'excludeLexiconFields'           => [],
-            'allowModxTags'                  => false,
-            'allowedTags'                    => '',
-            'lexiconFilenameField'           => 'uri',
-            'staticBlocksPageLexiconFilename' => 'static',
-            'contactsPageLexiconFilename'    => 'contacts',
-            'basePathToLexiconFile'          => $this->tmpDir . '/',
-            'corePath'                       => '',
-            'resourceLexiconKeysPath'        => 'nonexistent_rlang.php',
-            'resource'                       => new \stdClass(),
-        ];
-
-        return new LexiconManager($modx, $props);
-    }
-
-    public function testGetResourceIdentifierByIdUriSimple(): void
-    {
-        $m = $this->makeManagerWithUri('about/');
-        $this->assertEquals('about', $m->getResourceIdentifierById(5));
-    }
-
-    public function testGetResourceIdentifierByIdUriNested(): void
-    {
-        $m = $this->makeManagerWithUri('services/team/');
-        $this->assertEquals('services_team', $m->getResourceIdentifierById(5));
-    }
-
-    public function testGetResourceIdentifierByIdUriRoot(): void
-    {
-        $m = $this->makeManagerWithUri('');
-        $this->assertEquals('root', $m->getResourceIdentifierById(1));
-    }
-
-    public function testGetResourceIdentifierByIdUriRootSlash(): void
-    {
-        $m = $this->makeManagerWithUri('/');
-        $this->assertEquals('root', $m->getResourceIdentifierById(1));
-    }
-
-    public function testGetResourceIdentifierByIdUriLeadingSlash(): void
-    {
-        $m = $this->makeManagerWithUri('/about/');
-        $this->assertEquals('about', $m->getResourceIdentifierById(5));
-    }
-
-    public function testGetResourceIdentifierByIdUriDeepNested(): void
-    {
-        $m = $this->makeManagerWithUri('services/consulting/team/');
-        $this->assertEquals('services_consulting_team', $m->getResourceIdentifierById(5));
-    }
 
     /**
      * prepare() оставил stmt=false (SQL не подготовился — напр. невалидная
@@ -854,6 +769,18 @@ class LexiconManagerTest extends TestCase
      * ЕДИНЫЙ формат ключа (static) — им же пользуется редактор (FieldWriter),
      * чтобы ключи не разъезжались. idx=0 → БЕЗ суффикса (как у грабера на сайте).
      */
+    /** Нормализация поля имени файла: ТОЛЬКО id/alias, иначе → id. */
+    public function testNormalizeFilenameField(): void
+    {
+        $this->assertSame('alias', LexiconManager::normalizeFilenameField('alias'));
+        $this->assertSame('id', LexiconManager::normalizeFilenameField('id'));
+        $this->assertSame('id', LexiconManager::normalizeFilenameField('uri'));       // uri не допускается → id
+        $this->assertSame('id', LexiconManager::normalizeFilenameField('pagetitle')); // произвольное → id
+        $this->assertSame('id', LexiconManager::normalizeFilenameField(''));
+        $this->assertSame('id', LexiconManager::normalizeFilenameField(null));
+        $this->assertSame('alias', LexiconManager::normalizeFilenameField('  alias  ')); // trim
+    }
+
     public function testGetLexiconKeyFormat(): void
     {
         $this->assertSame('p_title', LexiconManager::getLexiconKey(['prefix' => 'p', 'fieldName' => 'title']));

@@ -181,11 +181,25 @@ class LexiconManager
         return true;
     }
 
+    /**
+     * Допустимые поля-источники имени лексикон-файла: ТОЛЬКО alias (структура
+     * одинакова в разных контекстах) и id (структура разная). Любое иное
+     * значение → 'id'. Сужает «полную свободу» (любая колонка), чтобы опечатка/
+     * произвольная колонка не ломала именование. Применяется ВЕЗДЕ, где читается
+     * mpc_lexicon_filename_field.
+     */
+    public static function normalizeFilenameField(?string $field): string
+    {
+        $field = trim((string)$field);
+        return in_array($field, ['id', 'alias'], true) ? $field : 'id';
+    }
+
     public function getResourceIdentifierById(int $rid): string
     {
-        if ($this->properties['lexiconFilenameField'] !== 'id') {
+        $field = self::normalizeFilenameField($this->properties['lexiconFilenameField'] ?? 'id');
+        if ($field !== 'id') {
             $q = $this->modx->newQuery('modResource');
-            $q->select($this->properties['lexiconFilenameField']);
+            $q->select($field);
             $q->where(['id' => $rid]);
             // prepare() возвращает false, если SQL не подготовился (напр.
             // mpc_lexicon_filename_field указывает на несуществующую колонку
@@ -197,18 +211,10 @@ class LexiconManager
                 $rid = trim($rid);
                 $rid = strtolower($rid);
                 $rid = str_replace([' ', "\n", "\r"], '-', $rid);
-
-                if ($this->properties['lexiconFilenameField'] === 'uri') {
-                    $rid = trim($rid, '/');
-                    $rid = str_replace('/', '_', $rid);
-                    if ($rid === '') {
-                        $rid = 'root';
-                    }
-                }
             } else {
                 $this->modx->log(\modX::LOG_LEVEL_ERROR, sprintf(
-                    '[mpc] LexiconManager: не удалось подготовить запрос идентификатора лексикона по полю "%s" (проверьте mpc_lexicon_filename_field — должна быть колонка modResource). Фолбэк на числовой id %d.',
-                    $this->properties['lexiconFilenameField'],
+                    '[mpc] LexiconManager: не удалось подготовить запрос идентификатора лексикона по полю "%s" (допустимы только id/alias). Фолбэк на числовой id %d.',
+                    $field,
                     $rid
                 ));
             }

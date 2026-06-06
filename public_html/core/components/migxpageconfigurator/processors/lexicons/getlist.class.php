@@ -6,10 +6,17 @@ class MigxpageconfiguratorLexiconsGetlistProcessor extends modProcessor
 {
     public function process()
     {
+        $corePath = $this->modx->getOption('migxpageconfigurator_core_path', null,
+            $this->modx->getOption('core_path') . 'components/migxpageconfigurator/');
+        require_once $corePath . 'services/vendor/autoload.php';
+
         $lexiconBase   = $this->modx->getOption('core_path')
             . $this->modx->getOption('mpc_lexicon_path', null, 'components/migxpageconfigurator/lexicon/');
         $defaultLang   = $this->modx->getOption('mpc_default_language', null, 'ru');
-        $filenameField = $this->modx->getOption('mpc_lexicon_filename_field', null, 'alias');
+        // Сужаем до безопасного набора id/alias/uri (иначе → id), единый источник.
+        $filenameField = \MpcServices\Handlers\Grabber\LexiconManager::normalizeFilenameField(
+            $this->modx->getOption('mpc_lexicon_filename_field', null, 'id')
+        );
         $labelField    = $this->modx->getOption('mpc_cmp_resource_label_field', null, 'pagetitle');
 
         $langDir = $lexiconBase . $defaultLang . '/';
