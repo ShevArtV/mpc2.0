@@ -155,8 +155,15 @@ class FieldWriter
     {
         // По ТИПУ TV через единый маппер (как грабёж data-mpc-tv): нетранслируемые
         // типы (number/date/email/url/file/listbox/…) → 'raw' → не лексиконятся.
-        $tv = $this->modx->getObject('modTemplateVar', ['name' => $tvName]);
-        return \MpcServices\Handlers\Grabber\LexiconManager::contentTypeForTvType($tv ? (string)$tv->get('type') : '');
+        // Тип неизвестен (TV нет в БД) → дефолт 'text': запись в лексикон
+        // дополнительно гейтится наличием ключа (LexiconWriter::has в writeTv),
+        // поэтому нелексиконизированные TV всё равно уходят в колонку. Без дефолта
+        // contentTypeForTvType('') = 'raw' блокировал бы правку перевода текстовых TV.
+        $tv   = $this->modx->getObject('modTemplateVar', ['name' => $tvName]);
+        $type = $tv ? (string)$tv->get('type') : '';
+        return $type !== ''
+            ? \MpcServices\Handlers\Grabber\LexiconManager::contentTypeForTvType($type)
+            : 'text';
     }
 
     /** inputTVtype поля из formtabs mpc_base (кэш по всем табам). '' если не найдено. */

@@ -223,8 +223,9 @@ class CutterSnapshotTest extends TestCase
         // pagetitle исключён → прямое чтение колонки, без | lexicon
         $this->assertStringContainsString('{$resource.pagetitle}', $tpl);
         $this->assertStringNotContainsString('mpc_resource_pagetitle', $tpl);
-        // content не исключён → лексикон-форма
-        $this->assertStringContainsString("{'mpc_resource_content' | lexicon}", $tpl);
+        // content не исключён → ОТЛОЖЕННАЯ лексикон-форма (##…} → {…} в parsed/,
+        // для переключения языка без перенарезки; см. Cutter::replaceResourceMarkers)
+        $this->assertStringContainsString("##'mpc_resource_content' | lexicon}", $tpl);
     }
 
     /**
@@ -242,10 +243,10 @@ class CutterSnapshotTest extends TestCase
         $cutter->handle('rfields.html');
         $tpl = file_get_contents($this->outputDir . '/sections/rftest.tpl');
 
-        // tv в тексте → innerHtml лексикон-форма с tv-неймспейсом
-        $this->assertStringContainsString("{'mpc_resource_tv_subtitle' | lexicon}", $tpl);
-        // tv на img → src лексикон-форма
-        $this->assertStringContainsString("src=\"{'mpc_resource_tv_cover' | lexicon}\"", $tpl);
+        // tv в тексте → innerHtml ОТЛОЖЕННАЯ лексикон-форма с tv-неймспейсом
+        $this->assertStringContainsString("##'mpc_resource_tv_subtitle' | lexicon}", $tpl);
+        // tv на img → src ОТЛОЖЕННАЯ лексикон-форма
+        $this->assertStringContainsString("src=\"##'mpc_resource_tv_cover' | lexicon}\"", $tpl);
         // прямого чтения tvs.* при включённых лексиконах быть не должно
         $this->assertStringNotContainsString('$resource.tvs.', $tpl);
     }

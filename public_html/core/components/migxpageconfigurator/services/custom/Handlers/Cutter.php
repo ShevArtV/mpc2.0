@@ -419,7 +419,10 @@ class Cutter extends Base
             } else {
                 // content-type: для TV — по ТИПУ TV (number/date/email/url/file → без
                 // `| lexicon`, значение из колонки/TV); для rfield — по тегу маркера.
-                $contentType = ($attr === 'data-mpc-tv')
+                // TV без известного типа (нет в БД / ещё не провижионена) → фолбэк на
+                // тег маркера (как rfield): иначе contentTypeForTvType('') = 'raw' и
+                // текстовый TV терял бы `| lexicon`. Симметрично ResourceFieldGrabber.
+                $contentType = ($attr === 'data-mpc-tv' && $tvType !== '')
                     ? LexiconManager::contentTypeForTvType($tvType)
                     : LexiconManager::contentTypeForTag($item->tagName());
                 $useLexicon = $lexiconize

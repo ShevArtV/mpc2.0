@@ -102,7 +102,16 @@ class ResourceFieldGrabber
                 // Прочие TV: content-type по ТИПУ TV. number/date/email/url/file → не
                 // переводимы → не лексиконятся (значение в колонке); text/textarea/
                 // richtext → лексикон mpc_resource_tv_<name>; @SELECT-listbox → raw.
-                $ct  = $this->useLexicons ? LexiconManager::contentTypeForTvType($tvType) : 'text';
+                // Тип TV неизвестен (TV нет в БД / нет xpdo) → фолбэк на тег маркера
+                // (как до M29): <span> → text лексиконится, <img> → image. Иначе
+                // contentTypeForTvType('') вернул бы 'raw' и текстовые TV без записи
+                // в БД переставали бы переводиться.
+                $ct = 'text';
+                if ($this->useLexicons) {
+                    $ct = $tvType !== ''
+                        ? LexiconManager::contentTypeForTvType($tvType)
+                        : LexiconManager::contentTypeForTag($el->tagName());
+                }
                 $key = $this->lexiconize($resource, $name, $value, $ct, 'mpc_resource_tv_');
                 $resource->setTVValue($name, $key !== '' ? $key : $value);
                 $written['tvs'][$name] = true;

@@ -2,6 +2,13 @@
 
 require_once dirname(__DIR__) . '/vendor/autoload.php';
 
+// В рантайме MODX определяет MODX_CORE_PATH сам; в юнит-окружении его нет.
+// Указываем во временную папку — код, который его использует (напр.
+// FieldWriter::invalidateParsed), безопасно сделает no-op на отсутствующем parsed/.
+if (!defined('MODX_CORE_PATH')) {
+    define('MODX_CORE_PATH', sys_get_temp_dir() . '/mpc_test_core/');
+}
+
 // Заглушка modX — базовый класс, от которого наследует ModxStub
 if (!class_exists('modX')) {
     class modX
