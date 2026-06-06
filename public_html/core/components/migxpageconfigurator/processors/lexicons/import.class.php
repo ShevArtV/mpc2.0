@@ -1,15 +1,23 @@
 <?php
 /**
- * Imports lexicons from an uploaded XLSX or ZIP (containing XLSX files).
- * Supports 2-sheet XLSX format: Sheet "Resource" → resource file, Sheet "Static" → static file.
- * Single-sheet XLSX files are imported into a file named after the sheet title.
- * ZIP files are processed as a collection of XLSX files.
+ * Импорт лексиконов из XLSX/ZIP — двухфазный (preview → apply), НЕ зависит от
+ * имени загружаемого файла: целевой ресурс определяется по имени ВКЛАДКИ
+ * (LexiconImport::resolveTarget). Понимает формат all-in-one (колонка «Контекст»
+ * + lexicon_key + языки) и старый (lexicon_key первой колонкой, листы
+ * Resource/Static). Колонка ключа/языков ищется по заголовкам, а не по позиции.
+ *
+ *  - mode=preview: сохраняет загрузку во временный файл (token), разбирает,
+ *    отдаёт план (вкладка→ресурс, ключей, новых/изменённых, распознан ли);
+ *  - mode=apply: по token + выбранным вкладкам (с ремапом) пишет значения,
+ *    снимает переведённое с pending-реестра, чистит temp, сбрасывает кэш.
  */
 class MigxpageconfiguratorLexiconsImportProcessor extends modProcessor
 {
-    /** База лексиконов и дефолтный язык — для снятия ключей с pending-реестра. */
     private string $lexiconBase = '';
     private string $defaultLang = 'ru';
+    private string $staticFile  = 'static';
+    private string $allowedTags = '';
+    private bool   $allowModxTags = false;
 
     public function process()
     {
@@ -17,210 +25,334 @@ class MigxpageconfiguratorLexiconsImportProcessor extends modProcessor
 
         $corePath = $this->modx->getOption('migxpageconfigurator_core_path', null,
             $this->modx->getOption('core_path') . 'components/migxpageconfigurator/');
-
         require_once $corePath . 'services/vendor/autoload.php';
 
+        $this->lexiconBase   = $this->modx->getOption('core_path')
+            . $this->modx->getOption('mpc_lexicon_path', null, 'components/migxpageconfigurator/lexicon/');
+        $this->defaultLang   = $this->modx->getOption('mpc_default_language', null, 'ru');
+        $this->staticFile    = $this->modx->getOption('mpc_static_blocks_page_lexicon_filename', null, 'static');
+        $this->allowedTags   = trim($this->modx->getOption('mpc_allowed_tags', null, ''));
+        $this->allowModxTags = (bool)$this->modx->getOption('mpc_allow_modx_tags', null, false);
+
+        $mode = $this->getProperty('mode', 'preview');
+        return $mode === 'apply' ? $this->doApply() : $this->doPreview();
+    }
+
+    // ---------------------------------------------------------------- preview
+
+    private function doPreview()
+    {
         if (empty($_FILES['file']['tmp_name'])) {
             return $this->failure($this->modx->lexicon('mpc_err_no_file'));
         }
-
-        $tmpFile      = $_FILES['file']['tmp_name'];
-        $originalName = basename($_FILES['file']['name'] ?? '');
-        $lexiconBase    = $this->modx->getOption('core_path')
-            . $this->modx->getOption('mpc_lexicon_path', null, 'components/migxpageconfigurator/lexicon/');
-        $staticFile     = $this->modx->getOption('mpc_static_blocks_page_lexicon_filename', null, 'static');
-        $allowedTags    = trim($this->modx->getOption('mpc_allowed_tags', null, ''));
-        $allowModxTags  = (bool)$this->modx->getOption('mpc_allow_modx_tags', null, false);
-
-        $defaultLang = $this->modx->getOption('mpc_default_language', null, 'ru');
-        $this->lexiconBase = $lexiconBase;
-        $this->defaultLang = $defaultLang;
-
-        if (preg_match('/\.zip$/i', $originalName)) {
-            $result = $this->importZip($tmpFile, $lexiconBase, $staticFile, $defaultLang, $allowedTags, $allowModxTags);
-        } elseif (preg_match('/\.xlsx$/i', $originalName)) {
-            $result = $this->importXlsx($tmpFile, $originalName, $lexiconBase, $staticFile, $defaultLang, $allowedTags, $allowModxTags);
-        } else {
+        $originalName = basename((string)($_FILES['file']['name'] ?? ''));
+        $ext = preg_match('/\.zip$/i', $originalName) ? 'zip'
+             : (preg_match('/\.xlsx$/i', $originalName) ? 'xlsx' : '');
+        if ($ext === '') {
             return $this->failure($this->modx->lexicon('mpc_err_invalid_filetype'));
         }
 
-        if (!empty($result['errors'])) {
-            return $this->failure(implode('; ', $result['errors']));
+        $tmpDir = $this->tmpDir();
+        $this->gcTmp($tmpDir);
+        $token  = uniqid('imp_', false);
+        $stored = $tmpDir . $token . '.' . $ext;
+        if (!@move_uploaded_file($_FILES['file']['tmp_name'], $stored)) {
+            // фолбэк для не-HTTP/тестового контекста
+            @copy($_FILES['file']['tmp_name'], $stored);
         }
 
+        try {
+            $sheets = $this->readWorkbook($stored);
+        } catch (\Throwable $e) {
+            @unlink($stored);
+            return $this->failure($this->modx->lexicon('mpc_err_cannot_read_file') . ': ' . $e->getMessage());
+        }
+
+        $existingRids = $this->existingRids();
+        $plan = [];
+        foreach ($sheets as $i => $s) {
+            $parsed = \MpcServices\Handlers\LexiconImport::sheetToData($s['headers'], $s['rows']);
+            if (empty($parsed['data'])) {
+                continue; // лист без колонки ключа / без строк
+            }
+            $target     = \MpcServices\Handlers\LexiconImport::resolveTarget($s['sheet'], $existingRids, $this->staticFile);
+            $recognized = $target !== null;
+            $diff = $recognized
+                ? \MpcServices\Handlers\LexiconImport::computeDiff($parsed['data'], $this->loadExisting((string)$target, $parsed['langs']))
+                : ['keys' => count($parsed['data']), 'new' => count($parsed['data']), 'changed' => 0];
+
+            $plan[] = [
+                'id'         => $i,
+                'file'       => $s['file'],
+                'sheet'      => $s['sheet'],
+                'target'     => (string)($target ?? ''),
+                'recognized' => $recognized,
+                'langs'      => implode(',', $parsed['langs']),
+                'keys'       => $diff['keys'],
+                'new'        => $diff['new'],
+                'changed'    => $diff['changed'],
+            ];
+        }
+
+        if (empty($plan)) {
+            @unlink($stored);
+            return $this->failure($this->modx->lexicon('mpc_err_cannot_read_file'));
+        }
+
+        return $this->success('', [
+            'token'     => $token . '.' . $ext,
+            'plan'      => $plan,
+            'resources' => $this->resourcesWithTitles($existingRids),
+        ]);
+    }
+
+    /**
+     * Ресурсы для combo ремапа: [{rid, label}] где label = «rid — Заголовок».
+     * Заголовок берём по нормализованному filename-field (id/alias/uri) +
+     * mpc_cmp_resource_label_field. Нет ресурса (static/контакты) → label = rid.
+     */
+    private function resourcesWithTitles(array $rids): array
+    {
+        $field = \MpcServices\Handlers\Grabber\LexiconManager::normalizeFilenameField(
+            $this->modx->getOption('mpc_lexicon_filename_field', null, 'id')
+        );
+        $labelField = $this->modx->getOption('mpc_cmp_resource_label_field', null, 'pagetitle');
+
+        $out = [];
+        foreach ($rids as $rid) {
+            $label = $rid;
+            $res   = $this->modx->getObject('modResource', [$field => $rid]);
+            if ($res) {
+                $title = (string)$res->get($labelField);
+                if ($title !== '') {
+                    $label = $rid . ' — ' . $title;
+                }
+            }
+            $out[] = ['rid' => $rid, 'label' => $label];
+        }
+        return $out;
+    }
+
+    // ---------------------------------------------------------------- apply
+
+    private function doApply()
+    {
+        $token = basename((string)$this->getProperty('token', '')); // защита от traversal
+        if ($token === '' || !preg_match('/^imp_[a-z0-9]+\.(xlsx|zip)$/i', $token)) {
+            return $this->failure($this->modx->lexicon('mpc_err_no_file'));
+        }
+        $stored = $this->tmpDir() . $token;
+        if (!is_file($stored)) {
+            return $this->failure($this->modx->lexicon('mpc_err_cannot_read_file'));
+        }
+
+        $selRaw = $this->getProperty('selections', '[]');
+        $selections = is_array($selRaw) ? $selRaw : json_decode((string)$selRaw, true);
+        $byId = [];
+        foreach ((array)$selections as $sel) {
+            $tid = (string)($sel['target'] ?? '');
+            if ($tid !== '') {
+                $byId[(int)($sel['id'] ?? -1)] = $tid;
+            }
+        }
+
+        try {
+            $sheets = $this->readWorkbook($stored);
+        } catch (\Throwable $e) {
+            return $this->failure($this->modx->lexicon('mpc_err_cannot_read_file') . ': ' . $e->getMessage());
+        }
+
+        $importedSheets = 0;
+        $importedKeys   = 0;
+        foreach ($sheets as $i => $s) {
+            if (!isset($byId[$i])) {
+                continue; // вкладка не выбрана
+            }
+            $target = basename($byId[$i]);
+            // целевой файл дефолтного языка должен существовать
+            if (!file_exists($this->lexiconBase . $this->defaultLang . '/' . $target . '.inc.php')) {
+                continue;
+            }
+            $parsed = \MpcServices\Handlers\LexiconImport::sheetToData($s['headers'], $s['rows']);
+            if (empty($parsed['data'])) {
+                continue;
+            }
+            $this->writeSheetData($target, $parsed['data']);
+            $importedSheets++;
+            $importedKeys += count($parsed['data']);
+        }
+
+        @unlink($stored);
         $this->modx->cacheManager->refresh(['lexicon_topics' => []]);
 
-        return $this->success('Импорт выполнен (' . $result['count'] . ' файл(ов))');
+        return $this->success(
+            'Импортировано вкладок: ' . $importedSheets . ' (ключей: ' . $importedKeys . ')',
+            ['sheets' => $importedSheets, 'keys' => $importedKeys]
+        );
     }
 
-    private function importZip(
-        string $zipPath,
-        string $lexiconBase,
-        string $staticFile,
-        string $defaultLang,
-        string $allowedTags,
-        bool   $allowModxTags
-    ): array {
-        $zip = new \ZipArchive();
-        if ($zip->open($zipPath) !== true) {
-            return ['count' => 0, 'errors' => []];
-        }
+    // ---------------------------------------------------------------- helpers
 
-        $tmpDir = sys_get_temp_dir() . '/mpc_import_' . uniqid();
-        mkdir($tmpDir, 0777, true);
-        $zip->extractTo($tmpDir);
-        $zip->close();
-
-        $count  = 0;
-        $errors = [];
-        foreach (glob($tmpDir . '/*.xlsx') as $xlsxFile) {
-            $result = $this->importXlsx($xlsxFile, basename($xlsxFile), $lexiconBase, $staticFile, $defaultLang, $allowedTags, $allowModxTags);
-            $count += $result['count'];
-            $errors = array_merge($errors, $result['errors']);
-        }
-
-        foreach (glob($tmpDir . '/*') as $f) { unlink($f); }
-        rmdir($tmpDir);
-
-        return ['count' => $count, 'errors' => $errors];
-    }
-
-    private function importXlsx(
-        string $tmpFile,
-        string $originalName,
-        string $lexiconBase,
-        string $staticFile,
-        string $defaultLang,
-        string $allowedTags,
-        bool   $allowModxTags
-    ): array {
-        try {
-            $reader = \OpenSpout\Reader\Common\Creator\ReaderFactory::createFromType('xlsx');
-            $reader->open($tmpFile);
-        } catch (\Exception $e) {
-            return ['count' => 0, 'errors' => [$this->modx->lexicon('mpc_err_cannot_read_file') . ': ' . $e->getMessage()]];
-        }
-
-        $baseName = preg_replace('/_lexicons$/', '', basename($originalName, '.xlsx'));
-        $errors   = [];
-
-        foreach ($reader->getSheetIterator() as $sheet) {
-            $title = $sheet->getName();
-            if ($title === 'Resource') {
-                $targetFilename = $baseName . '.inc.php';
-            } elseif ($title === 'Static') {
-                $targetFilename = $staticFile . '.inc.php';
-            } else {
-                $targetFilename = $title . '.inc.php';
-            }
-
-            if (!file_exists($lexiconBase . $defaultLang . '/' . $targetFilename)) {
-                $errors[] = $this->modx->lexicon('mpc_err_file_not_found', ['file' => $targetFilename]);
-                continue;
-            }
-
-            $this->processSheet($sheet, $lexiconBase, $targetFilename, $allowedTags, $allowModxTags);
-        }
-
-        $reader->close();
-
-        return ['count' => empty($errors) ? 1 : 0, 'errors' => $errors];
-    }
-
-    private function sanitizeValue(string $value, string $allowedTags, bool $allowModxTags): string
+    /** Пишет данные листа (key=>lang=>value) в файлы лексиконов целевого ресурса. */
+    private function writeSheetData(string $rid, array $data): void
     {
-        if ($allowedTags !== '') {
-            $tagList = array_filter(array_map('trim', explode(',', $allowedTags)));
-            $value   = strip_tags($value, $tagList);
-        } else {
-            $value = strip_tags($value);
-        }
-
-        if (!$allowModxTags) {
-            $value = preg_replace('/\[\[.+?\]\]/s', '', $value);
-            $value = preg_replace('/\{.+?\}/s', '', $value);
-        }
-
-        return $value;
-    }
-
-    private function processSheet(
-        \OpenSpout\Reader\XLSX\Sheet $sheet,
-        string $basePath,
-        string $targetFilename,
-        string $allowedTags = '',
-        bool   $allowModxTags = false
-    ): void {
-        $headers   = [];
-        $rows      = [];
-        $rowIndex  = 0;
-
-        foreach ($sheet->getRowIterator() as $row) {
-            $cells = $row->toArray();
-            if ($rowIndex === 0) {
-                $headers = $cells;
-            } else {
-                $rows[] = $cells;
-            }
-            $rowIndex++;
-        }
-
-        if (empty($headers) || ($headers[0] ?? '') !== 'lexicon_key') {
-            return;
-        }
-
-        $languages = array_slice($headers, 1);
-
-        // Build per-language arrays
-        $langData = [];
-        foreach ($rows as $row) {
-            $key = (string)($row[0] ?? '');
-            if ($key === '') {
-                continue;
-            }
-            foreach ($languages as $i => $lang) {
-                $raw = (string)($row[$i + 1] ?? '');
-                $langData[$lang][$key] = $this->sanitizeValue($raw, $allowedTags, $allowModxTags);
+        // перегруппируем в lang=>key=>value
+        $byLang = [];
+        foreach ($data as $key => $langVals) {
+            foreach ($langVals as $lang => $val) {
+                $byLang[$lang][$key] = $val;
             }
         }
 
-        foreach ($langData as $lang => $data) {
+        foreach ($byLang as $lang => $kv) {
             if (!preg_match('/^[a-z]{2}/', $lang)) {
                 continue;
             }
-
-            $langDir  = $basePath . $lang . '/';
-            $filePath = $langDir . $targetFilename;
-
+            $langDir  = $this->lexiconBase . $lang . '/';
+            $filePath = $langDir . $rid . '.inc.php';
             if (!is_dir($langDir)) {
                 mkdir($langDir, 0777, true);
             }
 
-            // Merge with existing
             $_lang = [];
             if (file_exists($filePath)) {
                 include $filePath;
             }
-            $_lang = array_merge($_lang, $data);
+            foreach ($kv as $k => $v) {
+                $_lang[$k] = $this->sanitizeValue((string)$v);
+            }
             ksort($_lang);
 
             $content = '<?php' . PHP_EOL;
             foreach ($_lang as $k => $v) {
-                $v        = str_replace("'", '&apos;', (string)$v);
+                $v = str_replace("'", '&apos;', (string)$v);
                 $content .= '$_lang[\'' . $k . '\'] = \'' . $v . '\';' . PHP_EOL;
             }
             file_put_contents($filePath, $content);
 
-            // Импортированные переводы неосновного языка снимают ключи с
-            // pending-реестра (непустые значения = переведено).
-            if ($lang !== $this->defaultLang && $this->lexiconBase !== '') {
-                $rid     = preg_replace('/\.inc\.php$/', '', $targetFilename);
+            // переводы неосновного языка снимают ключи с pending-реестра
+            if ($lang !== $this->defaultLang) {
                 $pending = new \MpcServices\Handlers\PendingTranslations($this->lexiconBase);
-                foreach ($data as $k => $v) {
-                    if ((string)$v !== '') {
-                        $pending->remove($lang, (string)$rid, (string)$k);
+                foreach ($kv as $k => $v) {
+                    if ((string)$this->sanitizeValue((string)$v) !== '') {
+                        $pending->remove($lang, $rid, (string)$k);
                     }
                 }
+            }
+        }
+    }
+
+    /** Существующие rid (basenames .inc.php дефолтного языка), кроме системных. */
+    private function existingRids(): array
+    {
+        $sys = ['default', 'properties', 'setting'];
+        $out = [];
+        foreach (glob($this->lexiconBase . $this->defaultLang . '/*.inc.php') ?: [] as $f) {
+            $rid = basename($f, '.inc.php');
+            if (!in_array($rid, $sys, true)) {
+                $out[] = $rid;
+            }
+        }
+        return $out;
+    }
+
+    /** Текущие значения по языкам для ресурса: lang=>(key=>value). */
+    private function loadExisting(string $rid, array $langs): array
+    {
+        $byLang = [];
+        foreach ($langs as $lang) {
+            $_lang = [];
+            $f = $this->lexiconBase . $lang . '/' . $rid . '.inc.php';
+            if (file_exists($f)) {
+                include $f;
+            }
+            $byLang[$lang] = is_array($_lang) ? $_lang : [];
+        }
+        return $byLang;
+    }
+
+    /**
+     * Читает workbook (xlsx или zip из xlsx) в список листов.
+     * @return array<int,array{file:string,sheet:string,headers:array,rows:array}>
+     */
+    private function readWorkbook(string $path): array
+    {
+        if (preg_match('/\.zip$/i', $path)) {
+            $sheets = [];
+            $zip = new \ZipArchive();
+            if ($zip->open($path) !== true) {
+                return [];
+            }
+            $exDir = $this->tmpDir() . 'x_' . uniqid('', false) . '/';
+            mkdir($exDir, 0777, true);
+            $zip->extractTo($exDir);
+            $zip->close();
+            foreach (glob($exDir . '*.xlsx') ?: [] as $xlsx) {
+                foreach ($this->readXlsx($xlsx, basename($xlsx)) as $s) {
+                    $sheets[] = $s;
+                }
+            }
+            foreach (glob($exDir . '*') ?: [] as $f) { @unlink($f); }
+            @rmdir($exDir);
+            return $sheets;
+        }
+        return $this->readXlsx($path, basename($path));
+    }
+
+    /** @return array<int,array{file:string,sheet:string,headers:array,rows:array}> */
+    private function readXlsx(string $path, string $fileLabel): array
+    {
+        $reader = \OpenSpout\Reader\Common\Creator\ReaderFactory::createFromType('xlsx');
+        $reader->open($path);
+        $sheets = [];
+        foreach ($reader->getSheetIterator() as $sheet) {
+            $headers = [];
+            $rows    = [];
+            $idx = 0;
+            foreach ($sheet->getRowIterator() as $row) {
+                $cells = $row->toArray();
+                if ($idx === 0) {
+                    $headers = $cells;
+                } else {
+                    $rows[] = $cells;
+                }
+                $idx++;
+            }
+            $sheets[] = ['file' => $fileLabel, 'sheet' => $sheet->getName(), 'headers' => $headers, 'rows' => $rows];
+        }
+        $reader->close();
+        return $sheets;
+    }
+
+    private function sanitizeValue(string $value): string
+    {
+        if ($this->allowedTags !== '') {
+            $value = strip_tags($value, array_filter(array_map('trim', explode(',', $this->allowedTags))));
+        } else {
+            $value = strip_tags($value);
+        }
+        if (!$this->allowModxTags) {
+            $value = preg_replace('/\[\[.+?\]\]/s', '', $value);
+            $value = preg_replace('/\{.+?\}/s', '', $value);
+        }
+        return (string)$value;
+    }
+
+    private function tmpDir(): string
+    {
+        $dir = $this->modx->getCachePath() . 'mpc_import/';
+        if (!is_dir($dir)) {
+            mkdir($dir, 0777, true);
+        }
+        return $dir;
+    }
+
+    /** Удаляет временные файлы старше часа. */
+    private function gcTmp(string $dir): void
+    {
+        foreach (glob($dir . '*') ?: [] as $f) {
+            if (is_file($f) && (time() - (int)@filemtime($f)) > 3600) {
+                @unlink($f);
             }
         }
     }

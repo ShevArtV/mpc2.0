@@ -504,31 +504,28 @@ MPC.grid.LexiconKeys = Ext.extend(Ext.grid.EditorGridPanel, {
         });
 
         var win = new Ext.Window({
-            title:  'Импорт лексиконов',
+            title:  'Импорт лексиконов — выбор файла',
             width:  420,
             modal:  true,
             items:  [form],
             buttons: [
                 {
-                    text:    'Импортировать',
+                    text:    'Далее',
+                    cls:     'primary-button',
                     handler: function () {
                         if (!form.getForm().isValid()) { return; }
+                        // mode=preview: бэкенд разбирает файл и возвращает план без записи
                         form.getForm().submit({
                             url:     MPC.config.connector_url + '?action=lexicons/import',
-                            waitMsg: 'Загрузка...',
+                            params:  { mode: 'preview' },
+                            waitMsg: 'Анализ файла...',
                             success: function (f, action) {
                                 win.close();
-                                if (grid.currentFile) {
-                                    grid.loadFile(grid.currentFile, grid.activeLanguages);
-                                }
-                                MODx.msg.status({
-                                    title:   'Успех',
-                                    message: action.result.message || 'Импорт выполнен',
-                                });
+                                grid.showImportPreview(action.result.object || {});
                             },
                             failure: function (f, action) {
                                 var msg = (action.result && action.result.message)
-                                    ? action.result.message : 'Ошибка импорта';
+                                    ? action.result.message : 'Ошибка анализа файла';
                                 MODx.msg.alert('Ошибка', msg);
                             },
                         });
@@ -542,5 +539,128 @@ MPC.grid.LexiconKeys = Ext.extend(Ext.grid.EditorGridPanel, {
         });
 
         win.show();
+    },
+
+    // Превью импорта: план «вкладка → ресурс» с галочками, ремапом нераспознанных
+    // вкладок и счётчиками; запись только после «Импортировать выбранное».
+    showImportPreview: function (data) {
+        var grid = this;
+        var plan = data.plan || [];
+
+        var recs = [];
+        for (var i = 0; i < plan.length; i++) {
+            var p = plan[i];
+            recs.push([p.id, p.sheet, p.file, p.target, p.recognized, p.langs, p.keys, p['new'], p.changed]);
+        }
+        var store = new Ext.data.ArrayStore({
+            fields: ['id', 'sheet', 'file', 'target', 'recognized', 'langs', 'keys', 'new', 'changed'],
+            data:   recs,
+        });
+
+        var resData = [];
+        var resources = data.resources || [];
+        for (var j = 0; j < resources.length; j++) {
+            // поддержка обоих форматов: {rid,label} или просто строка
+            var rr = resources[j];
+            if (rr && typeof rr === 'object') { resData.push([rr.rid, rr.label || rr.rid]); }
+            else { resData.push([rr, rr]); }
+        }
+        var resStore = new Ext.data.ArrayStore({ fields: ['rid', 'label'], data: resData });
+
+        var targetCombo = new Ext.form.ComboBox({
+            store:          resStore,
+            displayField:   'label',
+            valueField:     'rid',
+            mode:           'local',
+            triggerAction:  'all',
+            editable:       true,
+            forceSelection: false,
+        });
+
+        var sm = new Ext.grid.CheckboxSelectionModel();
+
+        var pgrid = new Ext.grid.EditorGridPanel({
+            store:        store,
+            sm:           sm,
+            clicksToEdit: 1,
+            autoScroll:   true,
+            border:       false,
+            colModel: new Ext.grid.ColumnModel({ columns: [
+                sm,
+                { header: 'Вкладка',  dataIndex: 'sheet', width: 170, renderer: Ext.util.Format.htmlEncode },
+                {
+                    header: '→ Ресурс (двойной клик)', dataIndex: 'target', width: 180, editor: targetCombo,
+                    renderer: function (v) {
+                        return v ? Ext.util.Format.htmlEncode(v)
+                                 : '<span style="color:#c00">выберите ресурс…</span>';
+                    },
+                },
+                { header: 'Ключей',   dataIndex: 'keys',    width: 60 },
+                { header: 'Новых',    dataIndex: 'new',     width: 60 },
+                { header: 'Изменён.', dataIndex: 'changed', width: 70 },
+                { header: 'Языки',    dataIndex: 'langs',   width: 90 },
+            ]}),
+        });
+
+        var win = new Ext.Window({
+            title:  'Импорт — предпросмотр и подтверждение',
+            modal:  true,
+            width:  820,
+            height: 470,
+            layout: 'fit',
+            items:  [pgrid],
+            buttons: [
+                {
+                    text: 'Импортировать выбранное',
+                    cls:  'primary-button',
+                    handler: function () {
+                        var sel = sm.getSelections();
+                        if (!sel.length) {
+                            MODx.msg.alert('Внимание', 'Отметьте галочками вкладки для импорта');
+                            return;
+                        }
+                        var selections = [];
+                        for (var k = 0; k < sel.length; k++) {
+                            var t = sel[k].get('target');
+                            if (!t) {
+                                MODx.msg.alert('Внимание', 'У вкладки «' + sel[k].get('sheet')
+                                    + '» не задан целевой ресурс — выберите его двойным кликом.');
+                                return;
+                            }
+                            selections.push({ id: sel[k].get('id'), target: t });
+                        }
+                        Ext.Ajax.request({
+                            url:     MPC.config.connector_url,
+                            params:  {
+                                action:     'lexicons/import',
+                                mode:       'apply',
+                                token:      data.token,
+                                selections: Ext.encode(selections),
+                            },
+                            timeout: 120000,
+                            success: function (resp) {
+                                var o = Ext.decode(resp.responseText);
+                                win.close();
+                                if (o.success) {
+                                    if (grid.currentFile) { grid.loadFile(grid.currentFile, grid.activeLanguages); }
+                                    MODx.msg.status({ title: 'Успех', message: o.message || 'Импортировано' });
+                                } else {
+                                    MODx.msg.alert('Ошибка', o.message);
+                                }
+                            },
+                            failure: function () { MODx.msg.alert('Ошибка', 'Запрос не выполнен'); },
+                        });
+                    },
+                },
+                { text: 'Отмена', handler: function () { win.close(); } },
+            ],
+        });
+
+        win.show();
+
+        // распознанные вкладки сразу отмечаем галочкой
+        var toSelect = [];
+        store.each(function (rec) { if (rec.get('recognized')) { toSelect.push(rec); } });
+        if (toSelect.length) { sm.selectRecords(toSelect); }
     },
 });
