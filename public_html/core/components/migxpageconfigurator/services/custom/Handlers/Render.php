@@ -480,8 +480,7 @@ class Render extends Base
         if ($cache !== null) {
             return $cache;
         }
-        // migxConfig — из пакета migx (Base его не регистрирует, в отличие от Grabber).
-        $this->modx->addPackage('migx', $this->properties['corePath'] . 'components/migx/model/');
+        // migxConfig — из пакета migx; регистрируется в Base::initialize (PackageBootstrap).
 
         $map = [];
         if (!$base = $this->modx->getObject('migxConfig', ['name' => $this->properties['baseSectionName']])) {

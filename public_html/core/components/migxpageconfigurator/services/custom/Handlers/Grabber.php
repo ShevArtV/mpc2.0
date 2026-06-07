@@ -89,7 +89,7 @@ class Grabber extends Base
             'lexiconFilenameField'    => $this->modx->getOption('mpc_lexicon_filename_field', '', 'id'),
         ]);
 
-        $this->modx->addPackage('migx', $this->properties['corePath'] . 'components/migx/model/');
+        // migx-пакет регистрируется в Base::initialize() (PackageBootstrap::ensure).
 
         // LexiconManager создаётся первым — нужен для getResourceIdentifierById в initialize
         $this->lexiconManager = new LexiconManager($this->modx, $this->properties);

@@ -9,6 +9,7 @@ use MpcServices\Handlers\Grabber;
 use MpcServices\Handlers\Cutter;
 use MpcServices\Handlers\Render;
 use MpcServices\Helpers\Logging;
+use MpcServices\Helpers\Response;
 
 /**
  * @author Arthur Shevchenko (https://t.me/ShevArtV)
@@ -82,9 +83,12 @@ class Mpc
             $this->properties['pdotoolsElementsPath'] = $this->properties['corePath'] . $this->properties['pdotoolsElementsPath'];
         }
 
-        $this->grabber = new Grabber($this->modx, $this->properties);
-        $this->cutter = new Cutter($this->modx, $this->properties);
-        $this->render = new Render($this->modx, $this->properties);
+        // Один Logging/Response на запрос — инжектим в хендлеры (DI), вместо
+        // создания по экземпляру в каждом Base::initialize.
+        $response = new Response($this->logging);
+        $this->grabber = new Grabber($this->modx, $this->properties, $this->logging, $response);
+        $this->cutter = new Cutter($this->modx, $this->properties, $this->logging, $response);
+        $this->render = new Render($this->modx, $this->properties, $this->logging, $response);
     }
 
 

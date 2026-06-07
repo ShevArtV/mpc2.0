@@ -32,6 +32,9 @@ class Base
      * @var Response
      */
     protected Response $response;
+    /** Инжектированные сверху (Mpc) Logging/Response; null → создаём свои. */
+    private ?Logging $injectedLogging = null;
+    private ?Response $injectedResponse = null;
     /**
      * @var Parser
      */
@@ -49,10 +52,12 @@ class Base
      * @param \modX $modx
      * @param array $properties
      */
-    public function __construct(\modX $modx, array $properties = [])
+    public function __construct(\modX $modx, array $properties = [], ?Logging $logging = null, ?Response $response = null)
     {
         $this->modx = $modx;
         $this->properties = $properties;
+        $this->injectedLogging = $logging;
+        $this->injectedResponse = $response;
         $this->initialize();
     }
 
@@ -61,12 +66,13 @@ class Base
      */
     protected function initialize(): void
     {
-        // Регистрируем xPDO-модель пакета (mpcType / mpcTypeCollection / mpcTypeData),
-        // чтобы getObject/newObject видели кастомные resource-классы в грабере,
-        // каттере и рендере.
-        $this->modx->addPackage(
-            'migxpageconfigurator',
-            ($this->properties['corePath'] ?? $this->modx->getOption('core_path')) . 'components/migxpageconfigurator/model/'
+        // Регистрируем xPDO-модели пакетов (migxpageconfigurator: mpcType/…; migx:
+        // migxConfig) — единым bootstrap'ом, чтобы getObject/newObject видели
+        // кастомные классы в грабере, каттере и рендере (раньше addPackage был
+        // рассредоточен по Base/Grabber/Render).
+        PackageBootstrap::ensure(
+            $this->modx,
+            (string)($this->properties['corePath'] ?? $this->modx->getOption('core_path'))
         );
 
         $translatableContentTypes = $this->modx->getOption('mpc_translated_content', '', 'text,image,poster,video,audio');
@@ -117,10 +123,16 @@ class Base
         ];
         $this->properties = array_merge($this->properties, $properties);
 
-        $this->logging = new Logging();
-        $logFileName = str_replace('\\', '-', self::class) . '.txt';
-        $this->logging->setPath($logFileName);
-        $this->response = new Response($this->logging);
+        // DI: используем инжектированные сверху (Mpc) Logging/Response — один набор
+        // на запрос. Без инъекции (прямое создание хендлера) — свои, с пер-классным
+        // лог-файлом (backward-compat).
+        if ($this->injectedLogging !== null) {
+            $this->logging = $this->injectedLogging;
+        } else {
+            $this->logging = new Logging();
+            $this->logging->setPath(str_replace('\\', '-', self::class) . '.txt');
+        }
+        $this->response = $this->injectedResponse ?? new Response($this->logging);
         $this->parser = new Parser();
     }
 
