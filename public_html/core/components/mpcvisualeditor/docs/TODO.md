@@ -35,6 +35,8 @@
    - Тесты: ArgvParserTest (8) + ApplyEnginesTest (6). End-to-end на стенде: settings/resources round-trip + откат, events dry-run.
    - ХВОСТ: package live-install проверить; точечная унификация плагин-событий через этот CLI вместо ручной админки.
 
+3b. [ ] **Документация перед релизом** — доку по всему пакету: data-mpc-* атрибуты, системные настройки, лексиконы (CMP + экспорт/импорт/all-in-one), визуальный редактор mpcVE, CLI (`console/README.md` как затравка). Формат/охват уточнить с пользователем.
+
 4. [ ] **Рефакторинг** `[mpcVE]`+`[mpc]` — после фич.
 
 5. [ ] **Тестирование и сборка** — полевые проверки (медиа edge: сдвиг `<source>`; миграция `is_static`; лексиконы после mgr_tpl) + сборочные хвосты: событие `OnBeforeDocFormSave` в build-декларацию плагина; резолверы таблиц `mpcve_changelog` и `mpc_tracked_fields` в build; авто-создание `lexicons-export/` и пр.
