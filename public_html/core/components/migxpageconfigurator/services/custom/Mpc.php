@@ -554,13 +554,20 @@ class Mpc
 
     private function getContextSettingValue($settingKey)
     {
+        // Глобальное значение — база; контекстная настройка переопределяет её,
+        // только если реально задана. Иначе fetchColumn() на пустой выборке
+        // вернул бы false и затёр глобальное значение (был такой баг → настройки
+        // из глобалки/модалки не подхватывались без context-override).
         $settingValue = $this->modx->getOption($settingKey);
         $q = $this->modx->newQuery('modContextSetting');
         $q->select('value');
         $q->where(['key' => $settingKey, 'context_key' => $this->modx->context->get('key')]);
         $q->prepare();
         if ($q->stmt->execute()) {
-            $settingValue = $q->stmt->fetchColumn();
+            $ctxValue = $q->stmt->fetchColumn();
+            if ($ctxValue !== false) {
+                $settingValue = $ctxValue;
+            }
         }
         return $settingValue;
     }
