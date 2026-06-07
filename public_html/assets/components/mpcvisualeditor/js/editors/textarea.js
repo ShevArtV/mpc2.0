@@ -4,9 +4,9 @@
  * в окне, чтобы было удобно и не ломалась вёрстка. Значение — plain text.
  */
 import { S } from '../state.js';
-import { api } from '../api.js';
 import { toast } from '../dom.js';
 import { fieldAddress } from '../address.js';
+import { doSave } from '../save.js';
 import { sanitizeHtml } from './rte.js';
 
 export function openTextareaEditor(el) {
@@ -45,23 +45,13 @@ export function openTextareaEditor(el) {
     var saveBtn = overlay.querySelector('[data-act=save]');
     saveBtn.addEventListener('click', function () {
         var value = ta.value;
-        saveBtn.disabled = true; saveBtn.textContent = 'Сохранение…';
-        api.post('field/save', { address: addr, value: value, old: cur }).then(function (r) {
-            if (r && r.success) {
-                // source: сырой HTML → реальная разметка; plain: текст как есть.
-                if (sourceMode) {
-                    // санитайз перед живым DOM (Sf2): on*/javascript: режутся.
-                    el.innerHTML = sanitizeHtml(value, (S.cfg.allowedTags && S.cfg.allowedTags.length) ? S.cfg.allowedTags : undefined);
-                } else { el.textContent = value; }
-                toast('Сохранено');
-                close();
-            } else {
-                toast((r && r.message) || 'Ошибка сохранения', true);
-                saveBtn.disabled = false; saveBtn.textContent = 'Сохранить';
-            }
-        }).catch(function () {
-            toast('Сетевая ошибка', true);
-            saveBtn.disabled = false; saveBtn.textContent = 'Сохранить';
-        });
+        doSave(addr, value, cur, { btn: saveBtn, onSuccess: function () {
+            // source: сырой HTML → реальная разметка; plain: текст как есть.
+            if (sourceMode) {
+                // санитайз перед живым DOM (Sf2): on*/javascript: режутся.
+                el.innerHTML = sanitizeHtml(value, (S.cfg.allowedTags && S.cfg.allowedTags.length) ? S.cfg.allowedTags : undefined);
+            } else { el.textContent = value; }
+            close();
+        } });
     });
 }

@@ -3,9 +3,9 @@
  * поле ввода (Enter/запятая добавляют). Хранение — список через запятую (дефолтный
  * разделитель MODX tag-TV). Пишем сырым (raw=1).
  */
-import { api } from '../api.js';
 import { toast, esc } from '../dom.js';
 import { fieldAddress } from '../address.js';
+import { doSave } from '../save.js';
 
 function splitTags(s) {
     return String(s || '').split(/\s*[,|]\s*/).map(function (t) { return t.trim(); }).filter(Boolean);
@@ -71,19 +71,9 @@ export function openTagsEditor(el) {
         var value = tags.join(',');
         // НЕ raw: теги — контентное значение; лексиконизировано → writer пишет в
         // лексикон под существующим ключом (как text.js), иначе литералом.
-        saveBtn.disabled = true; saveBtn.textContent = 'Сохранение…';
-        api.post('field/save', { address: addr, value: value, old: cur }).then(function (r) {
-            if (r && r.success) {
-                el.textContent = tags.join(', ');
-                toast('Сохранено');
-                close();
-            } else {
-                toast((r && r.message) || 'Ошибка сохранения', true);
-                saveBtn.disabled = false; saveBtn.textContent = 'Сохранить';
-            }
-        }).catch(function () {
-            toast('Сетевая ошибка', true);
-            saveBtn.disabled = false; saveBtn.textContent = 'Сохранить';
-        });
+        doSave(addr, value, cur, { btn: saveBtn, onSuccess: function () {
+            el.textContent = tags.join(', ');
+            close();
+        } });
     });
 }

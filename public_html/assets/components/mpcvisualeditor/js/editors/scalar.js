@@ -3,9 +3,9 @@
  * Один редактор, ветвление по data-mpcve-type. Значение пишем сырым (raw=1) —
  * число/дата не лексиконятся.
  */
-import { api } from '../api.js';
 import { toast, esc } from '../dom.js';
 import { fieldAddress } from '../address.js';
+import { doSave } from '../save.js';
 
 // "YYYY-MM-DD[ HH:MM:SS]" → значение <input type=datetime-local> ("…THH:MM").
 // Непарсящийся формат → '' (тогда показываем обычный текст-инпут, не портим).
@@ -74,19 +74,9 @@ export function openScalarEditor(el) {
         // НЕ raw: number/date — контентное значение (не enum-ключ). Если поле
         // лексиконизировано — writer пишет в лексикон под существующим ключом
         // (как text.js); иначе литералом. raw=1 затёр бы ключ в конфиге.
-        saveBtn.disabled = true; saveBtn.textContent = 'Сохранение…';
-        api.post('field/save', { address: addr, value: value, old: cur }).then(function (r) {
-            if (r && r.success) {
-                el.textContent = value;
-                toast('Сохранено');
-                close();
-            } else {
-                toast((r && r.message) || 'Ошибка сохранения', true);
-                saveBtn.disabled = false; saveBtn.textContent = 'Сохранить';
-            }
-        }).catch(function () {
-            toast('Сетевая ошибка', true);
-            saveBtn.disabled = false; saveBtn.textContent = 'Сохранить';
-        });
+        doSave(addr, value, cur, { btn: saveBtn, onSuccess: function () {
+            el.textContent = value;
+            close();
+        } });
     });
 }
