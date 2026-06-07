@@ -34,6 +34,12 @@ class ModxStub extends \modX
         };
     }
 
+    /** Зеркалит modX::getCacheManager() (код использует его вместо ->cacheManager). */
+    public function getCacheManager()
+    {
+        return $this->cacheManager;
+    }
+
     /**
      * Возвращает значение из config.php или $defaultValue
      */

@@ -5,7 +5,7 @@ namespace MpcTests\Stubs;
 /**
  * Заглушка MODX ORM-объекта (modResource, modSystemSetting и т.д.)
  */
-class ModxObjectStub
+class ModxObjectStub extends \modResource
 {
     private string $class;
     private array $data = [];

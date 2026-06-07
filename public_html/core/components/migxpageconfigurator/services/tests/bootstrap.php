@@ -60,5 +60,12 @@ if (!class_exists('modX')) {
     }
 }
 
+// Минимальная заглушка modResource — чтобы ModxObjectStub проходил type-hint
+// `\modResource` (напр. FieldWriter::copySectionsFromType). Методов нет — всё в
+// ModxObjectStub, который её наследует.
+if (!class_exists('modResource')) {
+    class modResource {}
+}
+
 require_once __DIR__ . '/Stubs/ModxObjectStub.php';
 require_once __DIR__ . '/Stubs/ModxStub.php';

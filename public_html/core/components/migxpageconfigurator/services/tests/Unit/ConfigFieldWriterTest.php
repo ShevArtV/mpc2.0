@@ -158,6 +158,17 @@ class ConfigFieldWriterTest extends TestCase
         $this->assertSame('Карточка 1', $rows[1]['title']); // значение уехало вместе со строкой
     }
 
+    public function testMoveRowRejectsOutOfBounds(): void
+    {
+        $w = new ConfigFieldWriter();
+        // toIdx за пределами диапазона существующих строк → отказ (не молча клампит).
+        $bad = $w->moveRow($this->sampleConfig(), ['section' => 'hero', 'parentField' => 'cards', 'fromIdx' => 0, 'toIdx' => 9]);
+        $this->assertFalse($bad['success']);
+        // fromIdx вне диапазона — тоже отказ.
+        $bad2 = $w->moveRow($this->sampleConfig(), ['section' => 'hero', 'parentField' => 'cards', 'fromIdx' => 9, 'toIdx' => 0]);
+        $this->assertFalse($bad2['success']);
+    }
+
     // --- path: вложенные списки (произвольная глубина) -------------------
 
     private function nestedConfig(): string

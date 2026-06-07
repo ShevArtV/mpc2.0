@@ -85,6 +85,19 @@ class AdminAudit
     }
 
     /** Дифф vs снимок + запись в лог (в OnDocFormSave, ДО re-cut). */
+    /**
+     * Уровень записи аудита по id/parent ресурса (PURE, тестируется без БД):
+     * сам staticBlocksPage → global; его прямой ребёнок (тип страницы) → type;
+     * иначе → resource. Ошибка здесь = неверный level всем записям журнала.
+     */
+    public static function resolveLevel(int $rid, int $parent, int $staticBlocksPageId): string
+    {
+        if ($rid === $staticBlocksPageId) {
+            return 'global';
+        }
+        return $parent === $staticBlocksPageId ? 'type' : 'resource';
+    }
+
     public function logChanges(\modResource $resource, int $staticBlocksPageId): void
     {
         $rid = (int)$resource->get('id');
@@ -94,9 +107,7 @@ class AdminAudit
         $old = self::$before[$rid];
         unset(self::$before[$rid]);
 
-        $level = $rid === $staticBlocksPageId
-            ? 'global'
-            : ((int)$resource->get('parent') === $staticBlocksPageId ? 'type' : 'resource');
+        $level = self::resolveLevel($rid, (int)$resource->get('parent'), $staticBlocksPageId);
 
         $entries = [];
         $this->diffConfig(
