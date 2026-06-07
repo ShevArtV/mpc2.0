@@ -87,9 +87,17 @@ export function choiceDialog(message, opts) {
             ov.querySelector('[data-choice="' + i + '"]').textContent = c.label;
         });
 
-        function done(v) { ov.remove(); document.removeEventListener('keydown', onKey); resolve(v); }
-        function onKey(e) { if (e.key === 'Escape') { done(null); } }
-        document.addEventListener('keydown', onKey);
+        function done(v) { ov.remove(); document.removeEventListener('keydown', onKey, true); resolve(v); }
+        // capture + stopImmediatePropagation: Escape гасит ТОЛЬКО этот диалог,
+        // не подлежащий редактор (он тоже слушает Escape на document). Если сверху
+        // confirm/prompt — отдаём Escape ему.
+        function onKey(e) {
+            if (e.key !== 'Escape') { return; }
+            if (document.querySelector('.mpcve-confirm')) { return; }
+            e.stopImmediatePropagation();
+            done(null);
+        }
+        document.addEventListener('keydown', onKey, true);
         ov.addEventListener('click', function (e) { if (e.target === ov) { done(null); } });
         ov.querySelector('[data-act=cancel]').addEventListener('click', function () { done(null); });
         choices.forEach(function (c, i) {
@@ -128,13 +136,14 @@ export function promptDialog(message, opts) {
         if (opts.placeholder) { inp.placeholder = opts.placeholder; }
         if (opts.value) { inp.value = opts.value; }
 
-        function done(v) { ov.remove(); document.removeEventListener('keydown', onKey); resolve(v); }
+        function done(v) { ov.remove(); document.removeEventListener('keydown', onKey, true); resolve(v); }
         function submit() { var v = inp.value.trim(); done(v || null); }
+        // capture + stopImmediatePropagation — гасим клавишу для подлежащего редактора.
         function onKey(e) {
-            if (e.key === 'Escape') { done(null); }
-            else if (e.key === 'Enter') { e.preventDefault(); submit(); }
+            if (e.key === 'Escape') { e.stopImmediatePropagation(); done(null); }
+            else if (e.key === 'Enter') { e.preventDefault(); e.stopImmediatePropagation(); submit(); }
         }
-        document.addEventListener('keydown', onKey);
+        document.addEventListener('keydown', onKey, true);
         ov.addEventListener('click', function (e) { if (e.target === ov) { done(null); } });
         ov.querySelector('[data-act=cancel]').addEventListener('click', function () { done(null); });
         ov.querySelector('[data-act=ok]').addEventListener('click', submit);
@@ -166,12 +175,13 @@ export function confirmDialog(message, opts) {
         ov.querySelector('[data-act=cancel]').textContent = opts.cancelLabel || 'Отмена';
         ov.querySelector('[data-act=ok]').textContent = opts.okLabel || 'OK';
 
-        function done(v) { ov.remove(); document.removeEventListener('keydown', onKey); resolve(v); }
+        function done(v) { ov.remove(); document.removeEventListener('keydown', onKey, true); resolve(v); }
+        // capture + stopImmediatePropagation — гасим клавишу для подлежащего редактора.
         function onKey(e) {
-            if (e.key === 'Escape') { done(false); }
-            else if (e.key === 'Enter') { e.preventDefault(); done(true); }
+            if (e.key === 'Escape') { e.stopImmediatePropagation(); done(false); }
+            else if (e.key === 'Enter') { e.preventDefault(); e.stopImmediatePropagation(); done(true); }
         }
-        document.addEventListener('keydown', onKey);
+        document.addEventListener('keydown', onKey, true);
         ov.addEventListener('click', function (e) { if (e.target === ov) { done(false); } });
         ov.querySelector('[data-act=cancel]').addEventListener('click', function () { done(false); });
         ov.querySelector('[data-act=ok]').addEventListener('click', function () { done(true); });

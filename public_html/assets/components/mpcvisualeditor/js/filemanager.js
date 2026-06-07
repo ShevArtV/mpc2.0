@@ -97,7 +97,9 @@ export function openFileManager(opts) {
         }
 
         function navigate(path) {
-            state.path = path || '';
+            path = String(path || '');
+            if (path.indexOf('..') !== -1) { path = ''; } // фронт-страховка от traversal (бэк санирует тоже)
+            state.path = path;
             setSelected(null);
             grid.innerHTML = '<div class="mpcve-fm__loading">Загрузка…</div>';
             files.list(state.path, accept).then(function (r) {

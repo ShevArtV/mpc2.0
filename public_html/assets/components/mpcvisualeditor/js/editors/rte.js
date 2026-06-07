@@ -15,7 +15,7 @@
  *
  * opts: { value, allowedTags:[], upload(file)->Promise<url> }.
  */
-import { toast, esc } from '../dom.js';
+import { toast, esc, promptDialog } from '../dom.js';
 import { S } from '../state.js';
 
 // Тег → кнопка. exec — execCommand; block — formatBlock; wrap — обернуть выделение
@@ -162,9 +162,13 @@ function runAction(b, area, opts) {
     if (b.link) {
         var sel = window.getSelection();
         var range = (sel && sel.rangeCount) ? sel.getRangeAt(0) : null;
-        var url = window.prompt('URL ссылки:', 'https://');
-        if (range) { sel.removeAllRanges(); sel.addRange(range); }
-        if (url) { document.execCommand('createLink', false, url); }
+        // promptDialog вместо window.prompt (тот глушится в iframe/CSP). Async →
+        // перед createLink возвращаем фокус в редактор и восстанавливаем выделение.
+        promptDialog('URL ссылки:', { title: 'Ссылка', value: 'https://' }).then(function (url) {
+            area.focus();
+            if (range && sel) { sel.removeAllRanges(); sel.addRange(range); }
+            if (url) { document.execCommand('createLink', false, url); }
+        });
         return;
     }
     if (b.image) { pickImage(area, opts); return; }

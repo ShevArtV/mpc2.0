@@ -123,9 +123,4 @@ class Connector
     {
         return ['success' => false, 'message' => $message, 'data' => []];
     }
-
-    private function success(string $message = '', array $data = []): array
-    {
-        return ['success' => true, 'message' => $message, 'data' => $data];
-    }
 }

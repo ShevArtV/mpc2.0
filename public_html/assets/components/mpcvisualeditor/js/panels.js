@@ -359,9 +359,17 @@ function openBlockPanel(title, descriptors) {
         '</div>';
     document.body.appendChild(overlay);
 
-    function close() { overlay.remove(); document.removeEventListener('keydown', onKey); }
-    function onKey(e) { if (e.key === 'Escape') { close(); } }
-    document.addEventListener('keydown', onKey);
+    var closed = false;
+    function close() { closed = true; overlay.remove(); document.removeEventListener('keydown', onKey, true); }
+    // capture + stopImmediatePropagation: Escape гасит ТОЛЬКО панель, не редактор
+    // под ней; если сверху confirm/prompt — отдаём Escape ему.
+    function onKey(e) {
+        if (e.key !== 'Escape') { return; }
+        if (document.querySelector('.mpcve-confirm')) { return; }
+        e.stopImmediatePropagation();
+        close();
+    }
+    document.addEventListener('keydown', onKey, true);
     overlay.addEventListener('click', function (e) { if (e.target === overlay) { close(); } });
     overlay.querySelector('[data-act=close]').addEventListener('click', close);
 
@@ -396,6 +404,7 @@ function openBlockPanel(title, descriptors) {
             api.post('field/save', { address: addr, value: value, old: old }).then(function (r) {
                 if (r && r.success) {
                     f.value = value;
+                    if (closed) { return; } // панель закрыта — не трогаем detached DOM
                     rowEl.classList.add('mpcve-hpanel__row--saved');
                     btn.textContent = '✓';
                     setTimeout(function () { btn.textContent = 'Сохранить'; btn.disabled = false; }, 1200);

@@ -87,7 +87,7 @@ export function openRowsEditor(listEl) {
     var rowsBox = overlay.querySelector('.mpcve-rows');
     var dragFrom = null; // индекс перетаскиваемой строки (drag-drop переупорядочивание)
 
-    function close() { overlay.remove(); document.removeEventListener('keydown', onKey); }
+    function close() { dragFrom = null; overlay.remove(); document.removeEventListener('keydown', onKey); }
     function onKey(e) { if (e.key === 'Escape') { close(); } }
     document.addEventListener('keydown', onKey);
     overlay.addEventListener('click', function (e) { if (e.target === overlay) { close(); } });
@@ -243,18 +243,19 @@ export function openRowsEditor(listEl) {
             return;
         }
         serverOp({ op: 'add' }, btn).then(function (ok) {
-            btn.disabled = false;
-            if (!ok) { return; }
+            // НЕ снимаем disabled до обновления UI (иначе двойной клик до ререндера).
+            if (!ok) { btn.disabled = false; return; }
             if (items.length) {
                 // JS-рендер новой строки: клон первой строки с очисткой значений.
                 var clone = cloneBlankRow(items[0]);
                 var last = items[items.length - 1];
                 last.parentNode.insertBefore(clone, last.nextSibling);
                 markFieldsWithin(clone);
-                renderRows();
+                renderRows(); // сам выставит addBtn.disabled = atMax (корректное состояние)
                 toast('Строка добавлена — заполните поля');
             } else {
                 // Пустой список: шаблона в DOM нет (структура полей — на нарезке).
+                btn.disabled = false;
                 toast('Строка добавлена в конфиг. Обновите страницу, чтобы заполнить.');
             }
         });

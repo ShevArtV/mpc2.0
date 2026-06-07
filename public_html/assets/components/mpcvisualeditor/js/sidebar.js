@@ -134,9 +134,16 @@ function wireDrag(row, idx, items) {
         items.forEach(function (s, i) { s.position = i + 1; });
         var order = items.map(function (s) { return s.section_name; });
         render();
+        // rollback модели+UI при ошибке (обратный splice), иначе экран расходится с БД.
+        var rollback = function () {
+            items.splice(to, 1);
+            items.splice(from, 0, moved);
+            items.forEach(function (s, i) { s.position = i + 1; });
+            render();
+        };
         sectionOp({ op: 'move', order: order }).then(function (r) {
             if (r && r.success) { toast('Порядок сохранён — «Обновить» для рендера'); }
-            else { toast((r && r.message) || 'Ошибка сохранения порядка', true); }
-        }).catch(function () { toast('Сетевая ошибка', true); });
+            else { rollback(); toast((r && r.message) || 'Ошибка сохранения порядка', true); }
+        }).catch(function () { rollback(); toast('Сетевая ошибка', true); });
     });
 }

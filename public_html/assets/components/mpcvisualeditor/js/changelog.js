@@ -21,6 +21,7 @@ function close() {
 function onKey(e) { if (e.key === 'Escape') { close(); } }
 
 function open() {
+    flt = { section: '', field: '', source: '', sortDesc: true }; // сброс фильтров при каждом открытии
     overlay = document.createElement('div');
     overlay.className = 'mpcve-modal mpcve-clogm';
     overlay.innerHTML =
