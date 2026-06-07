@@ -317,12 +317,9 @@ export function sanitizeHtml(html, allowedTags) {
 // ИСТОЧНИК СПИСКА — системная настройка `mpcve_allowed_attrs` (S.cfg.allowedAttrs).
 // Константа ниже — лишь FALLBACK, если настройка пуста/недоступна (напр. старая
 // вкладка). Менять список — в НАСТРОЙКЕ, не здесь.
-var DEFAULT_ALLOWED_ATTRS = [
-    'class', 'id', 'title', 'dir', 'lang', 'role', 'style',
-    'href', 'target', 'rel', 'name', 'download',
-    'src', 'alt', 'width', 'height', 'srcset', 'sizes', 'loading', 'decoding',
-    'type', 'media', 'start', 'colspan', 'rowspan', 'scope', 'datetime'
-];
+// Контент редактируемого поля (richtext/text/textarea): только инлайн-нужное —
+// class (форматирование/span), href (ссылки), src/alt/title (инлайн-картинки RTE).
+var DEFAULT_ALLOWED_ATTRS = ['class', 'href', 'src', 'alt', 'title'];
 // url-несущие атрибуты — дополнительно режем опасные схемы даже в whitelist.
 var URL_ATTRS = ['href', 'src', 'srcset', 'xlink:href', 'formaction'];
 // Опасные конструкции внутри инлайн-style (CSS-векторы).

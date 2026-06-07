@@ -22,9 +22,7 @@ switch ($options[xPDOTransport::PACKAGE_ACTION]) {
         // ключ => [value, xtype, area] — добавляется, только если ключа ещё нет
         $newSettings = [
             'mpcve_allowed_attrs' => [
-                'value' => 'class,id,title,dir,lang,role,style,href,target,rel,name,download,'
-                    . 'src,alt,width,height,srcset,sizes,loading,decoding,type,media,start,'
-                    . 'colspan,rowspan,scope,datetime',
+                'value' => 'class,href,src,alt,title',
                 'xtype' => 'textfield',
                 'area'  => 'editor',
             ],
