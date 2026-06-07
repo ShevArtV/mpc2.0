@@ -8,6 +8,9 @@ Setup-модалка при установке + кнопки копирован
 - TV img и copy_sections больше не создаются при установке (не нужны).
 - Удалена настройка mpc_copy_config_tv_name (обслуживала убранную галочку).
 - Фикс getContextSettingValue: context-настройка теперь override с fallback на глобальную (раньше затирала её на false) — глобальные настройки/модалка подхватываются на фронте.
+- mpc CLI: работа с контекстными настройками (modContextSetting, per-key 'context') и ClientConfig (cgSetting/cgContextValue); settings/clientconfig list с фильтрами --namespace/--context/--group/--key, табличный вывод.
+- Таблица mpc_tracked_fields теперь создаётся при установке через xPDO-схему (класс mpcTrackedField + 0schema-резолвер) вместо ленивого CREATE TABLE.
+- Плагин: привязка OnBeforeDocFormSave добавлена в build-декларацию (нужна для админ-аудита правок ресурса).
 
 2.5.23-rc
 ==============

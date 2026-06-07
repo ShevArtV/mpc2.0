@@ -744,17 +744,20 @@ class modExtraPackage
         }
         $this->builder->putVehicle($vehicle);
 
-        $this->builder->setPackageAttributes([
+        $attributes = [
             'changelog' => file_get_contents($this->config['core'] . 'docs/changelog.txt'),
             'license' => file_get_contents($this->config['core'] . 'docs/license.txt'),
             'readme' => file_get_contents($this->config['core'] . 'docs/readme.txt'),
-            // Модалка параметров при установке (язык/лексиконы/путь к манифестам).
-            // Значения сабмитятся в $options резолверов → resolvers/Asetupoptions.php.
-            'setup-options' => [
-                'source' => $this->config['build'] . 'setup.options.php',
-            ],
-        ]);
-        $this->modx->log(modX::LOG_LEVEL_INFO, 'Added package attributes and setup options.');
+        ];
+        // Модалка параметров при установке — только если у пакета есть форма
+        // (_build[/<pkg>]/setup.options.php). Значения сабмитятся в $options
+        // резолверов → resolvers/Asetupoptions.php. У mpcVE формы нет.
+        $setupOptions = $this->config['build'] . 'setup.options.php';
+        if (file_exists($setupOptions)) {
+            $attributes['setup-options'] = ['source' => $setupOptions];
+        }
+        $this->builder->setPackageAttributes($attributes);
+        $this->modx->log(modX::LOG_LEVEL_INFO, 'Added package attributes' . (isset($attributes['setup-options']) ? ' and setup options.' : '.'));
 
         $this->modx->log(modX::LOG_LEVEL_INFO, 'Packing up transport package zip...');
         $this->builder->pack();
