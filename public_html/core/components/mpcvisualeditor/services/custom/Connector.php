@@ -14,6 +14,30 @@ use MpcVEServices\Handlers\PermissionChecker;
  */
 class Connector
 {
+    /**
+     * Карта роутинга action → [класс-хендлер, метод]. page/save обрабатывается
+     * отдельно (отключён). Хендлеры инстанцируются с (\modX, Mpcve).
+     */
+    private const ROUTES = [
+        'fields/types'   => [Handlers\FieldTypesHandler::class,   'handle'],
+        'fields/options' => [Handlers\FieldOptionsHandler::class, 'handle'],
+        'config/get'     => [Handlers\ConfigGetHandler::class,    'handle'],
+        'field/save'     => [Handlers\FieldSaveHandler::class,    'handle'],
+        'row/op'         => [Handlers\RowOpHandler::class,        'handle'],
+        'section/op'     => [Handlers\SectionOpHandler::class,    'handle'],
+        'cache/clear'    => [Handlers\CacheClearHandler::class,   'handle'],
+        'lock/acquire'   => [Handlers\LockHandler::class,         'acquire'],
+        'lock/release'   => [Handlers\LockHandler::class,         'release'],
+        'log/list'       => [Handlers\LogHandler::class,          'list'],
+        'log/revert'     => [Handlers\LogHandler::class,          'revert'],
+        'image/upload'   => [Handlers\ImageUploadHandler::class,  'handle'],
+        'files/list'     => [Handlers\FileManagerHandler::class,  'list'],
+        'files/mkdir'    => [Handlers\FileManagerHandler::class,  'mkdir'],
+        'files/rename'   => [Handlers\FileManagerHandler::class,  'rename'],
+        'files/remove'   => [Handlers\FileManagerHandler::class,  'remove'],
+        'files/upload'   => [Handlers\FileManagerHandler::class,  'upload'],
+    ];
+
     private \modX $modx;
     private Mpcve $mpcve;
 
@@ -41,74 +65,22 @@ class Connector
         }
 
         $action = (string)($request['action'] ?? '');
-        switch ($action) {
-            case 'fields/types':
-                // Карта field→тип редактора из mpc_base (вариант B).
-                return (new Handlers\FieldTypesHandler($this->modx, $this->mpcve))->handle($request);
-            case 'fields/options':
-                // Опции listbox/option/checkbox-поля: TV (по имени) или сырой
-                // elements (@SELECT секционного listbox) → [{label,value}].
-                return (new Handlers\FieldOptionsHandler($this->modx, $this->mpcve))->handle($request);
-            case 'config/get':
-                // Декодированный mpc_config (resource+global) для панели скрытых
-                // полей: те, что вырезаны data-mpc-remove или вспомогательные.
-                return (new Handlers\ConfigGetHandler($this->modx, $this->mpcve))->handle($request);
-            case 'page/save':
-                // ВРЕМЕННО ОТКЛЮЧЕНО: ре-граб всего отрендеренного DOM деструктивен
-                // (рендер = склейка тип+ресурс + caттер-трансформы lazyload/fake-img),
-                // он перезаписывал конфиг ресурса мусором. Переходим на пер-полевое
-                // сохранение. До его готовности — экшен ничего не пишет.
-                return $this->error('Сохранение временно отключено (переход на пер-полевое).');
-            case 'field/save':
-                // Легаси точечной записи (rfield/tv/config) — оставлено для совместимости.
-                return (new Handlers\FieldSaveHandler($this->modx, $this->mpcve))->handle($request);
-            case 'row/op':
-                // Структурная операция над строками списка (add|delete|move).
-                return (new Handlers\RowOpHandler($this->modx, $this->mpcve))->handle($request);
-            case 'section/op':
-                // Структурная операция над секциями (move|visibility|static) —
-                // RAW-запись массива конфига, не через лексикон-aware field/save.
-                return (new Handlers\SectionOpHandler($this->modx, $this->mpcve))->handle($request);
-            case 'cache/clear':
-                // Полная очистка кэша MODX (кнопка тулбара).
-                return (new Handlers\CacheClearHandler($this->modx, $this->mpcve))->handle($request);
-            case 'lock/acquire':
-                // Взять/продлить блокировку ресурса на время редактирования.
-                return (new Handlers\LockHandler($this->modx, $this->mpcve))->acquire($request);
-            case 'lock/release':
-                // Снять блокировку (явный выход / закрытие вкладки — beacon).
-                return (new Handlers\LockHandler($this->modx, $this->mpcve))->release($request);
-            case 'log/list':
-                // Журнал изменений ресурса (кто/когда/что).
-                return (new Handlers\LogHandler($this->modx, $this->mpcve))->list($request);
-            case 'log/revert':
-                // Откат правки поля (записать старое значение обратно).
-                return (new Handlers\LogHandler($this->modx, $this->mpcve))->revert($request);
-            case 'image/upload':
-                // Загрузка картинки в media source mpc → возврат URL (фронт пишет
-                // его в поле через field/save). См. ImageUploadHandler.
-                return (new Handlers\ImageUploadHandler($this->modx, $this->mpcve))->handle($request);
-            case 'files/list':
-                // Файловый менеджер: листинг папки источника (навигация + выбор).
-                return (new Handlers\FileManagerHandler($this->modx, $this->mpcve))->list($request);
-            case 'files/mkdir':
-                // Файловый менеджер: создать папку.
-                return (new Handlers\FileManagerHandler($this->modx, $this->mpcve))->mkdir($request);
-            case 'files/rename':
-                // Файловый менеджер: переименовать файл/папку.
-                return (new Handlers\FileManagerHandler($this->modx, $this->mpcve))->rename($request);
-            case 'files/remove':
-                // Файловый менеджер: удалить файл/папку.
-                return (new Handlers\FileManagerHandler($this->modx, $this->mpcve))->remove($request);
-            case 'files/upload':
-                // Файловый менеджер: загрузить файл в текущую папку.
-                return (new Handlers\FileManagerHandler($this->modx, $this->mpcve))->upload($request);
-            default:
-                // S10: не отражаем ввод (action) в ответе — фронт мог бы вставить
-                // его в innerHTML. Конкретный action логируем, пользователю — общее.
-                $this->modx->log(\modX::LOG_LEVEL_WARN, '[mpcVE] unknown action: ' . $action);
-                return $this->error('Unknown or not-yet-implemented action');
+
+        // page/save ВРЕМЕННО ОТКЛЮЧЕН: ре-граб всего отрендеренного DOM деструктивен
+        // (перезаписывал конфиг ресурса мусором) — переход на пер-полевое сохранение.
+        if ($action === 'page/save') {
+            return $this->error('Сохранение временно отключено (переход на пер-полевое).');
         }
+
+        $route = self::ROUTES[$action] ?? null;
+        if ($route === null) {
+            // S10: не отражаем ввод (action) в ответе — фронт мог бы вставить его в
+            // innerHTML. Конкретный action логируем, пользователю — общее.
+            $this->modx->log(\modX::LOG_LEVEL_WARN, '[mpcVE] unknown action: ' . $action);
+            return $this->error('Unknown or not-yet-implemented action');
+        }
+        [$class, $method] = $route;
+        return (new $class($this->modx, $this->mpcve))->$method($request);
     }
 
     /** Сверка CSRF-nonce запроса с сессионным (constant-time). */
