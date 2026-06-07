@@ -231,6 +231,13 @@ return [
         'value' => 'ru',
         'area' => 'default',
     ],
+    // База манифестов mpc CLI (относительно папки core/ или абсолют). Читается
+    // ManifestLoader::baseDir (env MPC_MANIFESTS_PATH > эта настройка > дефолт).
+    'mpc_manifests_path' => [
+        'xtype' => 'textfield',
+        'value' => 'components/migxpageconfigurator/console/manifests/',
+        'area' => 'default',
+    ],
     'mpc_allowed_tags' => [
         'xtype' => 'textarea',
         'value' => 'b,p,span,h1,h2,h3,h4,h5,h6,small,i,blockquote,mark,ul,li,ol,img,button,a,u,s',
