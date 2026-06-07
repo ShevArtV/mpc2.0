@@ -36,7 +36,6 @@ class Render extends Base
         );
         $properties = [
             'commonConfigTvId' => $this->modx->getOption('mpc_config_tv_id', '', 0),
-            'copyConfigTvName' => $this->modx->getOption('mpc_copy_config_tv_name', '', ''),
             'extension' => $this->modx->getOption('mpc_tpl_file_extension', '', '.tpl'),
         ];
 
@@ -860,28 +859,24 @@ class Render extends Base
             if ($template && $this->modx->getCount('modTemplateVarTemplate', array('tmplvarid' => $this->properties['commonConfigTvId'], 'templateid' => $template))) {
                 if ($type = $this->getTypeResource($template)) {
                     if ($typeConfig = $type->getTVValue($this->properties['commonConfigTvName'])) {
+                        // Копируем содержимое отдельных секций с флагом copy_from_origin
+                        // из типа в ресурс. (Полное копирование по галочке copy_sections
+                        // убрано — заменено кнопками тулбара грида mpc_config.)
                         $config = $resource->getTVValue($this->properties['commonConfigTvName']);
-                        $copy_all = $resource->getTVValue($this->properties['copyConfigTvName']);
-                        if (!$config && $copy_all) {
-                            $resource->setTVValue($this->properties['commonConfigTvName'], $typeConfig); // копируем конфиг типа полностью
-                            $resource->setTVValue($this->properties['copyConfigTvName'], false);
-                        } else {
-                            // копируем содержимое отдельных секций
-                            $flag = false;
-                            $config = json_decode($config, 1) ?: [];
-                            $typeConfig = $this->reformatConfig(json_decode($typeConfig, 1));
-                            if (!empty($config)) {
-                                foreach ($config as $key => $item) {
-                                    if ($item['copy_from_origin'] && $typeConfig[$item['section_name']]) {
-                                        $flag = true;
-                                        $config[$key] = array_merge($item, $typeConfig[$item['section_name']]);
-                                    }
+                        $flag = false;
+                        $config = json_decode($config, 1) ?: [];
+                        $typeConfig = $this->reformatConfig(json_decode($typeConfig, 1));
+                        if (!empty($config)) {
+                            foreach ($config as $key => $item) {
+                                if ($item['copy_from_origin'] && $typeConfig[$item['section_name']]) {
+                                    $flag = true;
+                                    $config[$key] = array_merge($item, $typeConfig[$item['section_name']]);
                                 }
                             }
-                            if ($flag) {
-                                $config = json_encode($config);
-                                $resource->setTVValue($this->properties['commonConfigTvName'], $config);
-                            }
+                        }
+                        if ($flag) {
+                            $config = json_encode($config);
+                            $resource->setTVValue($this->properties['commonConfigTvName'], $config);
                         }
                     }
                 }

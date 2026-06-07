@@ -71,11 +71,6 @@ return [
         'value' => 'caption',
         'area' => 'default',
     ],
-    'mpc_copy_config_tv_name' => [
-        'xtype' => 'textfield',
-        'value' => 'copy_sections',
-        'area' => 'default',
-    ],
     'mpc_dev_mode' => [
         'xtype' => 'combo-boolean',
         'value' => '0',
