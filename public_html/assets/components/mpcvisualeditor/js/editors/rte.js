@@ -312,19 +312,17 @@ export function sanitizeHtml(html, allowedTags) {
     return tmp.innerHTML;
 }
 
-// Белый список атрибутов: на разрешённом теге оставляем ТОЛЬКО известно-
-// безопасные, всё прочее (on*, srcdoc, formaction, неизвестные) — режем.
-// Глобальные + доп. по тегу. Расширять здесь при необходимости.
-var GLOBAL_ATTRS = ['class', 'id', 'title', 'dir', 'lang', 'role', 'style'];
-var TAG_ATTRS = {
-    a: ['href', 'target', 'rel', 'name', 'download'],
-    img: ['src', 'alt', 'width', 'height', 'srcset', 'sizes', 'loading', 'decoding'],
-    source: ['src', 'srcset', 'type', 'media', 'sizes'],
-    ol: ['start', 'type'],
-    td: ['colspan', 'rowspan'],
-    th: ['colspan', 'rowspan', 'scope'],
-    time: ['datetime']
-};
+// Белый список атрибутов: на разрешённом теге оставляем ТОЛЬКО перечисленные,
+// всё прочее (on*, srcdoc, formaction, неизвестные) — режется.
+// ИСТОЧНИК СПИСКА — системная настройка `mpcve_allowed_attrs` (S.cfg.allowedAttrs).
+// Константа ниже — лишь FALLBACK, если настройка пуста/недоступна (напр. старая
+// вкладка). Менять список — в НАСТРОЙКЕ, не здесь.
+var DEFAULT_ALLOWED_ATTRS = [
+    'class', 'id', 'title', 'dir', 'lang', 'role', 'style',
+    'href', 'target', 'rel', 'name', 'download',
+    'src', 'alt', 'width', 'height', 'srcset', 'sizes', 'loading', 'decoding',
+    'type', 'media', 'start', 'colspan', 'rowspan', 'scope', 'datetime'
+];
 // url-несущие атрибуты — дополнительно режем опасные схемы даже в whitelist.
 var URL_ATTRS = ['href', 'src', 'srcset', 'xlink:href', 'formaction'];
 // Опасные конструкции внутри инлайн-style (CSS-векторы).
@@ -332,10 +330,9 @@ var STYLE_BAD = /(url\s*\(|expression\s*\(|javascript:|vbscript:|@import|<|>)/i;
 
 // Чистит атрибуты разрешённого элемента по whitelist (on*/неизвестные/javascript:).
 function scrubAttrs(el) {
-    var tag = el.tagName.toLowerCase();
-    // База (per-tag safe defaults) + расширение из настройки mpcve_allowed_attrs
-    // (S.cfg.allowedAttrs) — админ может разрешить доп. атрибуты сайт-wide.
-    var allowed = GLOBAL_ATTRS.concat(TAG_ATTRS[tag] || []).concat((S.cfg && S.cfg.allowedAttrs) || []);
+    // Список из настройки mpcve_allowed_attrs; пусто/нет → fallback-константа.
+    var allowed = (S.cfg && S.cfg.allowedAttrs && S.cfg.allowedAttrs.length)
+        ? S.cfg.allowedAttrs : DEFAULT_ALLOWED_ATTRS;
     Array.prototype.slice.call(el.attributes).forEach(function (a) {
         var n = a.name.toLowerCase();
         if (allowed.indexOf(n) === -1) { el.removeAttribute(a.name); return; }
