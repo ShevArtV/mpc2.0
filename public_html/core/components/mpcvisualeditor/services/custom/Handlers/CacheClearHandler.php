@@ -8,14 +8,9 @@ use MpcVEServices\Mpcve;
  * Экшен cache/clear: полная очистка кэша MODX (как кнопка «Очистить кэш» в
  * админке). Безопасно: права уже проверены в Connector (mpcve_edit).
  */
-class CacheClearHandler
+class CacheClearHandler extends BaseHandler
 {
-    private \modX $modx;
 
-    public function __construct(\modX $modx, Mpcve $mpcve)
-    {
-        $this->modx = $modx;
-    }
 
     public function handle(array $request): array
     {

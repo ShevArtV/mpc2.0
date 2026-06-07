@@ -18,16 +18,9 @@ use MpcVEServices\Mpcve;
  *                 при выключении — убирается из staticBlocksPage (контент остаётся
  *                 в ресурсе). Уровень global = staticBlocksPage.
  */
-class SectionOpHandler
+class SectionOpHandler extends BaseHandler
 {
-    private \modX $modx;
-    private Mpcve $mpcve;
 
-    public function __construct(\modX $modx, Mpcve $mpcve)
-    {
-        $this->modx  = $modx;
-        $this->mpcve = $mpcve;
-    }
 
     public function handle(array $request): array
     {
@@ -182,8 +175,4 @@ class SectionOpHandler
             : ['success' => true, 'message' => 'ok', 'data' => []];
     }
 
-    private function err(string $message): array
-    {
-        return ['success' => false, 'message' => $message, 'data' => []];
-    }
 }

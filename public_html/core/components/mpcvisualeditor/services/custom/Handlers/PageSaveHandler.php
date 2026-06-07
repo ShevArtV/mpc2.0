@@ -17,16 +17,9 @@ use MpcVEServices\Mpcve;
  * целиком из секций присланного HTML — частичная отправка стёрла бы остальные
  * секции. Это и есть «имитация чтения файла» как в mgr_tpl.
  */
-class PageSaveHandler
+class PageSaveHandler extends BaseHandler
 {
-    private \modX $modx;
-    private Mpcve $mpcve;
 
-    public function __construct(\modX $modx, Mpcve $mpcve)
-    {
-        $this->modx = $modx;
-        $this->mpcve = $mpcve;
-    }
 
     public function handle(array $request): array
     {
@@ -77,8 +70,4 @@ class PageSaveHandler
         return ['success' => true, 'message' => 'Сохранено', 'data' => ['resourceId' => $rid]];
     }
 
-    private function err(string $message): array
-    {
-        return ['success' => false, 'message' => $message, 'data' => []];
-    }
 }

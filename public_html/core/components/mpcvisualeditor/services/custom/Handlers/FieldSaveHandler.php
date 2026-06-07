@@ -10,16 +10,9 @@ use MpcVEServices\Mpcve;
  * (→ MpcServices\Handlers\FieldWriter). Реализованы типы rfield/tv (M4);
  * type=field (mpc_config) вернёт «not implemented» до M2.
  */
-class FieldSaveHandler
+class FieldSaveHandler extends BaseHandler
 {
-    private \modX $modx;
-    private Mpcve $mpcve;
 
-    public function __construct(\modX $modx, Mpcve $mpcve)
-    {
-        $this->modx = $modx;
-        $this->mpcve = $mpcve;
-    }
 
     public function handle(array $request): array
     {

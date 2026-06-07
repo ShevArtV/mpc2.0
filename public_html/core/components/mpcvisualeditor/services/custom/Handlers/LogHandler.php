@@ -10,16 +10,9 @@ use MpcVEServices\Mpcve;
  * для записей action=field с сохранённым старым значением (revertable=1).
  * Структурные операции (row/section) — только аудит, без отката.
  */
-class LogHandler
+class LogHandler extends BaseHandler
 {
-    private \modX $modx;
-    private Mpcve $mpcve;
 
-    public function __construct(\modX $modx, Mpcve $mpcve)
-    {
-        $this->modx = $modx;
-        $this->mpcve = $mpcve;
-    }
 
     public function list(array $request): array
     {
@@ -104,8 +97,4 @@ class LogHandler
         return ['success' => true, 'message' => 'Откат выполнен', 'data' => []];
     }
 
-    private function err(string $message): array
-    {
-        return ['success' => false, 'message' => $message, 'data' => []];
-    }
 }

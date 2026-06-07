@@ -17,16 +17,9 @@ use MpcVEServices\Mpcve;
  * parseInputOptions отдаёт массив строк, поэтому каждая строка-запись приводится
  * к {label,value} по колонкам (text/name/… → подпись, value/id → значение).
  */
-class FieldOptionsHandler
+class FieldOptionsHandler extends BaseHandler
 {
-    private \modX $modx;
-    private Mpcve $mpcve;
 
-    public function __construct(\modX $modx, Mpcve $mpcve)
-    {
-        $this->modx = $modx;
-        $this->mpcve = $mpcve;
-    }
 
     public function handle(array $request): array
     {

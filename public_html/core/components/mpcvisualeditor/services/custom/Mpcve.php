@@ -99,13 +99,29 @@ class Mpcve
      * @param array $address ['type'=>field|rfield|tv, 'resourceId'=>int, 'fieldName'=>..., 'level'=>..., ...]
      * @param mixed $value
      */
+    /** Сообщение при отсутствии mpc-пакета. */
+    private const MPC_REQUIRED = 'migxpageconfigurator (mpc) 2.4.0+ is required';
+
+    /** @var \MpcServices\Handlers\FieldWriter|null */
+    private $writer;
+    private bool $writerResolved = false;
+
+    /** Ленивый FieldWriter из общего vendor mpc; null — пакет mpc не установлен. */
+    private function getWriter()
+    {
+        if (!$this->writerResolved) {
+            $this->writerResolved = true;
+            $this->writer = class_exists('\\MpcServices\\Handlers\\FieldWriter')
+                ? new \MpcServices\Handlers\FieldWriter($this->modx)
+                : null;
+        }
+        return $this->writer;
+    }
+
     public function writeField(array $address, $value): array
     {
-        if (!class_exists('\\MpcServices\\Handlers\\FieldWriter')) {
-            return ['success' => false, 'message' => 'migxpageconfigurator (mpc) 2.4.0+ is required'];
-        }
-        $writer = new \MpcServices\Handlers\FieldWriter($this->modx);
-        return $writer->write($address, $value);
+        $w = $this->getWriter();
+        return $w ? $w->write($address, $value) : ['success' => false, 'message' => self::MPC_REQUIRED];
     }
 
     /**
@@ -117,11 +133,9 @@ class Mpcve
      */
     public function readConfig(string $level, int $resourceId): array
     {
-        if (!class_exists('\\MpcServices\\Handlers\\FieldWriter')) {
-            return ['success' => false, 'message' => 'migxpageconfigurator (mpc) 2.4.0+ is required', 'data' => []];
-        }
-        $writer = new \MpcServices\Handlers\FieldWriter($this->modx);
-        return $writer->readConfig($level, $resourceId);
+        $w = $this->getWriter();
+        return $w ? $w->readConfig($level, $resourceId)
+            : ['success' => false, 'message' => self::MPC_REQUIRED, 'data' => []];
     }
 
     /**
@@ -130,11 +144,9 @@ class Mpcve
      */
     public function saveConfig(string $level, int $resourceId, array $config): array
     {
-        if (!class_exists('\\MpcServices\\Handlers\\FieldWriter')) {
-            return ['success' => false, 'message' => 'migxpageconfigurator (mpc) 2.4.0+ is required'];
-        }
-        $writer = new \MpcServices\Handlers\FieldWriter($this->modx);
-        return $writer->saveConfig($level, $resourceId, $config);
+        $w = $this->getWriter();
+        return $w ? $w->saveConfig($level, $resourceId, $config)
+            : ['success' => false, 'message' => self::MPC_REQUIRED];
     }
 
     /**
@@ -143,11 +155,8 @@ class Mpcve
      */
     public function readLexicons(string $level, int $resourceId): array
     {
-        if (!class_exists('\\MpcServices\\Handlers\\FieldWriter')) {
-            return [];
-        }
-        $writer = new \MpcServices\Handlers\FieldWriter($this->modx);
-        return $writer->readLexicons($level, $resourceId);
+        $w = $this->getWriter();
+        return $w ? $w->readLexicons($level, $resourceId) : [];
     }
 
     /**
@@ -158,10 +167,8 @@ class Mpcve
      */
     public function rowOp(array $address): array
     {
-        if (!class_exists('\\MpcServices\\Handlers\\FieldWriter')) {
-            return ['success' => false, 'message' => 'migxpageconfigurator (mpc) 2.4.0+ is required', 'data' => []];
-        }
-        $writer = new \MpcServices\Handlers\FieldWriter($this->modx);
-        return $writer->writeRowOp($address);
+        $w = $this->getWriter();
+        return $w ? $w->writeRowOp($address)
+            : ['success' => false, 'message' => self::MPC_REQUIRED, 'data' => []];
     }
 }

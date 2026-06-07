@@ -16,16 +16,9 @@ use MpcVEServices\Mpcve;
  * иначе → resource (см. fieldAddress в mpcve.js). Запись скрытого поля идёт
  * прежним путём field/save (address с parentField/idx для полей внутри строк).
  */
-class ConfigGetHandler
+class ConfigGetHandler extends BaseHandler
 {
-    private \modX $modx;
-    private Mpcve $mpcve;
 
-    public function __construct(\modX $modx, Mpcve $mpcve)
-    {
-        $this->modx = $modx;
-        $this->mpcve = $mpcve;
-    }
 
     public function handle(array $request): array
     {

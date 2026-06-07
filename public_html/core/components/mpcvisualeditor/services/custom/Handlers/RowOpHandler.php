@@ -9,16 +9,9 @@ use MpcVEServices\Mpcve;
  * Принимает address (JSON или массив) + op + idx|fromIdx,toIdx, делегирует в
  * Mpcve::rowOp → MpcServices\Handlers\FieldWriter::writeRowOp.
  */
-class RowOpHandler
+class RowOpHandler extends BaseHandler
 {
-    private \modX $modx;
-    private Mpcve $mpcve;
 
-    public function __construct(\modX $modx, Mpcve $mpcve)
-    {
-        $this->modx = $modx;
-        $this->mpcve = $mpcve;
-    }
 
     public function handle(array $request): array
     {

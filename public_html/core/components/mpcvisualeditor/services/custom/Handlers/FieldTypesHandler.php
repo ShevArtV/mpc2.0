@@ -11,19 +11,12 @@ use MpcVEServices\Mpcve;
  * поля (text/richtext/image/media/rows). Вариант B: фронт грузит карту раз и
  * кеширует, не трогаем каттер/перенарезку, учитываются кастомные поля сайта.
  */
-class FieldTypesHandler
+class FieldTypesHandler extends BaseHandler
 {
     /** Индекс таба «Настройки секции» в formtabs mpc_base (1=Контент, 2=Стили). */
     private const SETTINGS_TAB_INDEX = 0;
 
-    private \modX $modx;
-    private Mpcve $mpcve;
 
-    public function __construct(\modX $modx, Mpcve $mpcve)
-    {
-        $this->modx = $modx;
-        $this->mpcve = $mpcve;
-    }
 
     public function handle(array $request): array
     {
