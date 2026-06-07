@@ -13,6 +13,7 @@ use MpcServices\Handlers\Cutter\SnippetCallBuilder;
 use MpcServices\Handlers\Cutter\SpecialTagProcessor;
 use MpcServices\Handlers\Cutter\SectionFileWriter;
 use MpcServices\Handlers\Grabber\LexiconManager;
+use MpcServices\Handlers\Grabber\ContentTypeHelper;
 use MpcServices\Handlers\Grabber\OptionFieldHelper;
 
 /**
@@ -433,8 +434,8 @@ class Cutter extends Base
                 // тег маркера (как rfield): иначе contentTypeForTvType('') = 'raw' и
                 // текстовый TV терял бы `| lexicon`. Симметрично ResourceFieldGrabber.
                 $contentType = ($attr === 'data-mpc-tv' && $tvType !== '')
-                    ? LexiconManager::contentTypeForTvType($tvType)
-                    : LexiconManager::contentTypeForTag($item->tagName());
+                    ? ContentTypeHelper::contentTypeForTvType($tvType)
+                    : ContentTypeHelper::contentTypeForTag($item->tagName());
                 $useLexicon = $lexiconize
                     && !empty($this->properties['useLexicons'])
                     && $this->lexiconManager->shouldLexiconize($contentType, $name);

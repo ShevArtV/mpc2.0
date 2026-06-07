@@ -222,15 +222,4 @@ class Base
         return $output;
     }
 
-    public function getLexiconKey(array $options): string
-    {
-        $fieldName = $options['fieldName'] ?? '';
-        $idx = $options['idx'] ?? '';
-        $parentFieldName = $options['parentFieldName'] ?? '';
-        $prefix = $options['prefix'] ?? '';
-
-        $lexiconKey = $parentFieldName ? "{$prefix}_{$parentFieldName}_$fieldName" : "{$prefix}_$fieldName";
-        return $idx ? "{$lexiconKey}_$idx" : $lexiconKey;
-    }
-
 }

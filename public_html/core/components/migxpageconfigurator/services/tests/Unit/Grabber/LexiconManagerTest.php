@@ -245,18 +245,6 @@ class LexiconManagerTest extends TestCase
     // лексикону секции (prefix 'third'): см. lexicon/ru/index.inc.php.
     // ---------------------------------------------------------------
 
-    public function testContentTypeForTag(): void
-    {
-        $this->assertSame('image', LexiconManager::contentTypeForTag('img'));
-        $this->assertSame('image', LexiconManager::contentTypeForTag('source'));
-        $this->assertSame('image', LexiconManager::contentTypeForTag('picture'));
-        $this->assertSame('video', LexiconManager::contentTypeForTag('video'));
-        $this->assertSame('audio', LexiconManager::contentTypeForTag('audio'));
-        $this->assertSame('text', LexiconManager::contentTypeForTag('div'));
-        $this->assertSame('text', LexiconManager::contentTypeForTag('a'));
-        $this->assertSame('text', LexiconManager::contentTypeForTag('H1')); // регистронезависимо
-    }
-
     public function testAppendLexiconParentBuildsChain(): void
     {
         $this->assertSame('list_of_lists', LexiconManager::appendLexiconParent('', 'list_of_lists', 0));

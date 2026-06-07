@@ -70,47 +70,6 @@ class LexiconManager
     }
 
     /**
-     * Content-type по HTML-тегу маркера — ЕДИНЫЙ для каттера, грабера (rfield/TV
-     * и медиа): img/source/picture → image, video → video, audio → audio, иначе
-     * text (текст/ссылка). Чтобы решение shouldLexiconize совпадало у всех.
-     */
-    public static function contentTypeForTag(string $tag): string
-    {
-        $tag = strtolower($tag);
-        if (in_array($tag, ['img', 'source', 'picture'], true)) {
-            return 'image';
-        }
-        if ($tag === 'video') {
-            return 'video';
-        }
-        if ($tag === 'audio') {
-            return 'audio';
-        }
-        return 'text';
-    }
-
-    /**
-     * Content-type по ТИПУ TV (modTemplateVar.type) — для data-mpc-tv решение о
-     * лексиконизации берётся по реальному типу TV, а не по HTML-тегу маркера
-     * (иначе `<span data-mpc-tv="email">` ловил бы 'text' и значение уезжало в
-     * лексикон — admin-инпут email падал на ключе `mpc_resource_tv_...`).
-     * Переводимы только человекочитаемые текстовые типы; image → image; всё
-     * прочее (number/date/email/url/file/listbox/listbox-multiple/option/checkbox/
-     * tag/…) → 'raw' (НЕ в mpc_translated_content → shouldLexiconize=false).
-     */
-    public static function contentTypeForTvType(string $tvType): string
-    {
-        $t = strtolower(trim($tvType));
-        if (strpos($t, 'image') !== false) {
-            return 'image';
-        }
-        if (in_array($t, ['text', 'textarea', 'richtext', 'tinymce', 'tinymcerte'], true)) {
-            return 'text';
-        }
-        return 'raw';
-    }
-
-    /**
      * Включён ли лексикон для указанного content-type.
      * Используется и грабером (нужно ли заводить ключ), и каттером (нужно ли
      * добавлять `| lexicon` к плейсхолдеру) — единый источник решения.

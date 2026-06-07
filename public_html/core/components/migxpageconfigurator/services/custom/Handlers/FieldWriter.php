@@ -170,7 +170,7 @@ class FieldWriter
         $tv   = $this->modx->getObject('modTemplateVar', ['name' => $tvName]);
         $type = $tv ? (string)$tv->get('type') : '';
         return $type !== ''
-            ? \MpcServices\Handlers\Grabber\LexiconManager::contentTypeForTvType($type)
+            ? \MpcServices\Handlers\Grabber\ContentTypeHelper::contentTypeForTvType($type)
             : 'text';
     }
 

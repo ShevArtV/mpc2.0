@@ -67,7 +67,7 @@ class ResourceFieldGrabber
             $value = $this->extractValue($el);
             // При лексиконизации в КОЛОНКУ кладём ключ (как config-поля хранят
             // ключ в mpc_config), значение — в лексикон. Иначе колонка = значение.
-            $key = $this->lexiconize($resource, $name, $value, LexiconManager::contentTypeForTag($el->tagName()));
+            $key = $this->lexiconize($resource, $name, $value, ContentTypeHelper::contentTypeForTag($el->tagName()));
             $resource->set($name, $key !== '' ? $key : $value);
             $written['fields'][$name] = true;
         }
@@ -109,8 +109,8 @@ class ResourceFieldGrabber
                 $ct = 'text';
                 if ($this->useLexicons) {
                     $ct = $tvType !== ''
-                        ? LexiconManager::contentTypeForTvType($tvType)
-                        : LexiconManager::contentTypeForTag($el->tagName());
+                        ? ContentTypeHelper::contentTypeForTvType($tvType)
+                        : ContentTypeHelper::contentTypeForTag($el->tagName());
                 }
                 $key = $this->lexiconize($resource, $name, $value, $ct, 'mpc_resource_tv_');
                 $resource->setTVValue($name, $key !== '' ? $key : $value);
