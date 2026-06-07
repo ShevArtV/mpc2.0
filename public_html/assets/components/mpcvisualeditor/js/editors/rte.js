@@ -311,19 +311,41 @@ export function sanitizeHtml(html, allowedTags) {
     return tmp.innerHTML;
 }
 
-// Убирает активные атрибуты с разрешённого элемента: обработчики on*, а также
-// javascript:/опасные data: в href/src/xlink:href (теги-то проходят whitelist,
-// но <img onerror>/<a href="javascript:"> иначе срабатывали — Sf2/Sf3).
+// Белый список атрибутов: на разрешённом теге оставляем ТОЛЬКО известно-
+// безопасные, всё прочее (on*, srcdoc, formaction, неизвестные) — режем.
+// Глобальные + доп. по тегу. Расширять здесь при необходимости.
+var GLOBAL_ATTRS = ['class', 'id', 'title', 'dir', 'lang', 'role', 'style'];
+var TAG_ATTRS = {
+    a: ['href', 'target', 'rel', 'name', 'download'],
+    img: ['src', 'alt', 'width', 'height', 'srcset', 'sizes', 'loading', 'decoding'],
+    source: ['src', 'srcset', 'type', 'media', 'sizes'],
+    ol: ['start', 'type'],
+    td: ['colspan', 'rowspan'],
+    th: ['colspan', 'rowspan', 'scope'],
+    time: ['datetime']
+};
+// url-несущие атрибуты — дополнительно режем опасные схемы даже в whitelist.
+var URL_ATTRS = ['href', 'src', 'srcset', 'xlink:href', 'formaction'];
+// Опасные конструкции внутри инлайн-style (CSS-векторы).
+var STYLE_BAD = /(url\s*\(|expression\s*\(|javascript:|vbscript:|@import|<|>)/i;
+
+// Чистит атрибуты разрешённого элемента по whitelist (on*/неизвестные/javascript:).
 function scrubAttrs(el) {
+    var tag = el.tagName.toLowerCase();
+    var allowed = GLOBAL_ATTRS.concat(TAG_ATTRS[tag] || []);
     Array.prototype.slice.call(el.attributes).forEach(function (a) {
         var n = a.name.toLowerCase();
-        var v = String(a.value || '').replace(/[\s -]+/g, '').toLowerCase();
-        if (n.indexOf('on') === 0) {
-            el.removeAttribute(a.name);
-        } else if ((n === 'href' || n === 'src' || n === 'xlink:href' || n === 'formaction')
-            && (v.indexOf('javascript:') === 0 || v.indexOf('vbscript:') === 0
-                || (v.indexOf('data:') === 0 && v.indexOf('data:image/') !== 0))) {
-            el.removeAttribute(a.name);
+        if (allowed.indexOf(n) === -1) { el.removeAttribute(a.name); return; }
+        if (n === 'style') {
+            if (STYLE_BAD.test(String(a.value || ''))) { el.removeAttribute(a.name); }
+            return;
+        }
+        if (URL_ATTRS.indexOf(n) !== -1) {
+            var v = String(a.value || '').replace(/[\s\u0000-\u001f]+/g, '').toLowerCase();
+            if (v.indexOf('javascript:') === 0 || v.indexOf('vbscript:') === 0
+                || (v.indexOf('data:') === 0 && v.indexOf('data:image/') !== 0)) {
+                el.removeAttribute(a.name);
+            }
         }
     });
 }

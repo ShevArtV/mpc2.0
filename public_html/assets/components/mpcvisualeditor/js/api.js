@@ -16,7 +16,12 @@ function rawPost(action, payload) {
         method: 'POST',
         credentials: 'same-origin',
         body: body
-    }).then(function (r) { return r.json(); });
+    }).then(function (r) {
+        // non-ok HTTP (403/500/HTML-страница ошибки) → понятная ошибка вместо
+        // падения r.json() на не-JSON («перелогиньтесь», а не «сетевая ошибка»).
+        if (!r.ok) { throw new Error('HTTP ' + r.status); }
+        return r.json();
+    });
 }
 
 // Наследование уровней при field/save. Бэк отвечает code=inherit_choice, если
@@ -84,7 +89,12 @@ export var api = {
             method: 'POST',
             credentials: 'same-origin',
             body: body
-        }).then(function (r) { return r.json(); });
+        }).then(function (r) {
+        // non-ok HTTP (403/500/HTML-страница ошибки) → понятная ошибка вместо
+        // падения r.json() на не-JSON («перелогиньтесь», а не «сетевая ошибка»).
+        if (!r.ok) { throw new Error('HTTP ' + r.status); }
+        return r.json();
+    });
     }
 };
 
