@@ -38,31 +38,10 @@ if ($transport->xpdo) {
         return $id;
     }
 
+    // TV img и copy_sections больше не создаются: img не используется, а
+    // copy_sections (галочка копирования секций) заменён кнопками тулбара
+    // MIGX-грида mpc_config (processors/resource/copysections + grid-config).
     $tvs = [
-        'img' => [
-            'type' => 'image',
-            'caption' => 'Картинка',
-            'description' => '',
-            'category' => 'MigxPageConfigurator',
-            'templates' => [
-                'Вывод содержимого'
-            ],
-            'resources' => ''
-        ],
-        // Флаг-хранилище для copyConfig: НЕ привязан к шаблонам → не показывается
-        // в форме ресурса. Управляется кнопкой «Скопировать секции из типа» в
-        // тулбаре MIGX-грида mpc_config (процессор resource/copysections взводит
-        // его через setTVValue, copyConfig сбрасывает). get/setTVValue работают
-        // независимо от привязки к шаблону.
-        'copy_sections' => [
-            'type' => 'checkbox',
-            'caption' => 'Копировать секции из шаблона?',
-            'description' => '',
-            'category' => 'MigxPageConfigurator',
-            'elements' => 'Да==1',
-            'templates' => [],
-            'resources' => ''
-        ],
         'mpc_config' => [
             'type' => 'migx',
             'caption' => 'Конфигурация страницы',

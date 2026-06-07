@@ -11,7 +11,9 @@ if ($transport->xpdo) {
         case xPDOTransport::ACTION_UPGRADE:
             $q = $modx->newQuery('modTemplateVar');
             $q->select('name, id');
-            $q->where(['name:IN' => ['mpc_config', 'img', 'contacts', 'copy_sections']]);
+            // img и copy_sections больше не создаются (см. 3tvs.php) → исключены
+            // из mpc_tmplvar_ids (список TV, привязываемых к новым mpc-шаблонам).
+            $q->where(['name:IN' => ['mpc_config', 'contacts']]);
             $q->prepare();
             $q->stmt->execute();
             $tvs = $q->stmt->fetchAll(PDO::FETCH_KEY_PAIR);
