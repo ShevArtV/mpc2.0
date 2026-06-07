@@ -912,32 +912,19 @@ class FieldWriter
         return $this->result(true, 'saved', ['type' => 'row', 'op' => $op, 'level' => $level]);
     }
 
+    /** @var LevelResolver|null */
+    private $levelResolver;
+
     /**
-     * Резолвит ресурс-носитель mpc_config для уровня. PURE-ish (только getObject).
+     * Резолвит ресурс-носитель mpc_config для уровня. Логика вынесена в
+     * {@see LevelResolver}; метод сохранён делегатом (зовётся из write-путей).
      */
     private function resolveLevelResource(string $level, int $resourceId)
     {
-        // Алиасы старых имён уровней → новая терминология (global не переименовываем).
-        $aliases = ['local' => 'resource', 'template' => 'type'];
-        $level = $aliases[$level] ?? $level;
-
-        switch ($level) {
-            case 'global':
-                return $this->modx->getObject('modResource', $this->staticBlocksPageId);
-            case 'type':
-                $resource = $this->modx->getObject('modResource', $resourceId);
-                if (!$resource) {
-                    return null;
-                }
-                $tpl = (int)$resource->get('template');
-                return $this->modx->getObject('modResource', [
-                    'parent'   => $this->staticBlocksPageId,
-                    'template' => $tpl,
-                ]);
-            case 'resource':
-            default:
-                return $resourceId > 0 ? $this->modx->getObject('modResource', $resourceId) : null;
+        if ($this->levelResolver === null) {
+            $this->levelResolver = new LevelResolver($this->modx, (int)$this->staticBlocksPageId);
         }
+        return $this->levelResolver->resolve($level, $resourceId);
     }
 
     /**
