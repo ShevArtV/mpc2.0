@@ -419,8 +419,15 @@
 ### [HIGH] Слабая валидация языка (regex без якоря)
 **Файл:** `updatekey.class.php:21`, `import.class.php:208` — `preg_match('/^[a-z]{2,8}$/',$lang)`.
 
-### [MEDIUM] TOCTOU токена импорта
-**Файл:** `import.class.php:57–61` — `uniqid` + файл живёт до часа, не привязан к сессии. `random_bytes(16)` + `$_SESSION`.
+### [MEDIUM] Предсказуемый токен импорта — ✅ ИСПРАВЛЕНО (частично)
+**Файл:** `import.class.php:63`
+**Проблема:** `uniqid('imp_')` предсказуем по microtime; файл лежит в `core/cache/mpc_import/` (под webroot, `.htaccess` нет → отдаётся по URL, подтверждено `HTTP 200`), живёт до часа. Перебор имени → чтение чужой выгрузки.
+**Исправление:** Токен → `'imp_' . bin2hex(random_bytes(16))` — криптослучаен, перебор невозможен. Данные лексиконов и так публичны (рендерятся на сайте), поэтому риск признан низким; привязку к сессии и вынос temp за webroot не делали.
+
+### [MEDIUM] ZIP-slip при импорте — ✅ ИСПРАВЛЕНО
+**Файл:** `import.class.php` (`readWorkbook`)
+**Проблема:** `$zip->extractTo($exDir)` извлекал ВСЕ записи; защита `extractTo` от `../` версионно-зависима → запись `.php` вне `$exDir` (webshell).
+**Исправление:** `extractTo` убран; вручную перебираем `numFiles`, извлекаем только `*.xlsx` по `basename` имени записи (`../foo` → `foo`, из `$exDir` не выбраться), потоком через `getStream`/`stream_copy_to_stream`, индекс-префикс пути против перезаписи при совпадении basename.
 
 ### [MEDIUM] Stored XSS в гриде лексиконов (см. S11)
 **Файл:** `js/mgr/lexicons.js:334–349` — добавить `renderer: Ext.util.Format.htmlEncode` ко всем колонкам.

@@ -60,7 +60,10 @@ class MigxpageconfiguratorLexiconsImportProcessor extends modProcessor
 
         $tmpDir = $this->tmpDir();
         $this->gcTmp($tmpDir);
-        $token  = uniqid('imp_', false);
+        // Имя = единственный барьер к загруженному файлу в core/cache (под
+        // webroot). uniqid() предсказуем по microtime → перебираем; берём
+        // криптослучайный токен. Формат imp_<hex> проходит regex в doApply.
+        $token  = 'imp_' . bin2hex(random_bytes(16));
         $stored = $tmpDir . $token . '.' . $ext;
         if (!@move_uploaded_file($_FILES['file']['tmp_name'], $stored)) {
             // фолбэк для не-HTTP/тестового контекста
@@ -293,12 +296,41 @@ class MigxpageconfiguratorLexiconsImportProcessor extends modProcessor
             if ($zip->open($path) !== true) {
                 return [];
             }
-            $exDir = $this->tmpDir() . 'x_' . uniqid('', false) . '/';
+            $exDir = $this->tmpDir() . 'x_' . bin2hex(random_bytes(8)) . '/';
             mkdir($exDir, 0777, true);
-            $zip->extractTo($exDir);
+
+            // ZIP-slip: НЕ доверяем extractTo (его защита от '../' версионно-
+            // зависима и обходилась). Извлекаем вручную только *.xlsx, по
+            // basename имени записи — '../foo' схлопывается в 'foo' и не может
+            // выбраться из $exDir; ничего исполняемого не распаковываем.
+            $written = [];
+            for ($i = 0; $i < $zip->numFiles; $i++) {
+                $entry = (string)$zip->getNameIndex($i);
+                if ($entry === '' || substr($entry, -1) === '/') {
+                    continue; // каталоги
+                }
+                $name = basename($entry);
+                if (!preg_match('/\.xlsx$/i', $name)) {
+                    continue;
+                }
+                $stream = $zip->getStream($entry);
+                if ($stream === false) {
+                    continue;
+                }
+                // индекс-префикс пути исключает перезапись при совпадении basename
+                $dest = $exDir . $i . '_' . $name;
+                $out  = @fopen($dest, 'wb');
+                if ($out !== false) {
+                    stream_copy_to_stream($stream, $out);
+                    fclose($out);
+                    $written[] = ['path' => $dest, 'label' => $name];
+                }
+                fclose($stream);
+            }
             $zip->close();
-            foreach (glob($exDir . '*.xlsx') ?: [] as $xlsx) {
-                foreach ($this->readXlsx($xlsx, basename($xlsx)) as $s) {
+
+            foreach ($written as $w) {
+                foreach ($this->readXlsx($w['path'], $w['label']) as $s) {
                     $sheets[] = $s;
                 }
             }
