@@ -2,6 +2,11 @@
 
 use MpcServices\Mpc;
 
+if (PHP_SAPI !== 'cli') {
+    http_response_code(403);
+    exit('CLI only');
+}
+
 define('MODX_API_MODE', true);
 if (!defined('MODX_CORE_PATH')) {
     define('MODX_CORE_PATH', dirname(__FILE__, 4) . '/');
@@ -20,8 +25,9 @@ $modx->setLogLevel(modX::LOG_LEVEL_ERROR);
 $modx->setLogTarget('FILE');
 $modx->error->message = null;
 
-$fileName = $argv[2] === 'all' ? null : $argv[2];
-$updContent = $argv[3];
+$target = $argv[2] ?? '';
+$fileName = $target === 'all' ? null : $target;
+$updContent = $argv[3] ?? '';
 
 $mpc = new Mpc($modx);
 $mpc->process($fileName, $updContent);

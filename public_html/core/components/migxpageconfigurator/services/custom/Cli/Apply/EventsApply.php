@@ -77,8 +77,7 @@ class EventsApply
         }
 
         if (!$dryRun && !empty($plan)) {
-            $this->modx->getCacheManager()->refresh(['system_settings' => []]);
-            // сбрасываем кэш карты событий
+            // полный сброс — карта событий (и заодно настройки)
             $this->modx->getCacheManager()->refresh();
         }
 
@@ -92,6 +91,6 @@ class EventsApply
             $msg .= '. Предупреждения: ' . implode('; ', $errors);
         }
 
-        return ['success' => empty($errors) || $bind + $unbind > 0, 'message' => $msg, 'data' => ['plan' => $plan, 'errors' => $errors]];
+        return ['success' => empty($errors), 'message' => $msg, 'data' => ['plan' => $plan, 'errors' => $errors]];
     }
 }

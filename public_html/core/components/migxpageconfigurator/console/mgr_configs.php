@@ -2,6 +2,11 @@
 
 use MpcServices\Processors\MigxConfig;
 
+if (PHP_SAPI !== 'cli') {
+    http_response_code(403);
+    exit('CLI only');
+}
+
 define('MODX_API_MODE', true);
 if (!defined('MODX_CORE_PATH')) {
     define('MODX_CORE_PATH', dirname(__FILE__, 4) . '/');
@@ -20,7 +25,7 @@ $modx->setLogLevel(modX::LOG_LEVEL_ERROR);
 $modx->setLogTarget('FILE');
 $modx->error->message = null;
 $processor = new MigxConfig($modx);
-$method = $argv[2];
+$method = $argv[2] ?? '';
 
 switch($method){
     case 'sync':

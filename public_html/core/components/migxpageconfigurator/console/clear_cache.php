@@ -2,6 +2,11 @@
 
 use MpcServices\Mpc;
 
+if (PHP_SAPI !== 'cli') {
+    http_response_code(403);
+    exit('CLI only');
+}
+
 define('MODX_API_MODE', true);
 if (!defined('MODX_CORE_PATH')) {
     define('MODX_CORE_PATH', str_replace('/', '\\', dirname(__FILE__, 4)) . '/');
@@ -21,7 +26,7 @@ $modx->setLogTarget('FILE');
 $modx->error->message = null;
 
 $mpc = new Mpc($modx);
-$mpc->render->clearCache($argv[2]);
+$mpc->render->clearCache($argv[2] ?? '');
 
 // пример команды для консоли
 // php -d display_errors -d error_reporting=E_ALL public_html/core/components/migxpageconfigurator/console/clear_cache.php 1,2,3

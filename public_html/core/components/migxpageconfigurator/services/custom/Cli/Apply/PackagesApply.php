@@ -145,13 +145,23 @@ class PackagesApply
             return;
         }
 
-        $target = $this->modx->getOption('core_path') . 'packages/' . $foundSignature . '.transport.zip';
+        // basename: signature из XML провайдера не должен вылезти за packages/
+        // через '..' (path traversal записи zip).
+        $target = $this->modx->getOption('core_path') . 'packages/' . basename($foundSignature) . '.transport.zip';
+        // URL пакета только по https (защита от SSRF/подмены по http).
+        if (strtolower((string)parse_url($location, PHP_URL_SCHEME)) !== 'https') {
+            $errors[] = 'Небезопасный URL пакета (требуется https): ' . $location;
+            return;
+        }
         $bin = @file_get_contents($location);
         if ($bin === false) {
             $errors[] = 'Не удалось скачать ' . $name . ' (' . $location . ')';
             return;
         }
-        file_put_contents($target, $bin);
+        if (file_put_contents($target, $bin) === false) {
+            $errors[] = 'Не удалось записать пакет: ' . $target;
+            return;
+        }
 
         $package = $this->modx->newObject('transport.modTransportPackage');
         $package->set('signature', $foundSignature);
