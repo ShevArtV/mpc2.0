@@ -308,6 +308,17 @@ class Render extends Base
 
         $cascadeFields = $this->getCascadeFieldsMap();
 
+        return $this->renderSections($sections, $resourceData, $staticConfig, $cascadeFields);
+    }
+
+    /**
+     * Рендер-цикл секций: пропуск базовой/скрытой, каскад настроек static-секции,
+     * служебные поля (rid/idx/sbp_id/cp_id/contacts/resource), {set}-блок для
+     * static, привязка и parseChunk чанка, конверсия ##→{ + кавычки параметров,
+     * событие mpcOnGetSectionHtml. Возвращает массив HTML секций по порядку.
+     */
+    private function renderSections(array $sections, array $resourceData, $staticConfig, array $cascadeFields): array
+    {
         $sectionsHtml = [];
         $i = 1;
         foreach ($sections as $section) {
