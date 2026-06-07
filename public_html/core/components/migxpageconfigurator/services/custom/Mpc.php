@@ -204,21 +204,24 @@ class Mpc
 
     public function loadWebScripts()
     {
+        $jsFlags = JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT;
         if ($this->properties['expandAttr'] && $this->properties['expandEnabled']) {
+            $expandAttr = json_encode((string)$this->properties['expandAttr'], $jsFlags);
             $this->modx->regClientScript(
                 "
-                <script>                
-                window.mpcExpandAttr = '{$this->properties['expandAttr']}';
+                <script>
+                window.mpcExpandAttr = {$expandAttr};
                 </script>
                 <script type=\"module\" src=\"assets/components/migxpageconfigurator/js/web/expand.js\"></script>",
                 true
             );
         }
         if ($this->properties['lazyloadAttr'] && $this->properties['lazyloadEnabled']) {
+            $lazyAttr = json_encode((string)$this->properties['lazyloadAttr'], $jsFlags);
             $this->modx->regClientScript(
                 "
                 <script>
-                window.mpcLazyLoadAttr = '{$this->properties['lazyloadAttr']}';               
+                window.mpcLazyLoadAttr = {$lazyAttr};
                 </script>
                 <script type=\"module\" src=\"assets/components/migxpageconfigurator/js/web/lazyload.js\"></script>",
                 true
@@ -396,11 +399,13 @@ class Mpc
     private function runTvProcessor($tvs)
     {
         foreach ($tvs as $name => $data) {
-            if ($data['templates'] && is_array($data['templates'])) {
-                $templates = [];
+            $templates = []; // на каждой итерации: иначе TV без templates унаследует прошлые
+            if (!empty($data['templates']) && is_array($data['templates'])) {
                 foreach ($data['templates'] as $template) {
                     $temp = $this->getTemplateId($template, true);
-                    $templates['templates'][$temp['id']] = $temp;
+                    if (!empty($temp['id'])) {
+                        $templates['templates'][$temp['id']] = $temp;
+                    }
                 }
             }
             $data = array_merge(
@@ -451,15 +456,18 @@ class Mpc
      */
     private function getTemplateId($templateName, $full = false)
     {
-        $template = $this->modx->getObject('modTemplate', ['templatename' => $templateName]);
         if ($templateName == null) {
-            return 0;
+            return $full !== false ? [] : 0;
+        }
+        $template = $this->modx->getObject('modTemplate', ['templatename' => $templateName]);
+        if (!is_object($template)) {
+            return $full !== false ? [] : 0; // шаблон не найден — без null->toArray()
         }
         if ($full !== false) {
             return array_merge($template->toArray(), ['access' => true]);
         }
 
-        return is_object($template) ? $template->get('id') : 0;
+        return $template->get('id');
     }
 
     /**

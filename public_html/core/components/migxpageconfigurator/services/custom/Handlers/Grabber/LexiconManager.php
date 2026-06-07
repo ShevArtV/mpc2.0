@@ -225,12 +225,16 @@ class LexiconManager
             'Grabber' => $this,
         ]);
 
-        return isset($this->modx->event->returnedValues) && !empty($this->modx->event->returnedValues['rid'])
+        $identifier = isset($this->modx->event->returnedValues) && !empty($this->modx->event->returnedValues['rid'])
             ? $this->modx->event->returnedValues['rid'] : $rid;
+        // идентификатор становится именем файла лексикона — запрещаем traversal
+        // (mpcOnGetResourceIdentifier может вернуть '../../evil').
+        return preg_replace('/[^a-zA-Z0-9_\-]/', '', (string)$identifier);
     }
 
     public function getLexicons(string $rid, string $basePath): array
     {
+        $rid = basename($rid); // защита от traversal в имени файла лексикона
         $pathToLexiconFile = $basePath . $rid . '.inc.php';
         if (file_exists($pathToLexiconFile)) {
             include $pathToLexiconFile;
@@ -549,6 +553,7 @@ class LexiconManager
                     }
                 }
             } elseif (file_exists($pathToLexiconFile) && !empty($_rlang)) {
+                $_lang = []; // сброс: иначе $_lang от прошлой итерации/include загрязнит intersect
                 include $pathToLexiconFile;
                 $tmp = array_intersect_key($_lang, $_rlang);
                 if (empty($tmp)) {
@@ -560,9 +565,13 @@ class LexiconManager
             if (!empty($lexicons)) {
                 $content = '<?php' . PHP_EOL;
                 foreach ($lexicons as $k => $v) {
-                    $content .= '$_lang[\'' . $k . '\'] = \'' . $this->sanitizeValue($v) . '\';' . PHP_EOL;
+                    // var_export ключа И значения — безопасный PHP-литерал (см.
+                    // LexiconWriter::set): защита от инъекции через ключ и поломки
+                    // файла бэкслешем в значении.
+                    $content .= '$_lang[' . var_export((string)$k, true) . '] = '
+                        . var_export($this->sanitizeValue($v), true) . ';' . PHP_EOL;
                 }
-                file_put_contents($pathToLexiconFile, $content);
+                file_put_contents($pathToLexiconFile, $content, LOCK_EX);
             } else {
                 if (file_exists($pathToLexiconFile)) {
                     unlink($pathToLexiconFile);
@@ -657,9 +666,11 @@ class LexiconManager
         }
         $content = '<?php' . PHP_EOL;
         foreach ($lexicons as $k => $v) {
-            $content .= '$_lang[\'' . $k . '\'] = \'' . $this->sanitizeValue($v) . '\';' . PHP_EOL;
+            // var_export ключа И значения — безопасный PHP-литерал (см. выше).
+            $content .= '$_lang[' . var_export((string)$k, true) . '] = '
+                . var_export($this->sanitizeValue($v), true) . ';' . PHP_EOL;
         }
-        file_put_contents($path, $content);
+        file_put_contents($path, $content, LOCK_EX);
     }
 
     /**

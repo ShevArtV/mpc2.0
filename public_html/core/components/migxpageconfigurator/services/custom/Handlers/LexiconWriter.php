@@ -77,13 +77,18 @@ class LexiconWriter
 
         $content = '<?php' . PHP_EOL;
         foreach ($entries as $k => $v) {
-            $content .= '$_lang[\'' . $k . '\'] = \'' . $this->lm->sanitizeValue((string)$v) . '\';' . PHP_EOL;
+            // var_export для ключа И значения: всегда синтаксически корректный
+            // PHP-литерал с экранированием ' и \. Ручная сборка '$_lang[\'k\']'
+            // допускала инъекцию PHP-кода через ключ и поломку файла бэкслешем
+            // в значении (sanitizeValue экранирует ' но не \).
+            $content .= '$_lang[' . var_export((string)$k, true) . '] = '
+                . var_export($this->lm->sanitizeValue((string)$v), true) . ';' . PHP_EOL;
         }
 
         if (!is_dir($this->basePath)) {
             @mkdir($this->basePath, 0755, true);
         }
-        $ok = file_put_contents($this->basePath . $identifier . '.inc.php', $content) !== false;
+        $ok = file_put_contents($this->basePath . $identifier . '.inc.php', $content, LOCK_EX) !== false;
 
         // Сброс кэша лексиконов — best-effort, на результат записи не влияет.
         if ($ok) {
