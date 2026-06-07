@@ -834,7 +834,6 @@ class SectionProcessor
     private function updateStaticSectionValues(array $sectionFieldsValues, string $sectionName): void
     {
         $upd = false;
-        $i = 0;
 
         if (!empty($this->properties['sbpSectionValues'])) {
             foreach ($this->properties['sbpSectionValues'] as $k => $sectionValue) {
@@ -848,12 +847,13 @@ class SectionProcessor
                     }
                     $upd = true;
                 }
-                $i = ++$k;
             }
         }
 
         if (!$upd) {
-            $this->properties['sbpSectionValues'][$i] = $sectionFieldsValues;
+            // append с авто-индексом (max+1) вместо ручного ++$k: исключает
+            // коллизию с существующим ключом при непоследовательных индексах.
+            $this->properties['sbpSectionValues'][] = $sectionFieldsValues;
         }
     }
 
