@@ -197,6 +197,9 @@ class Base
         }
 
         $config = json_decode($config, true);
+        if (!is_array($config)) { // невалидный непустой не-JSON → не падаем на foreach (V8)
+            return [];
+        }
         $output = [];
         foreach ($config as $item) {
             if (!$item['is_static'] && !$all) {

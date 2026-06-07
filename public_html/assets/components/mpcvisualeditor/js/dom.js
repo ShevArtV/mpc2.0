@@ -93,7 +93,10 @@ export function choiceDialog(message, opts) {
         // confirm/prompt — отдаём Escape ему.
         function onKey(e) {
             if (e.key !== 'Escape') { return; }
-            if (document.querySelector('.mpcve-confirm')) { return; }
+            // choiceDialog сам имеет класс .mpcve-confirm → исключаем себя, иначе
+            // querySelector находит собственный оверлей и Escape не закрывает (V9).
+            var top = document.querySelector('.mpcve-confirm');
+            if (top && top !== ov) { return; } // сверху ДРУГОЙ confirm/prompt — ему
             e.stopImmediatePropagation();
             done(null);
         }

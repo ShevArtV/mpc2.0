@@ -343,8 +343,10 @@ function scrubAttrs(el) {
         }
         if (URL_ATTRS.indexOf(n) !== -1) {
             var v = String(a.value || '').replace(/[\s\u0000-\u001f]+/g, '').toLowerCase();
+            // data:image/svg+xml исполняет JS при рендере → разрешаем ТОЛЬКО
+            // растровые data-URI; svg+xml и прочее data: режем (V1).
             if (v.indexOf('javascript:') === 0 || v.indexOf('vbscript:') === 0
-                || (v.indexOf('data:') === 0 && v.indexOf('data:image/') !== 0)) {
+                || (v.indexOf('data:') === 0 && !/^data:image\/(png|jpe?g|gif|webp|avif|bmp)[;,]/.test(v))) {
                 el.removeAttribute(a.name);
             }
         }

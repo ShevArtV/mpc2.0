@@ -65,8 +65,13 @@ class ExcelFileHandler
             'filePath' => $filePath,
             'ExcelFileHandler' => $this
         ]);
-        $filePath = isset($this->modx->event->returnedValues) && !empty($this->modx->event->returnedValues['filePath'])
-            ? $this->modx->event->returnedValues['filePath'] : $filePath;
+        // Путь от плагина mpcOnBeforeSaveExcel принимаем ТОЛЬКО в границах assets
+        // (иначе запись .xlsx в произвольный каталог); иначе — дефолтный путь (V7).
+        $override = (isset($this->modx->event->returnedValues) && !empty($this->modx->event->returnedValues['filePath']))
+            ? (string)$this->modx->event->returnedValues['filePath'] : '';
+        if ($override !== '' && $this->withinAssets($override)) {
+            $filePath = $override;
+        }
 
         $writer = WriterEntityFactory::createXLSXWriter();
         $writer->openToFile($filePath);
@@ -102,10 +107,27 @@ class ExcelFileHandler
         return WriterEntityFactory::createRowFromArray($values);
     }
 
+    /** Путь (или его каталог для ещё-не-созданного файла) внутри assets_path. */
+    private function withinAssets(string $path): bool
+    {
+        $base = realpath($this->assetsPath);
+        if ($base === false) {
+            return false;
+        }
+        $base = rtrim($base, '/\\') . DIRECTORY_SEPARATOR;
+        $real = realpath($path);
+        if ($real === false) { // файл может ещё не существовать (запись) → проверяем каталог
+            $real = realpath(dirname($path));
+            if ($real !== false) { $real .= DIRECTORY_SEPARATOR; }
+        }
+        return $real !== false && strpos($real, $base) === 0;
+    }
+
     public function getDataFromFile(string $path): array
     {
-        // существующий .xlsx-файл (не произвольный путь/расширение)
-        if (!is_file($path) || strtolower(pathinfo($path, PATHINFO_EXTENSION)) !== 'xlsx') {
+        // существующий .xlsx-файл В ГРАНИЦАХ assets (не произвольный путь/расширение, V7)
+        if (!is_file($path) || strtolower(pathinfo($path, PATHINFO_EXTENSION)) !== 'xlsx'
+            || !$this->withinAssets($path)) {
             return [];
         }
         $reader = ReaderFactory::createFromType('xlsx');

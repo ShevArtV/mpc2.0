@@ -361,8 +361,6 @@ class PlaceholderProcessor
             $sourceParent = $tag === 'picture' ? $fieldName : $accumulatedParent;
             $useSourceLexicon = $this->shouldLexiconize($sourceContentType, 'source', $sourceParent);
             $source = $this->setAttributes($sources[$k], $firstSymbol, '$source', [$sourceAttr => $useSourceLexicon], $deferVar);
-            $search = ['##', 'complexName', 'html'];
-            $replace = [$firstSymbol, $complexName];
 
             if ($this->properties['lazyloadAttr'] && !$row->hasAttribute('data-mpc-nolazy')) {
                 if ($tag === 'picture' && !$source->hasAttribute('data-mpc-nothumb') && !empty($this->properties['thumbSnippet'])) {
@@ -384,8 +382,14 @@ class PlaceholderProcessor
             }
 
             $sourceHtml = $this->parser->getHTMLString($source);
-            $replace[] = str_replace('</source>', '', $sourceHtml);
-            $pls .= str_replace($search, $replace, $this->properties['samples']['media']);
+            // strtr (один проход), не каскадный str_replace: '##'/'complexName'/
+            // 'html' не должны заменяться повторно внутри уже подставленных
+            // значений (V11, как в setSampleFields).
+            $pls .= strtr($this->properties['samples']['media'], [
+                '##'          => $firstSymbol,
+                'complexName' => $complexName,
+                'html'        => str_replace('</source>', '', $sourceHtml),
+            ]);
         }
 
         $images = $row->find('img');

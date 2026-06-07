@@ -141,17 +141,20 @@ class ImageUploadHandler
      */
     public function sanitizeSvg(string $svg): string
     {
-        // парные опасные элементы вместе с содержимым
-        $svg = preg_replace('#<\s*(script|foreignObject)\b[^>]*>.*?<\s*/\s*\1\s*>#is', '', $svg);
-        // одиночные/незакрытые те же теги
-        $svg = preg_replace('#<\s*/?\s*(script|foreignObject)\b[^>]*>#is', '', (string)$svg);
+        // Опасные элементы (вкл. неймспейс-префикс <svg:script> и SMIL-анимацию,
+        // которая может задать href=javascript: через attributeName) — вырезаем
+        // вместе с содержимым, затем одиночные/незакрытые.
+        $bad = 'script|foreignObject|use|set|animate|animateTransform|animateMotion|'
+             . 'image|iframe|embed|object|handler|listener|audio|video|a';
+        $svg = preg_replace('#<\s*(?:\w+:)?(' . $bad . ')\b[^>]*>.*?<\s*/\s*(?:\w+:)?\1\s*>#is', '', (string)$svg);
+        $svg = preg_replace('#<\s*/?\s*(?:\w+:)?(?:' . $bad . ')\b[^>]*>#is', '', (string)$svg);
         // DOCTYPE/ENTITY (XXE)
         $svg = preg_replace('#<!DOCTYPE[^>]*>#is', '', (string)$svg);
         $svg = preg_replace('#<!ENTITY[^>]*>#is', '', (string)$svg);
         // обработчики событий on*="..."/'...'/без кавычек
         $svg = preg_replace('#\son[a-z0-9_\-]+\s*=\s*("[^"]*"|\'[^\']*\'|[^\s>]+)#is', '', (string)$svg);
-        // javascript: в href/xlink:href
-        $svg = preg_replace('#(href|xlink:href)\s*=\s*("|\')?\s*javascript:[^"\'>\s]*("|\')?#is', '', (string)$svg);
+        // javascript:/опасные схемы в href/xlink:href/любом *:href
+        $svg = preg_replace('#(?:[\w-]+:)?href\s*=\s*("|\')?\s*(?:javascript|vbscript|data):[^"\'>\s]*("|\')?#is', '', (string)$svg);
         return (string)$svg;
     }
 

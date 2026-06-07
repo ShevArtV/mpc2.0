@@ -34,7 +34,12 @@ class TemplateUpdater
         // Значения из JSON-комментария вёрстки вставляются в Fenom — фильтруем,
         // чтобы кавычка/`}`/`$`/`..` не дали инъекцию Fenom или path traversal.
         $include = preg_replace('/[^a-zA-Z0-9_\/.:\-]/', '', (string)($tplData['include'] ?? ''));
-        $include = str_replace('..', '', $include);
+        // .. убираем РЕКУРСИВНО (один str_replace обходится вложением ....// → ../),
+        // и срезаем ведущий слэш — {include '/etc/passwd'} = абсолютный LFI (V6).
+        while (strpos($include, '..') !== false) {
+            $include = str_replace('..', '', $include);
+        }
+        $include = preg_replace('#^(file:)?/+#', '$1', $include);
         $tplData['content'] = $include !== ''
             ? "{include '{$include}'}"
             : "{include 'file:pages/index.tpl'}";

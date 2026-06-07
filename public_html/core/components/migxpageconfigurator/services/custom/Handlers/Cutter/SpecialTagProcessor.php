@@ -87,8 +87,8 @@ class SpecialTagProcessor
 
         foreach ($parses as $parse) {
             $chunk = trim((string)$parse->getAttribute('data-mpc-chunk'));
-            if ($chunk === '' || strpos($chunk, '..') !== false || strpos($chunk, '"') !== false) {
-                continue; // пустой / path traversal / поломка @FILE-строки кавычкой
+            if ($chunk === '' || $chunk[0] === '/' || strpos($chunk, '..') !== false || strpos($chunk, '"') !== false) {
+                continue; // пустой / абсолютный путь / path traversal / поломка @FILE-строки (V5)
             }
             $symbol     = trim((string)$parse->getAttribute('data-mpc-symbol')) ?: (!empty($properties['isStatic']) ? '##' : '{');
             $params     = trim((string)$parse->getAttribute('data-mpc-parse'));
@@ -116,8 +116,8 @@ class SpecialTagProcessor
 
         foreach ($includes as $include) {
             $chunk = trim((string)$include->getAttribute('data-mpc-chunk'));
-            if ($chunk === '' || strpos($chunk, '..') !== false || strpos($chunk, '"') !== false) {
-                continue; // пустой / path traversal / поломка file:-пути кавычкой
+            if ($chunk === '' || $chunk[0] === '/' || strpos($chunk, '..') !== false || strpos($chunk, '"') !== false) {
+                continue; // пустой / абсолютный путь / path traversal / поломка file:-пути (V5)
             }
             $path        = $this->properties['pathToChunks'] . $chunk;
             $symbol      = trim((string)$include->getAttribute('data-mpc-symbol')) ?: '{';

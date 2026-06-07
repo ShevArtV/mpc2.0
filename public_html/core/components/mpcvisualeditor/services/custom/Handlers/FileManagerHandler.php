@@ -137,7 +137,7 @@ class FileManagerHandler
             return $this->err($this->modx->lexicon('mpcve_fm_err_name'));
         }
         // Файл нельзя переименовать в исполняемое расширение (image.jpg → shell.php).
-        if ($kind !== 'dir' && $this->isBlockedExt($this->extOf($name))) {
+        if ($kind !== 'dir' && $this->isBlockedName($name)) {
             return $this->err($this->modx->lexicon('mpcve_err_upload_ext'));
         }
         $ok = $kind === 'dir'
@@ -196,7 +196,7 @@ class FileManagerHandler
         $ext    = strtolower((string)pathinfo((string)$file['name'], PATHINFO_EXTENSION));
         // accept=any пропускал любое расширение → блок-лист исполняемых ОБЯЗАТЕЛЕН
         // независимо от accept; MIME содержимого тоже не должен быть скриптом.
-        if (!$this->acceptExt($ext, $accept) || $this->isBlockedExt($ext)
+        if (!$this->acceptExt($ext, $accept) || $this->isBlockedName((string)$file['name'])
             || !$this->mimeNotExecutable((string)$file['tmp_name'])) {
             return $this->err($this->modx->lexicon('mpcve_err_upload_ext'));
         }
@@ -293,6 +293,25 @@ class FileManagerHandler
     {
         $ext = strtolower($ext);
         return in_array($ext, self::BLOCKED_EXT, true) || strpos($ext, 'php') !== false;
+    }
+
+    /**
+     * Блок по ВСЕМУ имени (V2): pathinfo берёт лишь последний сегмент, поэтому
+     * shell.php.jpg прошёл бы блок-лист, а Apache с `AddHandler .php` исполнил бы
+     * его. Проверяем каждый dot-сегмент + любую `.php` в имени.
+     */
+    private function isBlockedName(string $name): bool
+    {
+        $name = strtolower($name);
+        if (strpos($name, '.php') !== false) {
+            return true;
+        }
+        foreach (explode('.', $name) as $seg) {
+            if ($this->isBlockedExt($seg)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**

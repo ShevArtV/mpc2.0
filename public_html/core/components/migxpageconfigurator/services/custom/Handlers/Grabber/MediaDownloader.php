@@ -101,11 +101,31 @@ class MediaDownloader
             return false; // не резолвится — не качаем
         }
         foreach ($ips as $ip) {
-            if (!filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
+            if ($this->isBlockedIp($ip)) {
                 return false; // приватный/зарезервированный/loopback/link-local
             }
         }
         return true;
+    }
+
+    /**
+     * Внутренний/опасный IP. FILTER_FLAG_NO_RES_RANGE до PHP 8.1 НЕ ловит
+     * IPv6 ::1/ULA/link-local — на целевом php-7.4 это обход SSRF (V4).
+     * Дополнительно нормализуем IPv4-mapped IPv6 (::ffff:127.0.0.1).
+     */
+    protected function isBlockedIp(string $ip): bool
+    {
+        $lc = strtolower(trim($ip, '[]'));
+        if (strpos($lc, '::ffff:') === 0 && filter_var(substr($lc, 7), FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)) {
+            $lc = substr($lc, 7);
+        }
+        if (!filter_var($lc, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
+            return true;
+        }
+        if ($lc === '::1' || $lc === '::' || preg_match('/^(fe80|fc|fd)/', $lc)) {
+            return true; // IPv6 loopback/unspecified/link-local/ULA (не ловится на 7.4)
+        }
+        return false;
     }
 
     /** Базовые curl-опции с защитой: SSL-верификация + только http/https. */
