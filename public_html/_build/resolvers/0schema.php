@@ -28,7 +28,8 @@ switch ($options[xPDOTransport::PACKAGE_ACTION]) {
         $modx->addPackage('migxpageconfigurator', MODX_CORE_PATH . 'components/migxpageconfigurator/model/');
         $manager = $modx->getManager();
         $manager->createObjectContainer('mpcTypeData');
-        $modx->log(modX::LOG_LEVEL_INFO, '[MPC] Контейнер mpcTypeData (таблица mpc_type) создан/проверен');
+        $manager->createObjectContainer('mpcTrackedField');
+        $modx->log(modX::LOG_LEVEL_INFO, '[MPC] Контейнеры mpcTypeData (mpc_type) и mpcTrackedField (mpc_tracked_fields) созданы/проверены');
         break;
 
     case xPDOTransport::ACTION_UNINSTALL:

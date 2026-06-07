@@ -1,9 +1,10 @@
 <?php
 
 $xpdo_meta_map = array (
-  'xPDOObject' => 
+  'xPDOObject' =>
   array (
     0 => 'mpcTypeData',
+    1 => 'mpcTrackedField',
   ),
   'modResource' => 
   array (

@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<model package="mpcvisualeditor" baseClass="xPDOObject" platform="mysql" defaultEngine="InnoDB" phpdoc-package="mpcvisualeditor" version="1.0">
+    <!--
+        Журнал изменений визуального редактора (кто/когда/что + откат).
+        Запись/чтение — raw PDO (Handlers/ChangeLog), xPDO-класс нужен только
+        чтобы таблица mpcve_changelog создавалась при установке (resolvers/0schema).
+    -->
+    <object class="mpcveChangeLog" table="mpcve_changelog" extends="xPDOObject">
+        <field key="id" dbtype="int" precision="10" attributes="unsigned" phptype="integer" null="false" index="pk" generated="native" />
+        <field key="resource_id" dbtype="int" precision="11" phptype="integer" null="false" default="0" />
+        <field key="user_id" dbtype="int" precision="11" phptype="integer" null="false" default="0" />
+        <field key="username" dbtype="varchar" precision="100" phptype="string" null="false" default="" />
+        <field key="action" dbtype="varchar" precision="32" phptype="string" null="false" default="" />
+        <field key="section" dbtype="varchar" precision="190" phptype="string" null="false" default="" />
+        <field key="field" dbtype="varchar" precision="190" phptype="string" null="false" default="" />
+        <field key="address" dbtype="text" phptype="string" null="true" />
+        <field key="old_value" dbtype="mediumtext" phptype="string" null="true" />
+        <field key="new_value" dbtype="mediumtext" phptype="string" null="true" />
+        <field key="revertable" dbtype="tinyint" precision="1" phptype="integer" null="false" default="0" />
+        <field key="reverted" dbtype="tinyint" precision="1" phptype="integer" null="false" default="0" />
+        <field key="created_on" dbtype="int" precision="11" phptype="integer" null="false" default="0" />
+
+        <index alias="PRIMARY" name="PRIMARY" primary="true" unique="true" type="BTREE">
+            <column key="id" length="" collation="A" null="false" />
+        </index>
+        <index alias="res_created" name="res_created" primary="false" unique="false" type="BTREE">
+            <column key="resource_id" length="" collation="A" null="false" />
+            <column key="created_on" length="" collation="A" null="false" />
+        </index>
+    </object>
+</model>

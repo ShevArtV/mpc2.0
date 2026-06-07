@@ -5,6 +5,7 @@ return [
         'file' => 'plugin.migxpageconfigurator',
         'description' => '',
         'events' => [
+            'OnBeforeDocFormSave' => [],
             'OnCacheUpdate' => [],
             'OnContextSave' => [],
             'OnDocFormDelete' => [],

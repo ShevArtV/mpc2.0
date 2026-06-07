@@ -30,4 +30,30 @@
 
         <composite alias="OwnTypes" class="mpcType" local="id" foreign="parent" cardinality="many" owner="local" />
     </object>
+
+    <!--
+        Манифест трекаемых полей (нарезка) для админ-аудита: одна строка на
+        поле/секцию шаблона. Запись/чтение — raw PDO (Handlers/TrackedFields),
+        xPDO-класс нужен только чтобы таблица создавалась при установке (0schema).
+    -->
+    <object class="mpcTrackedField" table="mpc_tracked_fields" extends="xPDOObject">
+        <field key="id" dbtype="int" precision="10" attributes="unsigned" phptype="integer" null="false" index="pk" generated="native" />
+        <field key="template_id" dbtype="int" precision="11" phptype="integer" null="false" default="0" />
+        <field key="type" dbtype="varchar" precision="16" phptype="string" null="false" default="" />
+        <field key="section" dbtype="varchar" precision="191" phptype="string" null="false" default="" />
+        <field key="lexicon_prefix" dbtype="varchar" precision="191" phptype="string" null="false" default="" />
+        <field key="field" dbtype="varchar" precision="191" phptype="string" null="false" default="" />
+        <field key="kind" dbtype="varchar" precision="32" phptype="string" null="false" default="" />
+
+        <index alias="PRIMARY" name="PRIMARY" primary="true" unique="true" type="BTREE">
+            <column key="id" length="" collation="A" null="false" />
+        </index>
+        <index alias="template_id" name="template_id" primary="false" unique="false" type="BTREE">
+            <column key="template_id" length="" collation="A" null="false" />
+        </index>
+        <index alias="type_field" name="type_field" primary="false" unique="false" type="BTREE">
+            <column key="type" length="" collation="A" null="false" />
+            <column key="field" length="" collation="A" null="false" />
+        </index>
+    </object>
 </model>
