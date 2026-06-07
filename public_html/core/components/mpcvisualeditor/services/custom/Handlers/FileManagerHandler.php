@@ -37,6 +37,16 @@ class FileManagerHandler
         'file_list', 'file_remove', 'file_update', 'file_upload', 'file_create', 'file_view',
     ];
 
+    /**
+     * Исполняемые/опасные расширения — блок при upload и rename НЕЗАВИСИМО от
+     * accept (иначе accept=any пропускал .php → webshell, если источник в webroot).
+     */
+    private const BLOCKED_EXT = [
+        'php', 'php3', 'php4', 'php5', 'php7', 'php8', 'phtml', 'pht', 'phps', 'phar',
+        'shtml', 'cgi', 'pl', 'py', 'sh', 'bash', 'htaccess', 'htpasswd', 'user.ini',
+        'asp', 'aspx', 'jsp', 'jspx', 'exe', 'com', 'bat', 'cmd', 'msi', 'dll', 'so',
+    ];
+
     private \modX $modx;
     private Mpcve $mpcve;
 
@@ -103,7 +113,7 @@ class FileManagerHandler
             return $this->err($this->modx->lexicon('mpcve_err_source'));
         }
         $parent = $this->cleanPath((string)($request['path'] ?? ''));
-        $name   = trim((string)($request['name'] ?? ''));
+        $name   = $this->sanitizeFileName(trim((string)($request['name'] ?? '')));
         if ($name === '') {
             return $this->err($this->modx->lexicon('mpcve_fm_err_name'));
         }
@@ -121,10 +131,14 @@ class FileManagerHandler
             return $this->err($this->modx->lexicon('mpcve_err_source'));
         }
         $path = $this->cleanPath((string)($request['path'] ?? ''));
-        $name = trim((string)($request['name'] ?? ''));
+        $name = $this->sanitizeFileName(trim((string)($request['name'] ?? '')));
         $kind = (string)($request['kind'] ?? 'file');
         if ($path === '' || $name === '') {
             return $this->err($this->modx->lexicon('mpcve_fm_err_name'));
+        }
+        // Файл нельзя переименовать в исполняемое расширение (image.jpg → shell.php).
+        if ($kind !== 'dir' && $this->isBlockedExt($this->extOf($name))) {
+            return $this->err($this->modx->lexicon('mpcve_err_upload_ext'));
         }
         $ok = $kind === 'dir'
             ? $source->renameContainer($path, $name)
@@ -180,23 +194,27 @@ class FileManagerHandler
 
         $accept = (string)($request['accept'] ?? 'any');
         $ext    = strtolower((string)pathinfo((string)$file['name'], PATHINFO_EXTENSION));
-        if (!$this->acceptExt($ext, $accept)) {
+        // accept=any пропускал любое расширение → блок-лист исполняемых ОБЯЗАТЕЛЕН
+        // независимо от accept; MIME содержимого тоже не должен быть скриптом.
+        if (!$this->acceptExt($ext, $accept) || $this->isBlockedExt($ext)
+            || !$this->mimeNotExecutable((string)$file['tmp_name'])) {
             return $this->err($this->modx->lexicon('mpcve_err_upload_ext'));
         }
 
+        $name = $this->sanitizeFileName((string)$file['name']);
         $dir = $this->cleanPath((string)($request['path'] ?? ''));
         // createObject ждёт каталог с завершающим слэшем (getBases + dir + name).
         $dir = $dir === '' ? '' : rtrim($dir, '/') . '/';
-        $res = $source->createObject($dir, (string)$file['name'], (string)file_get_contents($file['tmp_name']));
+        $res = $source->createObject($dir, $name, (string)file_get_contents($file['tmp_name']));
         if ($res === false) {
             return $this->err($this->sourceErr($source) ?: $this->modx->lexicon('mpcve_err_upload'));
         }
 
-        $url = $source->getObjectUrl($dir . $file['name']);
+        $url = $source->getObjectUrl($dir . $name);
         return [
             'success' => true,
             'message' => $this->modx->lexicon('mpcve_uploaded'),
-            'data'    => ['url' => $url, 'path' => $dir . $file['name']],
+            'data'    => ['url' => $url, 'path' => $dir . $name],
         ];
     }
 
@@ -250,10 +268,66 @@ class FileManagerHandler
     /** Защита от обхода каталога вверх + нормализация слэшей. */
     private function cleanPath(string $path): string
     {
-        $path = str_replace('\\', '/', $path);
-        $path = preg_replace('#\.{2,}#', '', $path); // выкидываем .. сегменты
-        $path = preg_replace('#/+#', '/', (string)$path);
-        return ltrim((string)$path, '/');
+        $path = str_replace(['\\', "\0"], ['/', ''], $path);
+        // Отсекаем traversal посегментно: '..' и '.' выкидываем целиком (regex
+        // \.{2,} не ловил './' и мог оставить точки в середине сегмента).
+        $segments = [];
+        foreach (explode('/', $path) as $seg) {
+            $seg = trim($seg);
+            if ($seg === '' || $seg === '.' || $seg === '..' || strpos($seg, '..') !== false) {
+                continue;
+            }
+            $segments[] = $seg;
+        }
+        return implode('/', $segments);
+    }
+
+    /** Расширение имени в нижнем регистре. */
+    private function extOf(string $name): string
+    {
+        return strtolower((string)pathinfo($name, PATHINFO_EXTENSION));
+    }
+
+    /** Исполняемое/опасное расширение (любой вариант php-тега тоже). */
+    private function isBlockedExt(string $ext): bool
+    {
+        $ext = strtolower($ext);
+        return in_array($ext, self::BLOCKED_EXT, true) || strpos($ext, 'php') !== false;
+    }
+
+    /**
+     * Имя файла/папки: срезаем путь и управляющие, схлопываем '..', убираем
+     * ведущую точку (скрытый/.htaccess). Юникод (кириллицу) сохраняем.
+     */
+    private function sanitizeFileName(string $name): string
+    {
+        $name = basename(str_replace('\\', '/', $name));
+        $name = preg_replace('#[/\x00-\x1f]+#', '', $name);
+        $name = preg_replace('#\.{2,}#', '.', (string)$name);
+        $name = ltrim((string)$name, '.');
+        return (string)$name;
+    }
+
+    /** Содержимое не является исполняемым скриптом по реальному MIME (finfo). */
+    private function mimeNotExecutable(string $tmp): bool
+    {
+        if (!function_exists('finfo_open')) {
+            return true;
+        }
+        $finfo = @finfo_open(FILEINFO_MIME_TYPE);
+        if (!$finfo) {
+            return true;
+        }
+        $mime = (string)@finfo_file($finfo, $tmp);
+        @finfo_close($finfo);
+        foreach (['application/x-php', 'text/x-php', 'application/x-httpd-php',
+                  'application/x-perl', 'application/x-python', 'text/x-shellscript',
+                  'application/x-sh', 'application/x-executable', 'application/x-dosexec'] as $bad) {
+            if (strpos($mime, $bad) === 0) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private function sourceErr($source): string

@@ -41,8 +41,16 @@ class FieldOptionsHandler
                 return ['success' => false, 'message' => 'TV не найдена: ' . $tvName, 'data' => []];
             }
         } elseif ($raw !== '') {
+            // raw приходит из запроса (client-controlled). Биндинги @SELECT/@EVAL/
+            // @FILE/@CHUNK/@RESOURCE/@INHERIT в processBindings = SQLi/PHP-eval/LFI/
+            // чтение БД → запрещаем ЛЮБОЙ @-биндинг в raw (статические списки опций
+            // вида "Label==value||..." никогда не начинаются с @). DB-driven опции —
+            // только через именованную TV (ветка tv, доверенный источник из БД).
+            if (strpos(ltrim($raw), '@') === 0) {
+                return ['success' => false, 'message' => $this->modx->lexicon('mpcve_err_permission'), 'data' => []];
+            }
             // Секционный listbox: транзитная TV — чтобы переиспользовать
-            // processBindings (@SELECT и пр.) ровно как нативный рендер.
+            // parseInputOptions ровно как нативный рендер (без @-биндингов).
             $tv = $this->modx->newObject('modTemplateVar');
             $tv->set('elements', $raw);
         } else {

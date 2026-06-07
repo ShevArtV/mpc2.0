@@ -69,6 +69,13 @@ class ImageUploadHandler
             return $this->err($this->modx->lexicon('mpcve_err_upload'));
         }
 
+        // SVG — XML, исполняется браузером при открытии → stored XSS. getimagesize
+        // его не валидирует (isImage пропускает по расширению), поэтому вырезаем
+        // активную разметку перед записью.
+        if ($ext === 'svg') {
+            $content = $this->sanitizeSvg($content);
+        }
+
         $source = $this->getMediaSource();
         if (!$source) {
             return $this->err($this->modx->lexicon('mpcve_err_source'));
@@ -124,6 +131,28 @@ class ImageUploadHandler
         $name = preg_replace('/[^a-z0-9_\-]/', '-', $name);
         $name = preg_replace('/-+/', '-', $name);
         return trim((string)$name, '-');
+    }
+
+    /**
+     * Санитайз SVG: вырезаем активную/исполняемую разметку (stored XSS при
+     * открытии в браузере). Не полноценный XML-парсер, но закрывает основные
+     * векторы: <script>, <foreignObject>, обработчики on*, javascript:-ссылки,
+     * внешние сущности (DOCTYPE/ENTITY → XXE). Статичная графика не страдает.
+     */
+    public function sanitizeSvg(string $svg): string
+    {
+        // парные опасные элементы вместе с содержимым
+        $svg = preg_replace('#<\s*(script|foreignObject)\b[^>]*>.*?<\s*/\s*\1\s*>#is', '', $svg);
+        // одиночные/незакрытые те же теги
+        $svg = preg_replace('#<\s*/?\s*(script|foreignObject)\b[^>]*>#is', '', (string)$svg);
+        // DOCTYPE/ENTITY (XXE)
+        $svg = preg_replace('#<!DOCTYPE[^>]*>#is', '', (string)$svg);
+        $svg = preg_replace('#<!ENTITY[^>]*>#is', '', (string)$svg);
+        // обработчики событий on*="..."/'...'/без кавычек
+        $svg = preg_replace('#\son[a-z0-9_\-]+\s*=\s*("[^"]*"|\'[^\']*\'|[^\s>]+)#is', '', (string)$svg);
+        // javascript: в href/xlink:href
+        $svg = preg_replace('#(href|xlink:href)\s*=\s*("|\')?\s*javascript:[^"\'>\s]*("|\')?#is', '', (string)$svg);
+        return (string)$svg;
     }
 
     /** Mime-проверка по типу медиа. image → getimagesize; video/audio → finfo. */
