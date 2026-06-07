@@ -83,7 +83,7 @@ class FieldValueExtractor
             $parent = $parent->parent();
         }
 
-        $downloadMethod = $this->downloadMethodsByTagName[$parent->tagName()];
+        $downloadMethod = $this->downloadMethodsByTagName[$parent->tagName()] ?? '';
         $value['MIGX_id'] = $idx;
 
         foreach ($attrs as $attr) {
@@ -112,7 +112,7 @@ class FieldValueExtractor
         }
 
         if ($sources = $element->find('source')) {
-            $options['parentFieldName'] = $options['idx'] ? "{$options['fieldName']}_{$options['idx']}" : $options['fieldName'];
+            $options['parentFieldName'] = !empty($options['idx']) ? "{$options['fieldName']}_{$options['idx']}" : ($options['fieldName'] ?? '');
             $options['fieldName'] = 'source';
             foreach ($sources as $k => $source) {
                 $options['idx'] = $k;
@@ -174,7 +174,7 @@ class FieldValueExtractor
 
             if ($attr === 'src') {
                 if (strpos($media[0][$attr], 'http') !== false) {
-                    $downloadMethod = $this->downloadMethodsByTagName[$element->tagName()];
+                    $downloadMethod = $this->downloadMethodsByTagName[$element->tagName()] ?? '';
                     $media[0][$attr] = method_exists($this->mediaDownloader, $downloadMethod)
                         ? $this->mediaDownloader->$downloadMethod($media[0][$attr])
                         : $media[0][$attr];

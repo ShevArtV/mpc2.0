@@ -48,9 +48,16 @@ class ContactUpdater
             }
 
             $contactAttrValue = explode('|', trim($item->getAttribute('data-mpc-contact')));
+            // Все ключи инициализированы: cfield-поля заполняются в цикле ниже
+            // выборочно, без инициализации был бы Undefined index на PHP 8.
             $tmp = [
-                'type'      => $contactAttrValue[0],
-                'placement' => $contactAttrValue[1] ?? 'default',
+                'type'       => $contactAttrValue[0] ?? '',
+                'placement'  => $contactAttrValue[1] ?? 'default',
+                'value'      => '',
+                'key'        => '',
+                'fvalue'     => '',
+                'caption'    => '',
+                'attributes' => '',
             ];
 
             foreach ($fields as $field) {
@@ -94,9 +101,12 @@ class ContactUpdater
             }
 
             $this->modx->invokeEvent('mpcOnHandleContact', ['contact' => [$tmp], 'Grabber' => $this]);
-            $tmp = isset($this->modx->event->returnedValues) && !empty($this->modx->event->returnedValues['contact'])
-                ? $this->modx->event->returnedValues['contact']
-                : $tmp;
+            // Принимаем ответ события, только если это валидный контакт-массив
+            // (иначе дальнейший foreach $tmp с ключами сломался бы).
+            $returned = $this->modx->event->returnedValues['contact'] ?? null;
+            if (is_array($returned) && isset($returned['value'])) {
+                $tmp = $returned;
+            }
 
             // Лексиконим только переводимые под-поля (настройка mpc_contact_lexicon_fields).
             // Ключ строится по РОЛИ поля (identity контакта = data-mpc-key / md5(value)):

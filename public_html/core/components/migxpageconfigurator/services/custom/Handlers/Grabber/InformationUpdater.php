@@ -33,6 +33,10 @@ class InformationUpdater
 
         foreach ($items as $item) {
             $infoKey = $item->getAttribute('data-mpc-info');
+            if ($this->isProtectedSetting((string)$infoKey)) {
+                $this->modx->log(\modX::LOG_LEVEL_WARN, '[MPC info] попытка записи защищённой настройки через data-mpc-info: ' . $infoKey);
+                continue;
+            }
             $ctx     = $item->getAttribute('data-mpc-ctx') ?: $this->modx->context->get('key') ?: 'web';
 
             if (!$item->hasAttribute('data-mpc-ctx')) {
@@ -61,13 +65,28 @@ class InformationUpdater
                     $data['value'] = $item->getAttribute('src');
                     break;
                 default:
-                    $data['value'] = str_replace('{', '{ ', $item->nodeValue);
+                    // разбиваем Fenom `{` и MODX-теги `[[`, чтобы значение из
+                    // контента не исполнялось при рендере настройки.
+                    $data['value'] = str_replace(['{', '[['], ['{ ', '[ ['], $item->nodeValue);
                     break;
             }
 
             $setting->fromArray($data, '', true);
             $setting->save();
         }
+    }
+
+    /**
+     * Защита: настройки безопасности нельзя перезаписывать через контент
+     * (data-mpc-info). Blacklist префиксов/подстрок security-критичных ключей.
+     * Для более строгой модели — whitelist через системную настройку.
+     */
+    private function isProtectedSetting(string $key): bool
+    {
+        return $key === '' || (bool)preg_match(
+            '/(allow_manager|allow_forward|forgot|session|password|principal_targets|rb_base|manager_|filemanager|allow_multiple_emails|proxy|http_host|allow_tags_in|mail_|modx_charset|^cache_|register_enabled)/i',
+            $key
+        );
     }
 
     private function getClientConfigSetting(string $key, ?string $ctx = null): ?object

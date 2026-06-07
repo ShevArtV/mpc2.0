@@ -31,11 +31,15 @@ class TemplateUpdater
             return null;
         }
 
-        $tplData['content'] = !empty($tplData['include'])
-            ? "{include '{$tplData['include']}'}"
+        // Значения из JSON-комментария вёрстки вставляются в Fenom — фильтруем,
+        // чтобы кавычка/`}`/`$`/`..` не дали инъекцию Fenom или path traversal.
+        $include = preg_replace('/[^a-zA-Z0-9_\/.:\-]/', '', (string)($tplData['include'] ?? ''));
+        $include = str_replace('..', '', $include);
+        $tplData['content'] = $include !== ''
+            ? "{include '{$include}'}"
             : "{include 'file:pages/index.tpl'}";
 
-        $wrapperName         = $tplData['wrapper'] ?? 'wrapper';
+        $wrapperName = preg_replace('/[^a-zA-Z0-9_\-]/', '', (string)($tplData['wrapper'] ?? '')) ?: 'wrapper';
         $tplData['description'] = "@FILE {$this->properties['pathToSections']}$wrapperName{$this->properties['extension']}";
 
         if (empty($tplData['icon'])) {

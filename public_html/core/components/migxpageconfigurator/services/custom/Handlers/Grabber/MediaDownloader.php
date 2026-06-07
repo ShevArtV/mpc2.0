@@ -37,10 +37,13 @@ class MediaDownloader
 
     public function detectExtensionByContentType(string $url): string
     {
+        if (!$this->isSafeUrl($url)) {
+            return '';
+        }
         $ch = curl_init($url);
         curl_setopt($ch, CURLOPT_NOBODY, true);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        curl_setopt_array($ch, $this->curlSecurityOpts());
         curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
         curl_setopt($ch, CURLOPT_MAXREDIRS, 5);
         curl_setopt($ch, CURLOPT_TIMEOUT, 10);
@@ -66,6 +69,59 @@ class MediaDownloader
         return dirname(__FILE__, 8);
     }
 
+    /**
+     * Защита от SSRF: разрешаем только http/https и публичные адреса. Блокируем
+     * file://, gopher://, dict://, loopback, RFC-1918, link-local (включая
+     * 169.254.169.254 — cloud-metadata). Хост резолвится — проверяются ВСЕ IP.
+     */
+    protected function isSafeUrl(string $url): bool
+    {
+        $parts = parse_url($url);
+        if (!$parts || empty($parts['scheme']) || empty($parts['host'])) {
+            return false;
+        }
+        if (!in_array(strtolower($parts['scheme']), ['http', 'https'], true)) {
+            return false;
+        }
+        $host = $parts['host'];
+        $ips = [];
+        if (filter_var($host, FILTER_VALIDATE_IP)) {
+            $ips[] = $host;
+        } else {
+            foreach (@dns_get_record($host, DNS_A | DNS_AAAA) ?: [] as $r) {
+                if (!empty($r['ip'])) { $ips[] = $r['ip']; }
+                if (!empty($r['ipv6'])) { $ips[] = $r['ipv6']; }
+            }
+            if (!$ips) {
+                $ip = gethostbyname($host);
+                if ($ip && $ip !== $host) { $ips[] = $ip; }
+            }
+        }
+        if (!$ips) {
+            return false; // не резолвится — не качаем
+        }
+        foreach ($ips as $ip) {
+            if (!filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
+                return false; // приватный/зарезервированный/loopback/link-local
+            }
+        }
+        return true;
+    }
+
+    /** Базовые curl-опции с защитой: SSL-верификация + только http/https. */
+    protected function curlSecurityOpts(): array
+    {
+        $opts = [
+            CURLOPT_SSL_VERIFYPEER => true,
+            CURLOPT_SSL_VERIFYHOST => 2,
+        ];
+        if (defined('CURLPROTO_HTTP')) {
+            $opts[CURLOPT_PROTOCOLS]       = CURLPROTO_HTTP | CURLPROTO_HTTPS;
+            $opts[CURLOPT_REDIR_PROTOCOLS] = CURLPROTO_HTTP | CURLPROTO_HTTPS;
+        }
+        return $opts;
+    }
+
     public function sanitizeFileName(string $name): string
     {
         if (function_exists('transliterator_transliterate')) {
@@ -79,18 +135,27 @@ class MediaDownloader
 
     public function download(string $url, string $path): string
     {
-        if (!$path) {
+        if (!$path || strpos($path, '..') !== false) {
+            return ''; // пустой путь или path traversal
+        }
+        if (!$this->isSafeUrl($url)) {
             return '';
         }
 
-        $fullPath = $this->getBaseDir() . $path;
+        $baseDir  = $this->getBaseDir();
+        $fullPath = $baseDir . $path;
+        // итоговый каталог должен оставаться внутри baseDir
+        $parentReal = realpath(dirname($fullPath));
+        if ($parentReal === false || strpos($parentReal . DIRECTORY_SEPARATOR, realpath($baseDir) . DIRECTORY_SEPARATOR) !== 0) {
+            return '';
+        }
         if (file_exists($fullPath)) {
             return $path;
         }
 
         $ch = curl_init($url);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        curl_setopt_array($ch, $this->curlSecurityOpts());
         curl_setopt($ch, CURLOPT_HEADER, false);
         curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
         curl_setopt($ch, CURLOPT_MAXREDIRS, 5);
@@ -198,6 +263,10 @@ class MediaDownloader
         if ($content === '') {
             return $attrValue;
         }
+        if (!$this->isAllowedMediaContent($content)) {
+            $this->modx->log(\modX::LOG_LEVEL_ERROR, '[MPC MediaDownloader] контент отклонён (похож на скрипт/HTML): ' . $attrValue);
+            return $attrValue;
+        }
 
         $this->ensureContainer($source, $dir);
         if ($source->createObject($dir, $fileName, $content) === false) {
@@ -252,14 +321,40 @@ class MediaDownloader
     }
 
     /**
+     * Content sniffing: отклоняем исполняемый/скриптовый контент под видом медиа
+     * (webshell `image.jpg` с PHP внутри). Расширение уже ограничено whitelist'ом
+     * (downloadExtensions) — это доп. защита по содержимому.
+     */
+    protected function isAllowedMediaContent(string $content): bool
+    {
+        $head = strtolower(substr($content, 0, 512));
+        foreach (['<?php', '<?=', '<script', '<html', '<!doctype'] as $marker) {
+            if (strpos($head, $marker) !== false) {
+                return false;
+            }
+        }
+        if (function_exists('finfo_open') && ($finfo = finfo_open(FILEINFO_MIME_TYPE))) {
+            $mime = strtolower((string)finfo_buffer($finfo, $content));
+            finfo_close($finfo);
+            if ($mime !== '' && (strpos($mime, 'php') !== false || strpos($mime, 'html') !== false || strpos($mime, 'javascript') !== false)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
      * Качает содержимое URL (curl). '' при ошибке.
      */
     protected function fetch(string $url): string
     {
+        if (!$this->isSafeUrl($url)) {
+            $this->modx->log(\modX::LOG_LEVEL_ERROR, "[MPC MediaDownloader] небезопасный URL отклонён: $url");
+            return '';
+        }
         $ch = curl_init($url);
-        curl_setopt_array($ch, [
+        curl_setopt_array($ch, $this->curlSecurityOpts() + [
             CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_SSL_VERIFYPEER => false,
             CURLOPT_HEADER         => false,
             CURLOPT_FOLLOWLOCATION => true,
             CURLOPT_MAXREDIRS      => 5,
