@@ -609,8 +609,8 @@ class Render extends Base
         $pathToFile = $this->properties['pdotoolsElementsPath'] . $this->properties['pathToDist'] . $resourceData['id'] . $this->properties['extension'];
         if ($this->wrapperTpl) {
             $html = $this->pdo->parseChunk($this->wrapperTpl, $resourceData);
-            $html = $this->convertStaticHashToBrace($html);
-            $html = $this->quoteSnippetParamValues($html);
+            $html = FenomFormatter::convertStaticHashToBrace($html);
+            $html = FenomFormatter::quoteSnippetParamValues($html);
         } else {
             $html = $resourceData['sections'] ? implode("\n", $resourceData['sections']) : $resourceData['content'];
         }
