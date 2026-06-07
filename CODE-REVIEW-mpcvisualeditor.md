@@ -213,4 +213,21 @@
 - **`mpcve_allowed_attrs`**: зарегистрировать системную настройку в `_build` (release-tail); код работает и без DB-строки (default `''`).
 
 ### Осталось (функциональные баги фронта — НЕ безопасность, нужен интерактивный QA)
-DOM-races и UX: утечка keydown при вложенных модалках (`dom.js`), гонка двойного клика «добавить строку» (`rows.js`), destroy/create RTE при быстром переключении (`richtext.js`), нет rollback DOM при ошибке drag-drop (`sidebar.js`/`rows.js`), обращение к detached DOM (`panels.js`), нет флага параллельного `field/save` (`panels.js`), `window.prompt` для URL (`rte.js`), `dragFrom` не сбрасывается (`rows.js`), a11y (focus-trap/aria), NIT (дубли CSS/шаблонов). Чинить с проверкой в живом редакторе (статикой не верифицируются).
+### ✅ Функциональные баги фронта — закрыты (2-я волна)
+- **keydown** (`dom.js` 3 диалога + `panels.js`): capture-фаза + `stopImmediatePropagation` + дефер к `.mpcve-confirm` — Escape не закрывает заодно подлежащий редактор.
+- **rows.js**: гонка двойного клика «добавить» (disabled снимается после ререндера); `dragFrom` сброшен в `close()`.
+- **sidebar.js**: rollback порядка секций при ошибке (обратный splice).
+- **panels.js**: `closed`-флаг (guard detached-DOM в save-колбэке).
+- **rte.js**: `window.prompt` → `promptDialog` (iframe/CSP-safe; focus+range восстановлены).
+- **filemanager.js**: фронт-страховка `navigate` от `..`. **changelog.js**: сброс `flt` при `open()`.
+- **Connector.php**: удалён мёртвый `success()`. **overlay.css**: убран дубль `.mpcve-rows__btn`.
+
+Ложные срабатывания/уже корректно: rows drag (DOM двигается после `ok`), richtext `close` (destroy гваржен `mode==='visual'`), panels parallel-save (`btn.disabled`), panels multiline (richtext возвращается раньше).
+
+### ⏸️ Оставлено сознательно (низкая ценность / риск рефактора)
+- a11y (`role=dialog`/`aria-modal`/focus-trap) — отдельная полировка доступности.
+- Дедуп шаблона диалогов `dom.js` (вынос `openDialog`) — косметика.
+- `Lock/CacheClear` неиспользуемый `$mpcve` — единая сигнатура хендлеров.
+- `ChangeLog` raw PDO вместо xPDO-модели — рефактор рискованнее пользы.
+- Хардкод RU-сообщений (`PageSaveHandler`/`SectionOp`/`RowOp`) — RU-проект; `PageSaveHandler` к тому же мёртвый код.
+- filemanager dblclick (двойной `setSelected` идемпотентен), picture rollback (reload на успехе) — доброкачественны.

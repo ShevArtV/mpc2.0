@@ -556,10 +556,6 @@ body:not(.mpcve-on) .mpcve-media-badge {
     cursor: grabbing;
 }
 
-.mpcve-rows__btn {
-    cursor: pointer;
-}
-
 .mpcve-rows__num {
     flex: 0 0 22px;
     text-align: center;
