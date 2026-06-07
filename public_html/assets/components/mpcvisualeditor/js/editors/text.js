@@ -2,9 +2,11 @@
  * mpcVisualEditor — инлайн-редактор текста (contenteditable) + пер-полевое
  * сохранение через field/save.
  */
+import { S } from '../state.js';
 import { api } from '../api.js';
 import { toast } from '../dom.js';
 import { fieldAddress } from '../address.js';
+import { sanitizeHtml } from './rte.js';
 
 // Пер-полевое сохранение: адрес поля + значение → field/save → FieldWriter.
 // old — прежнее значение (для журнала/отката).
@@ -82,8 +84,9 @@ export function openTextEditor(el) {
         cleanup();
         if (sourceMode) {
             // Введённый сырой HTML → реальная разметка (парсинг браузером).
+            // Санитайз (Sf2): on*/javascript: режутся, как и при записи на сервере.
             var src = el.innerText;
-            el.innerHTML = src;
+            el.innerHTML = sanitizeHtml(src, (S.cfg.allowedTags && S.cfg.allowedTags.length) ? S.cfg.allowedTags : undefined);
             // saveField прочитает el.innerHTML (теперь = реальная разметка).
             if (el.innerHTML !== orig) {
                 saveField(el, orig);

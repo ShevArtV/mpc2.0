@@ -104,7 +104,10 @@ class Connector
                 // Файловый менеджер: загрузить файл в текущую папку.
                 return (new Handlers\FileManagerHandler($this->modx, $this->mpcve))->upload($request);
             default:
-                return $this->error('Unknown or not-yet-implemented action: ' . $action);
+                // S10: не отражаем ввод (action) в ответе — фронт мог бы вставить
+                // его в innerHTML. Конкретный action логируем, пользователю — общее.
+                $this->modx->log(\modX::LOG_LEVEL_WARN, '[mpcVE] unknown action: ' . $action);
+                return $this->error('Unknown or not-yet-implemented action');
         }
     }
 

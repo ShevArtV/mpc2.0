@@ -303,8 +303,27 @@ export function sanitizeHtml(html, allowedTags) {
             if (allowed.indexOf(c.tagName.toLowerCase()) === -1) {
                 while (c.firstChild) { node.insertBefore(c.firstChild, c); }
                 node.removeChild(c);
+            } else {
+                scrubAttrs(c); // даже на разрешённом теге убираем on*/javascript:
             }
         });
     })(tmp);
     return tmp.innerHTML;
+}
+
+// Убирает активные атрибуты с разрешённого элемента: обработчики on*, а также
+// javascript:/опасные data: в href/src/xlink:href (теги-то проходят whitelist,
+// но <img onerror>/<a href="javascript:"> иначе срабатывали — Sf2/Sf3).
+function scrubAttrs(el) {
+    Array.prototype.slice.call(el.attributes).forEach(function (a) {
+        var n = a.name.toLowerCase();
+        var v = String(a.value || '').replace(/[\s -]+/g, '').toLowerCase();
+        if (n.indexOf('on') === 0) {
+            el.removeAttribute(a.name);
+        } else if ((n === 'href' || n === 'src' || n === 'xlink:href' || n === 'formaction')
+            && (v.indexOf('javascript:') === 0 || v.indexOf('vbscript:') === 0
+                || (v.indexOf('data:') === 0 && v.indexOf('data:image/') !== 0))) {
+            el.removeAttribute(a.name);
+        }
+    });
 }

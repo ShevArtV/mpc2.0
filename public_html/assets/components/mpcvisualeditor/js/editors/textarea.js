@@ -3,9 +3,11 @@
  * Инлайново правим только простые однострочные поля (text); многострочные —
  * в окне, чтобы было удобно и не ломалась вёрстка. Значение — plain text.
  */
+import { S } from '../state.js';
 import { api } from '../api.js';
 import { toast } from '../dom.js';
 import { fieldAddress } from '../address.js';
+import { sanitizeHtml } from './rte.js';
 
 export function openTextareaEditor(el) {
     if (document.querySelector('.mpcve-modal')) { return; }
@@ -47,7 +49,10 @@ export function openTextareaEditor(el) {
         api.post('field/save', { address: addr, value: value, old: cur }).then(function (r) {
             if (r && r.success) {
                 // source: сырой HTML → реальная разметка; plain: текст как есть.
-                if (sourceMode) { el.innerHTML = value; } else { el.textContent = value; }
+                if (sourceMode) {
+                    // санитайз перед живым DOM (Sf2): on*/javascript: режутся.
+                    el.innerHTML = sanitizeHtml(value, (S.cfg.allowedTags && S.cfg.allowedTags.length) ? S.cfg.allowedTags : undefined);
+                } else { el.textContent = value; }
                 toast('Сохранено');
                 close();
             } else {

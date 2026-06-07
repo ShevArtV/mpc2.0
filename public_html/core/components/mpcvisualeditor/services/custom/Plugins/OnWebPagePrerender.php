@@ -38,10 +38,12 @@ class OnWebPagePrerender extends PluginHandler
 
         $assetsUrl = $mpcve->getConfig('assetsUrl');
         $clientCfg = json_encode($mpcve->getClientConfig(), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        // assetsUrl уходит в HTML-атрибуты href/src — экранируем (S13).
+        $assetsAttr = htmlspecialchars((string)$assetsUrl, ENT_QUOTES);
 
-        $inject = '<link rel="stylesheet" href="' . $assetsUrl . 'css/overlay.css">' . PHP_EOL
+        $inject = '<link rel="stylesheet" href="' . $assetsAttr . 'css/overlay.css">' . PHP_EOL
             . '<script>window.mpcVEConfig=' . $clientCfg . ';</script>' . PHP_EOL
-            . '<script type="module" src="' . $assetsUrl . 'js/mpcve.js"></script>' . PHP_EOL;
+            . '<script type="module" src="' . $assetsAttr . 'js/mpcve.js"></script>' . PHP_EOL;
 
         $resource->_output = str_ireplace('</body>', $inject . '</body>', $resource->_output);
     }

@@ -91,7 +91,9 @@ export function openRichtextEditor(el) {
         saveBtn.disabled = true; saveBtn.textContent = 'Сохранение…';
         api.post('field/save', { address: addr, value: value, old: orig }).then(function (r) {
             if (r && r.success) {
-                el.innerHTML = value; // обновляем страницу без перезагрузки
+                // санитайз перед вставкой в живой DOM (Sf2): срез on*/javascript: на
+                // случай пейлода в значении; пустой allowedTags → DEFAULT_TAGS.
+                el.innerHTML = sanitizeHtml(value, (S.cfg.allowedTags && S.cfg.allowedTags.length) ? S.cfg.allowedTags : undefined); // обновляем страницу без перезагрузки
                 toast('Сохранено');
                 close();
             } else {

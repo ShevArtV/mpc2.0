@@ -65,8 +65,22 @@ class FieldTypesHandler
         // Карта типов TV (имя TV → тип редактора по modTemplateVar.type). TV — НЕ
         // config-поле mpc_base, поэтому для них своя карта: иначе тип брался по
         // совпадению имени с config-полем (TV subtitle ловил тип одноимённого поля).
+        // S14: НЕ грузим все TV сайта (разведка + OOM). На странице видны только
+        // TV её шаблона — ограничиваем выборку шаблоном ресурса; backstop-лимит
+        // на случай отсутствия ресурса.
         $tvs = [];
-        foreach ($this->modx->getCollection('modTemplateVar') as $tv) {
+        $rid = (int)($request['resourceId'] ?? 0);
+        $templateId = 0;
+        if ($rid > 0 && ($res = $this->modx->getObject('modResource', $rid))) {
+            $templateId = (int)$res->get('template');
+        }
+        $q = $this->modx->newQuery('modTemplateVar');
+        if ($templateId > 0) {
+            $q->innerJoin('modTemplateVarTemplate', 'TemplateVarTemplate', 'TemplateVarTemplate.tmplvarid = modTemplateVar.id');
+            $q->where(['TemplateVarTemplate.templateid' => $templateId]);
+        }
+        $q->limit(500);
+        foreach ($this->modx->getCollection('modTemplateVar', $q) as $tv) {
             $name = (string)$tv->get('name');
             if ($name === '') {
                 continue;

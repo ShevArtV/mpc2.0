@@ -125,7 +125,7 @@ function render() {
             ? '<div class="mpcve-clogm__diff" title="клик — развернуть">' + diffHtml(e.old, e.new) + '</div>'
             : '<div class="mpcve-clogm__diff">' + esc(strip(e.new)) + '</div>';
         var act = e.revertable
-            ? '<button type="button" class="mpcve-clogm__revert" data-id="' + e.id + '">↩</button>'
+            ? '<button type="button" class="mpcve-clogm__revert" data-id="' + esc(String(e.id)) + '">↩</button>'
             : (e.reverted ? '<span class="mpcve-clogm__rev">откачено</span>' : '');
         var src = (e.source === 'admin') ? ' <span class="mpcve-clogm__src" title="из админки">⚙</span>' : '';
         return '<tr>' +
