@@ -1068,10 +1068,8 @@ class FieldWriter
     }
 
     /**
-     * Хук + инвалидация кэша после успешной записи.
-     * ВАЖНО (проверить на сайте): объём инвалидации. Сейчас обновляется
-     * resource-кэш контекста ресурса; parsed/ pdoTools и lexicon-кэш —
-     * через подписчиков mpcOnFieldSave (см. план mpcVE, cache invalidation).
+     * Хук mpcOnFieldSave + инвалидация кэша (resource-context + parsed/) после
+     * успешной записи. Кэш-логика вынесена в {@see CacheInvalidator}.
      */
     private function afterSave(object $resource, array $address): void
     {
@@ -1081,53 +1079,7 @@ class FieldWriter
             'address'    => $address,
         ]);
 
-        $cm = null;
-        if (method_exists($this->modx, 'getCacheManager')) {
-            $cm = $this->modx->getCacheManager();
-        } elseif (isset($this->modx->cacheManager)) {
-            $cm = $this->modx->cacheManager;
-        }
-        if ($cm && method_exists($cm, 'refresh')) {
-            $context = (string)($resource->get('context_key') ?: 'web');
-            $cm->refresh(['resource' => ['contexts' => [$context]]]);
-        }
-
-        // parsed/<rid>.tpl держит ЗАПЕЧЁННЫЕ значения нестатичных секций
-        // (регенерится только при отсутствии файла). После правки значения сносим
-        // его → пересоберётся при следующем заходе с новым значением.
-        $this->invalidateParsed($resource, (string)($address['level'] ?? 'resource'));
-    }
-
-    /**
-     * Удаляет parsed-файл(ы) после правки значения. Обычно — файл самого ресурса.
-     * Но правка на уровне global (статичные блоки) ИЛИ правка ресурса-ТИПА (донор,
-     * parent = staticBlocksPage) влияет на ВСЕ наследующие страницы → сносим весь
-     * parsed (каждый регенерится лениво при заходе).
-     */
-    private function invalidateParsed(object $resource, string $level): void
-    {
-        $elements = (string)$this->modx->getOption('pdotools_elements_path', null, MODX_CORE_PATH . 'elements/');
-        $elements = str_replace('{core_path}', MODX_CORE_PATH, $elements);
-        $dist = $elements . (string)$this->modx->getOption('mpc_path_to_dist', null, 'parsed/');
-        if (!is_dir($dist)) {
-            return;
-        }
-        $ext = (string)$this->modx->getOption('mpc_tpl_file_extension', null, '.tpl');
-        $sbp = (int)$this->modx->getOption('mpc_static_block_page_id', null, 1);
-        $isDonor = (int)$resource->get('parent') === $sbp;
-
-        if ($level === 'global' || $isDonor) {
-            foreach ((array)@scandir($dist) as $f) {
-                if ($f !== '.' && $f !== '..' && is_file($dist . $f)) {
-                    @unlink($dist . $f);
-                }
-            }
-            return;
-        }
-        $file = $dist . (int)$resource->get('id') . $ext;
-        if (is_file($file)) {
-            @unlink($file);
-        }
+        (new CacheInvalidator($this->modx))->invalidate($resource, (string)($address['level'] ?? 'resource'));
     }
 
     private function result(bool $success, string $message, array $data = []): array
