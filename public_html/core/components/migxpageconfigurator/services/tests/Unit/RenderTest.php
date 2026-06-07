@@ -3,6 +3,7 @@
 namespace MpcTests\Unit;
 
 use MpcServices\Handlers\Render;
+use MpcServices\Handlers\FenomFormatter;
 use PHPUnit\Framework\TestCase;
 use ReflectionClass;
 
@@ -16,12 +17,7 @@ class RenderTest extends TestCase
 {
     private function convert(string $html): string
     {
-        $ref      = new ReflectionClass(Render::class);
-        $instance = $ref->newInstanceWithoutConstructor();
-        $method   = $ref->getMethod('convertStaticHashToBrace');
-        $method->setAccessible(true);
-
-        return $method->invoke($instance, $html);
+        return FenomFormatter::convertStaticHashToBrace($html);
     }
 
     private function chunkBinding(array $section, array $properties): string
@@ -41,12 +37,7 @@ class RenderTest extends TestCase
 
     private function quoteParams(string $html): string
     {
-        $ref      = new ReflectionClass(Render::class);
-        $instance = $ref->newInstanceWithoutConstructor();
-        $method   = $ref->getMethod('quoteSnippetParamValues');
-        $method->setAccessible(true);
-
-        return $method->invoke($instance, $html);
+        return FenomFormatter::quoteSnippetParamValues($html);
     }
 
     /** Прод-разметка без маркеров: ##-плейсхолдеры → {-теги. */
