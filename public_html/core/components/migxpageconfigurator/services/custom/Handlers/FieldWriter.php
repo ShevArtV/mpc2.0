@@ -75,10 +75,13 @@ class FieldWriter
         $culture = !empty($_COOKIE['mpc_lang'])
             ? (string)$_COOKIE['mpc_lang']
             : (string)$this->modx->getOption('cultureKey', null, 'en');
-        // culture идёт в путь к файлу лексикона — валидируем (cookie mpc_lang под
-        // контролем клиента: mpc_lang=../../ дал бы path traversal).
-        if (!preg_match('/^[a-z]{2}(_[A-Z]{2})?$/', $culture)) {
-            $culture = 'en';
+        // culture идёт в путь к файлу лексикона как компонент каталога
+        // ({lexiconPath}/{culture}/...) — cookie mpc_lang под контролем клиента,
+        // поэтому отсекаем traversal через basename() (срезает ../ и разделители),
+        // не ломая нестандартные форматы cultureKey (ru-RU, zh_CN, custom).
+        $culture = basename($culture);
+        if ($culture === '' || $culture === '.' || $culture === '..') {
+            $culture = (string)$this->modx->getOption('cultureKey', null, 'en');
         }
         $this->lexProps = [
             'culture'              => $culture,

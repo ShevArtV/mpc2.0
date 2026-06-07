@@ -326,9 +326,12 @@ class Render extends Base
             $section['sbp_id'] = $this->properties['staticBlocksPageId']; // передаем на страницу id ресурса со статичными блоками
             $section['cp_id'] = $this->properties['contactsPageId']; // передаем на страницу id ресурса с контактами
 
-            // имя секции вставляется в Fenom-литерал — ограничиваем символы,
-            // чтобы кавычка/`]`/Fenom-код не дали инъекцию.
-            $formname = preg_replace('/[^a-zA-Z0-9_\-]/', '', (string)($section['MIGX_formname'] ?? ''));
+            // имя секции вставляется в одинарно-кавыченный Fenom-литерал —
+            // экранируем `\` и `'`, чтобы значение не разорвало литерал. Внутри
+            // '...' Fenom не интерполирует {$...}, поэтому единственный вектор
+            // пробоя — закрывающая кавычка. Символы НЕ вырезаем: имя секции может
+            // содержать пробелы/кириллицу и должно совпасть в getStaticSection.
+            $formname = str_replace(['\\', "'"], ['\\\\', "\\'"], (string)($section['MIGX_formname'] ?? ''));
             $sets = PHP_EOL . "{set \$section = '!getStaticSection'| snippet:['section_name' => '{$formname}']}{if \$section}";
 
             foreach ($section as $key => $value) {
