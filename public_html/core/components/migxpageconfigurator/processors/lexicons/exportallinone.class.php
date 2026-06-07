@@ -9,6 +9,12 @@
  */
 class MigxpageconfiguratorLexiconsExportallinoneProcessor extends modProcessor
 {
+    /** Требуется право редактирования (коннектор проверяет лишь сессию). */
+    public function checkPermissions()
+    {
+        return $this->modx->hasPermission('save_document') || $this->modx->hasPermission('mpc_edit');
+    }
+
     /** Файлы лексиконов, не относящиеся к контенту ресурсов. */
     private array $systemFiles = ['default', 'properties', 'setting'];
 

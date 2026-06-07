@@ -4,6 +4,12 @@
  */
 class MigxpageconfiguratorLexiconsUpdatekeyProcessor extends modProcessor
 {
+    /** Требуется право редактирования (коннектор проверяет лишь сессию). */
+    public function checkPermissions()
+    {
+        return $this->modx->hasPermission('save_document') || $this->modx->hasPermission('mpc_edit');
+    }
+
     public function process()
     {
         $filename = basename($this->getProperty('filename', ''));
@@ -17,8 +23,8 @@ class MigxpageconfiguratorLexiconsUpdatekeyProcessor extends modProcessor
             return $this->failure($this->modx->lexicon('mpc_err_missing_params'));
         }
 
-        // Validate lang looks like a language code
-        if (!preg_match('/^[a-z]{2}/', $lang)) {
+        // Validate lang looks like a language code (anchored)
+        if (!preg_match('/^[a-z]{2,8}$/', $lang)) {
             return $this->failure($this->modx->lexicon('mpc_err_invalid_lang'));
         }
 
@@ -41,10 +47,14 @@ class MigxpageconfiguratorLexiconsUpdatekeyProcessor extends modProcessor
 
         $content = '<?php' . PHP_EOL;
         foreach ($_lang as $k => $v) {
-            $v = str_replace("'", '&apos;', $v);
-            $content .= '$_lang[\'' . $k . '\'] = \'' . $v . '\';' . PHP_EOL;
+            // var_export ключа И значения — безопасный PHP-литерал (защита от
+            // инъекции через ключ и поломки файла бэкслешем в значении).
+            $content .= '$_lang[' . var_export((string)$k, true) . '] = '
+                . var_export((string)$v, true) . ';' . PHP_EOL;
         }
-        file_put_contents($filePath, $content);
+        if (file_put_contents($filePath, $content, LOCK_EX) === false) {
+            return $this->failure($this->modx->lexicon('mpc_err_write_failed'));
+        }
 
         // Ввод перевода для неосновного языка снимает ключ с реестра
         // непереведённых (подход «явный pending-list» для экспорта). Пустое

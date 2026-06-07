@@ -4,6 +4,12 @@
  */
 class MigxpageconfiguratorLexiconsGetlistProcessor extends modProcessor
 {
+    /** Требуется право редактирования (коннектор проверяет лишь сессию). */
+    public function checkPermissions()
+    {
+        return $this->modx->hasPermission('save_document') || $this->modx->hasPermission('mpc_edit');
+    }
+
     public function process()
     {
         $corePath = $this->modx->getOption('migxpageconfigurator_core_path', null,

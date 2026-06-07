@@ -4,6 +4,12 @@
  */
 class MigxpageconfiguratorLexiconsGetlanguagesProcessor extends modProcessor
 {
+    /** Требуется право редактирования (коннектор проверяет лишь сессию). */
+    public function checkPermissions()
+    {
+        return $this->modx->hasPermission('save_document') || $this->modx->hasPermission('mpc_edit');
+    }
+
     public function process()
     {
         $lexiconBase = $this->modx->getOption('core_path')

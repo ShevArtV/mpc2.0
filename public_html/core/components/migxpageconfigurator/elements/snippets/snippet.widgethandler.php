@@ -9,12 +9,14 @@ $corePath = $modx->getOption('core_path', '', MODX_CORE_PATH);
 require_once $corePath . 'components/migxpageconfigurator/services/vendor/autoload.php';
 
 $result = '';
-$method = $scriptProperties['method'];
-$className = $scriptProperties['className'];
+$method = (string)($scriptProperties['method'] ?? '');
+$className = (string)($scriptProperties['className'] ?? '');
 unset($scriptProperties['className'], $scriptProperties['method']);
-if ($className && class_exists($className)) {
+// whitelist: только классы пакета (MpcServices\…) и публичные не-_ методы —
+// иначе className/method из параметров дали бы инстанс произвольного класса.
+if ($className !== '' && strpos($className, 'MpcServices\\') === 0 && class_exists($className)) {
     $class = new $className($modx, $scriptProperties);
-    if (method_exists($class, $method)) {
+    if ($method !== '' && $method[0] !== '_' && method_exists($class, $method)) {
         $result = $class->$method();
     }
 }

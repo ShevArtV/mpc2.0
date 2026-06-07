@@ -13,6 +13,12 @@
  */
 class MigxpageconfiguratorLexiconsImportProcessor extends modProcessor
 {
+    /** Требуется право редактирования (коннектор проверяет лишь сессию). */
+    public function checkPermissions()
+    {
+        return $this->modx->hasPermission('save_document') || $this->modx->hasPermission('mpc_edit');
+    }
+
     private string $lexiconBase = '';
     private string $defaultLang = 'ru';
     private string $staticFile  = 'static';
@@ -205,7 +211,10 @@ class MigxpageconfiguratorLexiconsImportProcessor extends modProcessor
         }
 
         foreach ($byLang as $lang => $kv) {
-            if (!preg_match('/^[a-z]{2}/', $lang)) {
+            // basename + якорный regex: заголовок колонки XLSX под контролем
+            // загружающего → 'en/../../assets' дал бы запись .inc.php вне lexiconBase.
+            $lang = basename((string)$lang);
+            if (!preg_match('/^[a-z]{2,8}$/', $lang)) {
                 continue;
             }
             $langDir  = $this->lexiconBase . $lang . '/';
@@ -225,10 +234,11 @@ class MigxpageconfiguratorLexiconsImportProcessor extends modProcessor
 
             $content = '<?php' . PHP_EOL;
             foreach ($_lang as $k => $v) {
-                $v = str_replace("'", '&apos;', (string)$v);
-                $content .= '$_lang[\'' . $k . '\'] = \'' . $v . '\';' . PHP_EOL;
+                // var_export ключа И значения — безопасный PHP-литерал (RCE-защита).
+                $content .= '$_lang[' . var_export((string)$k, true) . '] = '
+                    . var_export((string)$v, true) . ';' . PHP_EOL;
             }
-            file_put_contents($filePath, $content);
+            file_put_contents($filePath, $content, LOCK_EX);
 
             // переводы неосновного языка снимают ключи с pending-реестра
             if ($lang !== $this->defaultLang) {

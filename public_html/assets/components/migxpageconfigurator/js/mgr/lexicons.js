@@ -334,6 +334,7 @@ MPC.grid.LexiconKeys = Ext.extend(Ext.grid.EditorGridPanel, {
             dataIndex: 'key',
             width:     260,
             sortable:  true,
+            renderer:  Ext.util.Format.htmlEncode,
         }];
 
         Ext.each(languages, function (lang) {
@@ -343,6 +344,7 @@ MPC.grid.LexiconKeys = Ext.extend(Ext.grid.EditorGridPanel, {
                 dataIndex: lang,
                 width:     250,
                 sortable:  false,
+                renderer:  Ext.util.Format.htmlEncode,
                 editor:    new Ext.form.TextField({ allowBlank: true }),
             });
         });
