@@ -317,25 +317,24 @@ class FieldWriter
      * влияет на все ресурсы шаблона/сайта — нужна более широкая инвалидация
      * кэша, чем resource-cache одного контекста.
      */
-    private function writeConfigField(array $address, $value): array
+    /**
+     * Резолвит целевой ресурс/уровень/configJson для записи config-поля с учётом
+     * наследования (секции нет в ресурсе → выбор пользователя $address['inherit']):
+     *   'type' — пишем в конфиг ТИПА; 'copy' — сидируем секцию в РЕСУРС;
+     *   ''     — code=inherit_choice (фронт спросит). global/type приходят разрешёнными.
+     * Возврат: ['resource','level','configJson'] или ['error'=>result()] для раннего выхода.
+     */
+    private function resolveConfigWriteTarget(array $address): array
     {
         $level   = (string)($address['level'] ?? 'resource');
         $inherit = (string)($address['inherit'] ?? '');
         $rid     = (int)($address['resourceId'] ?? 0);
         $section = (string)($address['section'] ?? '');
 
-        // Наследование уровней: если секции НЕТ в конфиге РЕСУРСА — она наследуется
-        // от типа (Render мёржит type+resource, лексиконы тоже global→type→resource).
-        // Решаем по выбору пользователя ($address['inherit']):
-        //   'type' — пишем в конфиг/лексикон ТИПА (глобально для шаблона);
-        //   'copy' — сидируем секцию + её лексикон-ключи в РЕСУРС, пишем локально;
-        //   ''     — возвращаем code=inherit_choice (фронт спросит, что делать).
-        // global/type сюда не попадают: static-секции адресуются global (у
-        // staticBlocksPage свой конфиг), type приходит уже разрешённым.
         if ($level === 'resource') {
             $resource = $this->resolveLevelResource('resource', $rid);
             if (!$resource) {
-                return $this->result(false, 'target resource for level "resource" not found');
+                return ['error' => $this->result(false, 'target resource for level "resource" not found')];
             }
             $configJson = (string)$resource->getTVValue($this->configTvName);
             if (!$this->configHasSection($configJson, $section)) {
@@ -343,35 +342,112 @@ class FieldWriter
                     $level = 'type';
                     $resource = $this->resolveLevelResource('type', $rid);
                     if (!$resource) {
-                        return $this->result(false, 'type resource not found for level "type"');
+                        return ['error' => $this->result(false, 'type resource not found for level "type"')];
                     }
                     $configJson = (string)$resource->getTVValue($this->configTvName);
                 } elseif ($inherit === 'copy') {
                     $seed = $this->seedSectionIntoResource($resource, $rid, $section);
                     if (empty($seed['success'])) {
-                        return $seed;
+                        return ['error' => $seed];
                     }
                     $configJson = (string)($seed['data']['json'] ?? '');
                 } else {
                     // Нет выбора → фронт спросит: скопировать секцию в ресурс ИЛИ
-                    // открыть страницу-источник (тип) и править там. Отдаём id+URL
-                    // type-ресурса, чтобы фронт мог сделать редирект.
+                    // открыть страницу-источник (тип). Отдаём id+URL type-ресурса.
                     $data = ['code' => 'inherit_choice', 'section' => $section];
                     $typeRes = $this->resolveLevelResource('type', $rid);
                     if ($typeRes) {
                         $data['typeResourceId'] = (int)$typeRes->get('id');
                         $data['typeUrl'] = $this->modx->makeUrl((int)$typeRes->get('id'), '', '', 'full');
                     }
-                    return $this->result(false, 'section inherited from type', $data);
+                    return ['error' => $this->result(false, 'section inherited from type', $data)];
                 }
             }
         } else {
             $resource = $this->resolveLevelResource($level, $rid);
             if (!$resource) {
-                return $this->result(false, 'target resource for level "' . $level . '" not found');
+                return ['error' => $this->result(false, 'target resource for level "' . $level . '" not found')];
             }
             $configJson = (string)$resource->getTVValue($this->configTvName);
         }
+
+        return ['resource' => $resource, 'level' => $level, 'configJson' => $configJson];
+    }
+
+    /**
+     * Лексикон-aware трансформация значения config-поля перед записью:
+     *  - медиа/img-запись → мерж/генерация лексикон-ключей под-полей;
+     *  - значение существующего ключа → пишем в лексикон (ранний возврат result);
+     *  - новое лексиконизируемое поле → генерим ключ, в конфиг кладём ключ.
+     * raw=1 / useLexicons=0 → значение без изменений.
+     * Возврат: ['result'=>result()] (ранний выход) или ['value'=>$value].
+     */
+    private function applyLexiconToConfigValue(ConfigFieldWriter $cfw, $resource, string $level, string $configJson, array $address, $value): array
+    {
+        if (!$this->useLexicons || !empty($address['raw'])) {
+            return ['value' => $value];
+        }
+        $writer  = $this->lexiconWriter();
+        $ident   = $writer->identifier((int)$resource->get('id'));
+        $current = $cfw->getValue($configJson, $address)['data']['value'] ?? null;
+
+        if ($this->isRecordValue($value)) {
+            if ($this->isMediaWithSources($value)) {
+                // picture/video/audio: запись с вложенным img (JSON-строка) и
+                // массивом sources → глубокий мерж лексикона.
+                $value = $this->mergeMediaRecord(
+                    $writer, $ident, $current, $value,
+                    $this->sectionPrefix($configJson, (string)($address['section'] ?? '')),
+                    (string)($address['fieldName'] ?? '')
+                );
+            } elseif ($this->recordHasLexiconKeys($writer, $ident, $current)) {
+                // плоская img-запись с ключами → мерж по под-полям.
+                $value = $this->mergeRecordWithLexicon($writer, $ident, $current, $value);
+            } else {
+                // новая плоская img-запись → генерим ключи src/alt/title.
+                $value = $this->newRecordWithLexiconKeys($writer, $ident, $configJson, $address, $value);
+            }
+        } elseif (is_string($current) && $current !== '' && !$this->isRecordValue($current)
+            && $writer->has($ident, $current)) {
+            if (!$writer->set($ident, $current, is_scalar($value) ? (string)$value : '')) {
+                return ['result' => $this->result(false, 'failed to write lexicon entry')];
+            }
+            $this->afterSave($resource, [
+                'type' => 'field', 'level' => $level, 'lexicon' => true,
+                'section' => (string)($address['section'] ?? ''),
+                'fieldName' => (string)($address['fieldName'] ?? ''),
+            ]);
+            return ['result' => $this->result(true, 'saved', ['type' => 'field', 'level' => $level, 'lexicon' => true])];
+        } elseif (is_string($value) && $value !== '' && !$this->isRecordValue($value)
+            && ($current === null || $current === '' || (is_string($current) && !$writer->has($ident, $current)))
+            && $this->shouldLexiconizeField(
+                $this->configFieldContentType((string)($address['fieldName'] ?? '')),
+                (string)($address['fieldName'] ?? ''),
+                $this->addressPath($address),
+                $this->sectionPrefix($configJson, (string)($address['section'] ?? '')),
+                (string)($address['level'] ?? '') === 'global'
+            )) {
+            // НОВОЕ лексиконизируемое поле: ключа ещё нет. Генерим ключ как грабер,
+            // пишем значение в лексикон, в конфиг кладём КЛЮЧ (иначе {$field|lexicon}
+            // вернёт '' для литерала). Только если поле реально лексиконится.
+            $key = $this->makeLexiconKey($configJson, $address);
+            if ($key !== '' && $writer->set($ident, $key, (string)$value)) {
+                $value = $key;
+            }
+        }
+
+        return ['value' => $value];
+    }
+
+    private function writeConfigField(array $address, $value): array
+    {
+        $target = $this->resolveConfigWriteTarget($address);
+        if (isset($target['error'])) {
+            return $target['error'];
+        }
+        $resource   = $target['resource'];
+        $level      = $target['level'];
+        $configJson = $target['configJson'];
 
         if ($configJson === '') {
             return $this->result(false, 'empty mpc_config for level "' . $level . '"');
@@ -379,63 +455,11 @@ class FieldWriter
 
         $cfw = new ConfigFieldWriter();
 
-        // Лексикон-aware: значение-ключ → пишем в лексикон, конфиг не трогаем;
-        // медиа-запись → мерж по под-полям (ключи остаются, лексикон обновляется).
-        // raw=1 (listbox): значение — сырой ключ опции, лексикон НЕ трогаем (капшены
-        // опций пишет грабер при нарезке) — пишем значение прямо в конфиг.
-        if ($this->useLexicons && empty($address['raw'])) {
-            $writer  = $this->lexiconWriter();
-            $ident   = $writer->identifier((int)$resource->get('id'));
-            $current = $cfw->getValue($configJson, $address)['data']['value'] ?? null;
-
-            if ($this->isRecordValue($value)) {
-                if ($this->isMediaWithSources($value)) {
-                    // picture/video/audio: запись с вложенным img (JSON-строка) и
-                    // массивом sources → глубокий мерж лексикона (существующий ключ
-                    // обновляем, новый srcset/src/alt/poster — генерим).
-                    $value = $this->mergeMediaRecord(
-                        $writer, $ident, $current, $value,
-                        $this->sectionPrefix($configJson, (string)($address['section'] ?? '')),
-                        (string)($address['fieldName'] ?? '')
-                    );
-                } elseif ($this->recordHasLexiconKeys($writer, $ident, $current)) {
-                    // плоская img-запись с ключами → мерж по под-полям.
-                    $value = $this->mergeRecordWithLexicon($writer, $ident, $current, $value);
-                } else {
-                    // новая плоская img-запись → генерим ключи src/alt/title.
-                    $value = $this->newRecordWithLexiconKeys($writer, $ident, $configJson, $address, $value);
-                }
-            } elseif (is_string($current) && $current !== '' && !$this->isRecordValue($current)
-                && $writer->has($ident, $current)) {
-                if (!$writer->set($ident, $current, is_scalar($value) ? (string)$value : '')) {
-                    return $this->result(false, 'failed to write lexicon entry');
-                }
-                $this->afterSave($resource, [
-                    'type' => 'field', 'level' => $level, 'lexicon' => true,
-                    'section' => (string)($address['section'] ?? ''),
-                    'fieldName' => (string)($address['fieldName'] ?? ''),
-                ]);
-                return $this->result(true, 'saved', ['type' => 'field', 'level' => $level, 'lexicon' => true]);
-            } elseif (is_string($value) && $value !== '' && !$this->isRecordValue($value)
-                && ($current === null || $current === '' || (is_string($current) && !$writer->has($ident, $current)))
-                && $this->shouldLexiconizeField(
-                    $this->configFieldContentType((string)($address['fieldName'] ?? '')),
-                    (string)($address['fieldName'] ?? ''),
-                    $this->addressPath($address),
-                    $this->sectionPrefix($configJson, (string)($address['section'] ?? '')),
-                    (string)($address['level'] ?? '') === 'global'
-                )) {
-                // НОВОЕ лексиконизируемое поле (напр. поле только что добавленной
-                // строки): ключа ещё нет. Генерим ключ как грабер, пишем значение
-                // в лексикон, в конфиг кладём КЛЮЧ — иначе чанк {$field|lexicon}
-                // вернёт '' для литерала. Лексиконизируем только если поле реально
-                // лексиконится (у соседних строк того же списка — ключи).
-                $key = $this->makeLexiconKey($configJson, $address);
-                if ($key !== '' && $writer->set($ident, $key, (string)$value)) {
-                    $value = $key;
-                }
-            }
+        $applied = $this->applyLexiconToConfigValue($cfw, $resource, $level, $configJson, $address, $value);
+        if (isset($applied['result'])) {
+            return $applied['result'];
         }
+        $value = $applied['value'];
 
         $res = $cfw->setValue($configJson, $address, $value);
         if (!$res['success']) {
