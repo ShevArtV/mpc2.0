@@ -4,10 +4,10 @@
  */
 class MigxpageconfiguratorLexiconsGetlanguagesProcessor extends modProcessor
 {
-    /** Требуется право редактирования (коннектор проверяет лишь сессию). */
+    /** Требуется право mpc_view (как CMP лексиконов); коннектор проверяет лишь сессию. */
     public function checkPermissions()
     {
-        return $this->modx->hasPermission('save_document') || $this->modx->hasPermission('mpc_edit');
+        return $this->modx->hasPermission('mpc_view');
     }
 
     public function process()
