@@ -350,7 +350,7 @@ class Mpc
                 $plugin->addMany($events);
             }
             if (!$plugin->save()) {
-                $this->logging->write(__METHOD__, "Failed to save plugin $name with the following data", $data);
+                $this->logging->write(__METHOD__, "Failed to save plugin $name with the following data", $data, false, Logging::ERROR);
             }
         }
     }
@@ -387,7 +387,7 @@ class Mpc
             }
             $snippet->setProperties($properties);
             if (!$snippet->save()) {
-                $this->logging->write(__METHOD__, "Failed to save snippet $name with the following data", $data);
+                $this->logging->write(__METHOD__, "Failed to save snippet $name with the following data", $data, false, Logging::ERROR);
             }
         }
     }

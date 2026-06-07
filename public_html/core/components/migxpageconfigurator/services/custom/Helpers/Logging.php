@@ -15,6 +15,11 @@ namespace MpcServices\Helpers;
  */
 class Logging
 {
+    /** Уровни: DEBUG пишется только при debug=true; ERROR — всегда (виден на проде). */
+    public const DEBUG = 0;
+    public const WARN  = 1;
+    public const ERROR = 2;
+
     /**
      * @var string
      */
@@ -59,9 +64,12 @@ class Logging
      * @param $noDate
      * @return void
      */
-    public function write($method, $msg, $data = [], $noDate = false)
+    public function write($method, $msg, $data = [], $noDate = false, int $level = self::DEBUG)
     {
-        if ($this->debug) {
+        // ERROR пишем всегда (критичные сбои не должны теряться на проде, где
+        // debug=false); DEBUG/WARN — только в debug-режиме. Поведение существующих
+        // вызовов (без $level) не меняется.
+        if ($this->debug || $level >= self::ERROR) {
             if (!$noDate) {
                 $date = date('d.m.Y H:i:s');
                 $text = "**$date** [$method] $msg" . PHP_EOL;
