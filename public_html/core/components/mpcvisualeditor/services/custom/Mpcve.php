@@ -55,12 +55,20 @@ class Mpcve
             'trim',
             explode(',', (string)$this->modx->getOption('mpc_allowed_tags', null, ''))
         )));
+        // Доп. атрибуты к безопасным дефолтам sanitizeHtml (per-tag whitelist в
+        // rte.js). Настройка mpcve_allowed_attrs (как mpc_allowed_tags) — пусто
+        // по умолчанию: применяются только хардкод-дефолты.
+        $allowedAttrs = array_values(array_filter(array_map(
+            'trim',
+            explode(',', (string)$this->modx->getOption('mpcve_allowed_attrs', null, ''))
+        )));
         return [
             'connectorUrl' => $this->config['connectorUrl'],
             'assetsUrl'    => $this->config['assetsUrl'],
             'editParam'    => $this->config['editParam'],
             'resourceId'   => $resource ? (int)$resource->get('id') : 0,
             'allowedTags'  => $allowedTags,
+            'allowedAttrs' => $allowedAttrs,
             // CSRF-nonce: коннектор сверяет его с сессией на каждом write-действии.
             'nonce'        => $this->nonce(),
             // Для кнопки «Открыть в админке» (тулбар).

@@ -16,6 +16,7 @@
  * opts: { value, allowedTags:[], upload(file)->Promise<url> }.
  */
 import { toast, esc } from '../dom.js';
+import { S } from '../state.js';
 
 // Тег → кнопка. exec — execCommand; block — formatBlock; wrap — обернуть выделение
 // в тег (для small/mark/span, которых нет в execCommand); link/image — особые.
@@ -332,7 +333,9 @@ var STYLE_BAD = /(url\s*\(|expression\s*\(|javascript:|vbscript:|@import|<|>)/i;
 // Чистит атрибуты разрешённого элемента по whitelist (on*/неизвестные/javascript:).
 function scrubAttrs(el) {
     var tag = el.tagName.toLowerCase();
-    var allowed = GLOBAL_ATTRS.concat(TAG_ATTRS[tag] || []);
+    // База (per-tag safe defaults) + расширение из настройки mpcve_allowed_attrs
+    // (S.cfg.allowedAttrs) — админ может разрешить доп. атрибуты сайт-wide.
+    var allowed = GLOBAL_ATTRS.concat(TAG_ATTRS[tag] || []).concat((S.cfg && S.cfg.allowedAttrs) || []);
     Array.prototype.slice.call(el.attributes).forEach(function (a) {
         var n = a.name.toLowerCase();
         if (allowed.indexOf(n) === -1) { el.removeAttribute(a.name); return; }
