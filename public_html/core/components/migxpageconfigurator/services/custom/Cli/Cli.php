@@ -91,9 +91,16 @@ class Cli
     private function applyGroup(string $group, string $action, array $args, array $opts, Output $out): int
     {
         if ($action !== 'apply') {
-            return $out->result(['success' => false, 'message' => "Поддерживается только: $group apply <файл> [--dry-run] [--force] [--only=ref]"]);
+            return $out->result(['success' => false, 'message' => "Поддерживается только: $group apply [файл|имя] [--dry-run] [--force] [--only=ref]"]);
         }
-        $file = $args[0] ?? '';
+        // Путь манифеста: без аргумента — дефолт по группе ({base}/{group}.php),
+        // короткое имя — профиль ({base}/{имя}.php), полный путь — как есть.
+        $file = ManifestLoader::resolve($this->modx, $group, (string)($args[0] ?? ''));
+        if (!is_file($file)) {
+            return $out->result(['success' => false, 'message' =>
+                "Манифест не найден: $file" . PHP_EOL .
+                "Положите файл в базу манифестов (mpc_manifests_path) или укажите путь явно: $group apply <файл>"]);
+        }
         $manifest = ManifestLoader::load($file);
 
         $dryRun = !empty($opts['dry-run']);
@@ -260,13 +267,17 @@ class Cli
             'mpc CLI — декларативное управление MODX из проектных манифестов',
             '',
             'Использование:',
-            '  php console/mpc.php <группа> apply <файл.php> [--dry-run] [--force] [--only=ref] [--json]',
+            '  ./console/mpc <группа> apply [файл|имя] [--dry-run] [--force] [--only=ref] [--json]',
+            '',
+            'Манифест: без аргумента берётся {base}/<группа>.php, короткое имя — {base}/<имя>.php,',
+            'полный путь — как есть. База {base} = env MPC_MANIFESTS_PATH > настройка mpc_manifests_path',
+            '> console/manifests/. Запуск: ./console/mpc (env MPC_PHP — путь к нужному php).',
             '',
             'Группы:',
-            '  resources apply <файл>   — дерево ресурсов (idempotent, матч по context+pagetitle)',
-            '  settings  apply <файл>   — системные настройки (upsert по key)',
-            '  events    apply <файл>   — привязки плагинов к событиям (bind/unbind по файлу)',
-            '  packages  apply <файл>   — установка/удаление пакетов (нужен --force)',
+            '  resources apply [файл]   — дерево ресурсов (idempotent, матч по context+pagetitle)',
+            '  settings  apply [файл]   — системные настройки (upsert по key)',
+            '  events    apply [файл]   — привязки плагинов к событиям (bind/unbind по файлу)',
+            '  packages  apply [файл]   — установка/удаление пакетов (нужен --force)',
             '  cut <файл.tpl|all> [--upd]   — нарезка: без --upd умный мерж, с --upd полная перезапись',
             '  elements <type|all>      — создать/обновить элементы из elements/create/',
             '  configs sync             — применить сид MIGX-конфигов (merge)',

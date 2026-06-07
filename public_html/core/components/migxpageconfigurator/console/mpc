@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# Тонкая обёртка mpc CLI — чтобы не писать полный путь к mpc.php.
+#
+#   ./console/mpc <группа> apply [файл|имя] [флаги]
+#
+# Выбор php: переменная MPC_PHP (на hostland — /usr/local/php/php-7.4/bin/php),
+# иначе php из PATH. Базу манифестов можно задать через MPC_MANIFESTS_PATH.
+set -euo pipefail
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+exec "${MPC_PHP:-php}" "$DIR/mpc.php" "$@"
