@@ -62,37 +62,38 @@ class MigxpageconfiguratorLexiconsExportallProcessor extends modProcessor
             return $this->failure($this->modx->lexicon('mpc_err_no_lexicons'));
         }
 
-        $assetsPath = $this->modx->getOption('assets_path') . 'components/migxpageconfigurator/';
-        $exportDir  = $assetsPath . 'lexicons-export/';
-        if (!is_dir($exportDir)) {
-            mkdir($exportDir, 0777, true);
-        }
-
+        // ZIP собираем во временный файл (ZipArchive умеет писать только в
+        // реальный путь) в системном temp, затем стримим в браузер и удаляем —
+        // публичного файла в assets нет (см. ExportStreamer, закрывает S9).
         $zipFilename = 'lexicons_all_' . date('Y-m-d_His') . '.zip';
-        $zipPath     = $exportDir . $zipFilename;
-
-        $zip = new \ZipArchive();
-        if ($zip->open($zipPath, \ZipArchive::CREATE | \ZipArchive::OVERWRITE) !== true) {
+        $tempDir     = \MpcServices\Helpers\ExportStreamer::tempDir($this->modx);
+        $zipPath     = tempnam($tempDir, 'mpc_zip_');
+        if ($zipPath === false) {
             return $this->failure($this->modx->lexicon('mpc_err_zip_create'));
         }
 
-        foreach ($files as $file) {
-            $name    = basename($file, '.inc.php');
-            $content = $this->generateExcel($lexiconBase, $name, $languages, $defaultLang);
-            if ($content !== null) {
-                $zip->addFromString($name . '.xlsx', $content);
-            }
+        $zip = new \ZipArchive();
+        if ($zip->open($zipPath, \ZipArchive::CREATE | \ZipArchive::OVERWRITE) !== true) {
+            @unlink($zipPath);
+            return $this->failure($this->modx->lexicon('mpc_err_zip_create'));
         }
 
-        $zip->close();
+        try {
+            foreach ($files as $file) {
+                $name    = basename($file, '.inc.php');
+                $content = $this->generateExcel($lexiconBase, $name, $languages, $defaultLang);
+                if ($content !== null) {
+                    $zip->addFromString($name . '.xlsx', $content);
+                }
+            }
+            $zip->close();
+        } catch (\Throwable $e) {
+            @$zip->close();
+            @unlink($zipPath);
+            throw $e;
+        }
 
-        $assetsUrl = $this->modx->getOption('assets_url')
-            . 'components/migxpageconfigurator/lexicons-export/' . $zipFilename;
-
-        return $this->success('', [
-            'filePath' => $assetsUrl,
-            'fileName' => $zipFilename,
-        ]);
+        \MpcServices\Helpers\ExportStreamer::streamFileAndExit($zipPath, $zipFilename, 'application/zip');
     }
 
     private function generateExcel(

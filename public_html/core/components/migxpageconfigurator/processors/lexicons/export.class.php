@@ -53,47 +53,40 @@ class MigxpageconfiguratorLexiconsExportProcessor extends modProcessor
             return strcmp($a, $b);
         });
 
-        // Write to assets export dir
-        $assetsPath = $this->modx->getOption('assets_path') . 'components/migxpageconfigurator/';
-        $exportDir  = $assetsPath . 'lexicons-export/';
-        if (!is_dir($exportDir)) {
-            mkdir($exportDir, 0777, true);
-        }
-
-        $exportFilename = $filename . '_lexicons.xlsx';
-        $exportPath     = $exportDir . $exportFilename;
-
-        // Строки считаем ДО открытия writer: в режиме «непереведённых» при пустом
-        // результате файл не плодим (UI покажет «ничего не найдено»).
+        // Строки считаем ДО открытия writer: режим probe (лёгкий XHR из UI)
+        // лишь сообщает, есть ли что отдавать — чтобы для «непереведённых» при
+        // пустом результате показать сообщение, а не навигировать на пустой файл.
         $resourceRows = $this->loadRows($lexiconBase, $filename, $languages);
         $staticRows   = $this->loadRows($lexiconBase, $staticFile, $languages);
 
-        if ($this->onlyUntranslated && empty($resourceRows) && empty($staticRows)) {
-            return $this->success('', []);
+        if ($this->getProperty('probe')) {
+            return $this->success('', ['found' => count($resourceRows) + count($staticRows)]);
         }
 
-        $writer = \OpenSpout\Writer\Common\Creator\WriterEntityFactory::createXLSXWriter();
-        $writer->openToFile($exportPath);
+        // Стримим XLSX прямо в браузер (см. ExportStreamer): публичного файла
+        // в assets больше нет — отдача идёт через коннектор с проверкой прав.
+        $tempDir = \MpcServices\Helpers\ExportStreamer::tempDir($this->modx);
+        $writer  = \MpcServices\Helpers\ExportStreamer::xlsxWriterToBrowser(
+            $filename . '_lexicons.xlsx',
+            $tempDir
+        );
 
-        // Sheet 1: resource lexicons
-        $writer->getCurrentSheet()->setName('Resource');
-        $this->writeSheet($writer, $resourceRows, $languages);
+        try {
+            // Sheet 1: resource lexicons
+            $writer->getCurrentSheet()->setName('Resource');
+            $this->writeSheet($writer, $resourceRows, $languages);
 
-        // Sheet 2: static section lexicons (if they exist)
-        if (!empty($staticRows)) {
-            $writer->addNewSheetAndMakeItCurrent()->setName('Static');
-            $this->writeSheet($writer, $staticRows, $languages);
+            // Sheet 2: static section lexicons (if they exist)
+            if (!empty($staticRows)) {
+                $writer->addNewSheetAndMakeItCurrent()->setName('Static');
+                $this->writeSheet($writer, $staticRows, $languages);
+            }
+        } catch (\Throwable $e) {
+            $writer->close(); // уберёт temp-папку writer'а при обрыве
+            throw $e;
         }
 
-        $writer->close();
-
-        $assetsUrl = $this->modx->getOption('assets_url')
-            . 'components/migxpageconfigurator/lexicons-export/' . $exportFilename;
-
-        return $this->success('', [
-            'filePath' => $assetsUrl,
-            'fileName' => $exportFilename,
-        ]);
+        \MpcServices\Helpers\ExportStreamer::finishAndExit($writer);
     }
 
     private function loadRows(string $base, string $filename, array $languages): array

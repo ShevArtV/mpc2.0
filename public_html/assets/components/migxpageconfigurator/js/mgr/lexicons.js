@@ -384,6 +384,21 @@ MPC.grid.LexiconKeys = Ext.extend(Ext.grid.EditorGridPanel, {
         });
     },
 
+    // Скачивание идёт навигацией на коннектор (он стримит XLSX/ZIP, публичного
+    // файла больше нет). window.location не шлёт modAuth-заголовок, который
+    // ExtJS добавляет к XHR, поэтому токен передаём GET-параметром HTTP_MODAUTH
+    // (коннектор принимает его и так) — это же закрывает CSRF на скачивание.
+    buildDownloadUrl: function (action, params) {
+        var url = MPC.config.connector_url
+            + (MPC.config.connector_url.indexOf('?') === -1 ? '?' : '&')
+            + 'action=' + encodeURIComponent(action)
+            + '&HTTP_MODAUTH=' + encodeURIComponent(MODx.siteId);
+        Ext.iterate(params, function (k, v) {
+            url += '&' + encodeURIComponent(k) + '=' + encodeURIComponent(v);
+        });
+        return url;
+    },
+
     exportAllInOne: function () {
         // Если ресурсы выделены — экспортируем их, иначе все. Языки — активные.
         var filenames = [];
@@ -393,27 +408,27 @@ MPC.grid.LexiconKeys = Ext.extend(Ext.grid.EditorGridPanel, {
                 filenames.push(sel[i].get('filename'));
             }
         }
-        var langs = (this.activeLanguages || []);
+        var params = {
+            filenames: filenames.join(','),
+            languages: (this.activeLanguages || []).join(','),
+        };
+        // Probe-XHR: есть ли что отдавать (несёт modAuth-заголовок штатно).
         Ext.Ajax.request({
             url:     MPC.config.connector_url,
-            params:  {
-                action:    'lexicons/exportallinone',
-                filenames: filenames.join(','),
-                languages: langs.join(','),
-            },
+            params:  Ext.apply({ action: 'lexicons/exportallinone', probe: 1 }, params),
             timeout: 120000,
             scope:   this,
             success: function (resp) {
                 var obj = Ext.decode(resp.responseText);
-                if (obj.success) {
-                    if (!obj.object || !obj.object.filePath) {
-                        MODx.msg.alert('Готово', 'Лексиконов для экспорта не найдено');
-                        return;
-                    }
-                    window.location.href = obj.object.filePath;
-                } else {
+                if (!obj.success) {
                     MODx.msg.alert('Ошибка', obj.message);
+                    return;
                 }
+                if (!obj.object || !obj.object.found) {
+                    MODx.msg.alert('Готово', 'Лексиконов для экспорта не найдено');
+                    return;
+                }
+                window.location.href = this.buildDownloadUrl('lexicons/exportallinone', params);
             },
             failure: function () {
                 MODx.msg.alert('Ошибка', 'Запрос не выполнен');
@@ -432,23 +447,10 @@ MPC.grid.LexiconKeys = Ext.extend(Ext.grid.EditorGridPanel, {
         for (var i = 0; i < selected.length; i++) {
             filenames.push(selected[i].get('filename'));
         }
-        var langs = (this.activeLanguages || []);
-        Ext.Ajax.request({
-            url:     MPC.config.connector_url,
-            params:  {
-                action:    'lexicons/exportall',
-                filenames: filenames.join(','),
-                languages: langs.join(','),
-            },
-            timeout: 120000,
-            success: function (resp) {
-                var obj = Ext.decode(resp.responseText);
-                if (obj.success) {
-                    window.location.href = obj.object.filePath;
-                } else {
-                    MODx.msg.alert('Ошибка', obj.message);
-                }
-            },
+        // Выбор гарантирует непустой набор → стримим сразу, без probe.
+        window.location.href = this.buildDownloadUrl('lexicons/exportall', {
+            filenames: filenames.join(','),
+            languages: (this.activeLanguages || []).join(','),
         });
     },
 
@@ -465,26 +467,32 @@ MPC.grid.LexiconKeys = Ext.extend(Ext.grid.EditorGridPanel, {
             MODx.msg.alert('Внимание', 'Выберите ресурс');
             return;
         }
+        var params = {
+            filename:     this.currentFile,
+            languages:    (this.activeLanguages || []).join(','),
+            untranslated: untranslated ? 1 : 0,
+        };
+        // «Непереведённые» могут оказаться пустыми → probe перед навигацией.
+        // Обычный экспорт всегда есть что отдать → стримим сразу.
+        if (!untranslated) {
+            window.location.href = this.buildDownloadUrl('lexicons/export', params);
+            return;
+        }
         Ext.Ajax.request({
             url:    MPC.config.connector_url,
-            params: {
-                action:       'lexicons/export',
-                filename:     this.currentFile,
-                languages:    (this.activeLanguages || []).join(','),
-                untranslated: untranslated ? 1 : 0,
-            },
+            params: Ext.apply({ action: 'lexicons/export', probe: 1 }, params),
             scope:  this,
             success: function (resp) {
                 var obj = Ext.decode(resp.responseText);
-                if (obj.success) {
-                    if (!obj.object || !obj.object.filePath) {
-                        MODx.msg.alert('Готово', 'Непереведённых ключей не найдено');
-                        return;
-                    }
-                    window.location.href = obj.object.filePath;
-                } else {
+                if (!obj.success) {
                     MODx.msg.alert('Ошибка', obj.message);
+                    return;
                 }
+                if (!obj.object || !obj.object.found) {
+                    MODx.msg.alert('Готово', 'Непереведённых ключей не найдено');
+                    return;
+                }
+                window.location.href = this.buildDownloadUrl('lexicons/export', params);
             },
         });
     },

@@ -19,7 +19,7 @@
 | S6 | **HIGH** | Авторизация | все `processors/lexicons/*`, `processors/resource/copysections.class.php` | Нет `checkPermissions()`/`hasPermission()` — любой mgr-пользователь с сессией вызывает напрямую через коннектор |
 | S7 | **HIGH** | Инъекция Fenom | `Handlers/Grabber/TemplateUpdater.php`; `Handlers/Cutter/SpecialTagProcessor.php` | `include`/`@FILE`-путь и параметры из атрибутов шаблона вставляются в генерируемый Fenom без экранирования |
 | S8 | **HIGH** | Перезапись системных настроек | `Handlers/Grabber/InformationUpdater.php` | `data-mpc-info` пишет в произвольный `modSystemSetting`/`modContextSetting` без whitelist · ⏸️ ОСТАВЛЕНО: blacklist `isProtectedSetting` + запись только в CLI `--upd` (см. §2) |
-| S9 | **HIGH** | Раскрытие данных | `processors/lexicons/export*.class.php` | Экспортные XLSX/ZIP в `assets/.../lexicons-export/` доступны по предсказуемому URL без аутентификации |
+| S9 | **HIGH** | Раскрытие данных | `processors/lexicons/export*.class.php` | Экспортные XLSX/ZIP в `assets/.../lexicons-export/` доступны по предсказуемому URL без аутентификации · ✅ ИСПРАВЛЕНО: стрим через коннектор (`ExportStreamer`), публичный файл убран |
 | S10 | **HIGH** | Динамический класс | `elements/snippets/snippet.widgethandler.php` | Инстанцирование произвольного `className`/`method` из `$scriptProperties` без whitelist |
 | S11 | **MEDIUM** | Stored XSS | `assets/.../js/mgr/lexicons.js` | Колонки грида без `htmlEncode`-рендерера |
 | S12 | **MEDIUM** | Path traversal | `FieldWriter.php` (cookie `mpc_lang`); `Mpc.php`/`PendingTranslations.php` (`cultureKey`/`lang`/`rid` в пути) | Значения подставляются в путь к файлу лексикона без валидации · ✅ FieldWriter: `basename()`+guard (`Mpc.php`/`PendingTranslations.php` — остаётся) |
@@ -410,10 +410,11 @@
 **Проблема:** Нет `checkPermissions()`/`hasPermission()`; коннектор требует лишь сессию. Кастомные `mpc_view`/`mpc_edit` проверяются только в контроллере CMP.
 **Рекомендация:** `hasPermission('mpc_edit')` в `process()`; в `copysections` — право на конкретный ресурс.
 
-### [HIGH] Экспортные XLSX/ZIP публично доступны (см. S9)
-**Файл:** `export.class.php:51–57`, `exportall.class.php:59–67`, `exportallinone.class.php:43–48`
-**Проблема:** `assets/.../lexicons-export/` без `.htaccess`/`index.php`, имена предсказуемы, каталог `0777`.
-**Рекомендация:** Хранить вне webroot, отдавать через PHP-прокси с проверкой сессии; `0755`.
+### [HIGH] Экспортные XLSX/ZIP публично доступны (см. S9) — ✅ ИСПРАВЛЕНО
+**Файл:** `export.class.php`, `exportall.class.php`, `exportallinone.class.php`; новый `Helpers/ExportStreamer.php`; `js/mgr/lexicons.js`
+**Проблема:** `assets/.../lexicons-export/` без `.htaccess`/`index.php`, имена предсказуемы, каталог `0777`. `.htaccess` бесполезен на nginx — защита обязана жить в PHP.
+**Исправление:** Запись в публичный assets убрана полностью. Файл стримится в браузер через сам коннектор (`ExportStreamer::xlsxWriterToBrowser`/`streamFileAndExit`), где `checkPolicy('load')` + `checkPermissions(mpc_view)` проверены ДО процессора → enforcement в PHP, одинаков на Apache/nginx. Скачивание — навигацией на коннектор с токеном `HTTP_MODAUTH` (GET-параметр, т.к. ExtJS-заголовок при `window.location` не уходит; заодно анти-CSRF). Внутренний temp OpenSpout/ZIP — в системном temp с TTL-свипом и `try/finally`-cleanup; публичного артефакта нет. UI: «не найдено» сохранено через probe-XHR перед навигацией.
+**Деплой:** на стенде/проде вручную удалить старый каталог `assets/components/migxpageconfigurator/lexicons-export/` со скопившимися выгрузками (код туда больше не пишет, но ранее экспортированные файлы остаются доступны по URL).
 
 ### [HIGH] Слабая валидация языка (regex без якоря)
 **Файл:** `updatekey.class.php:21`, `import.class.php:208` — `preg_match('/^[a-z]{2,8}$/',$lang)`.

@@ -41,19 +41,52 @@ class MigxpageconfiguratorLexiconsExportallinoneProcessor extends modProcessor
             return $this->failure($this->modx->lexicon('mpc_err_no_lexicons'));
         }
 
-        $context = new \MpcServices\Handlers\LexiconContext($this->modx);
-
-        $assetsPath = $this->modx->getOption('assets_path') . 'components/migxpageconfigurator/';
-        $exportDir  = $assetsPath . 'lexicons-export/';
-        if (!is_dir($exportDir)) {
-            mkdir($exportDir, 0777, true);
+        // Probe (лёгкий XHR из UI): сообщаем, есть ли вкладки с ключами, чтобы
+        // показать «не найдено» вместо навигации на пустой файл. Контекст
+        // (дорогой resolve) здесь не считаем — только наличие ключей.
+        if ($this->getProperty('probe')) {
+            $found = 0;
+            foreach ($files as $rid) {
+                $_lang = [];
+                $f     = $lexiconBase . $defaultLang . '/' . $rid . '.inc.php';
+                if (file_exists($f)) {
+                    include $f;
+                }
+                if (!empty($_lang)) {
+                    $found++;
+                }
+            }
+            return $this->success('', ['found' => $found]);
         }
 
-        $exportFilename = 'lexicons_all-in-one_' . date('Y-m-d_His') . '.xlsx';
-        $exportPath     = $exportDir . $exportFilename;
+        $context = new \MpcServices\Handlers\LexiconContext($this->modx);
 
-        $writer = \OpenSpout\Writer\Common\Creator\WriterEntityFactory::createXLSXWriter();
-        $writer->openToFile($exportPath);
+        // Строки собираем ДО открытия writer: openToBrowser шлёт заголовки сразу,
+        // поэтому решение «есть ли что отдавать» принимаем заранее.
+        $sheets         = [];
+        $usedSheetNames = [];
+        foreach ($files as $rid) {
+            $rows = $this->loadRows($lexiconBase, $rid, $languages, $defaultLang, $context);
+            if (empty($rows)) {
+                continue;
+            }
+            $sheets[] = [
+                'name' => $this->uniqueSheetName($rid, $usedSheetNames),
+                'rows' => $rows,
+            ];
+        }
+
+        if (empty($sheets)) {
+            // UI гейтит через probe — сюда штатно не доходим; не навигируем.
+            return $this->success('', ['found' => 0]);
+        }
+
+        // Стримим XLSX в браузер (см. ExportStreamer): публичного файла нет.
+        $tempDir = \MpcServices\Helpers\ExportStreamer::tempDir($this->modx);
+        $writer  = \MpcServices\Helpers\ExportStreamer::xlsxWriterToBrowser(
+            'lexicons_all-in-one_' . date('Y-m-d_His') . '.xlsx',
+            $tempDir
+        );
 
         // Ширины столбцов (на весь workbook — раскладка одинакова на всех вкладках):
         // 1=Контекст, 2=lexicon_key, 3..=языки. Текст в ячейках переносится (wrap).
@@ -64,41 +97,21 @@ class MigxpageconfiguratorLexiconsExportallinoneProcessor extends modProcessor
             $writer->setColumnWidthForRange(60, 3, 2 + $langCount);
         }
 
-        $usedSheetNames = [];
-        $first          = true;
-        $wroteAny       = false;
-
-        foreach ($files as $rid) {
-            $rows = $this->loadRows($lexiconBase, $rid, $languages, $defaultLang, $context);
-            if (empty($rows)) {
-                continue;
+        try {
+            $first = true;
+            foreach ($sheets as $s) {
+                // Первый лист уже создан writer'ом, последующие добавляем.
+                $sheet = $first ? $writer->getCurrentSheet() : $writer->addNewSheetAndMakeItCurrent();
+                $sheet->setName($s['name']);
+                $first = false;
+                $this->writeSheet($writer, $s['rows'], $languages);
             }
-
-            $sheetName = $this->uniqueSheetName($rid, $usedSheetNames);
-            // Первый лист уже создан writer'ом, последующие добавляем.
-            $sheet = $first ? $writer->getCurrentSheet() : $writer->addNewSheetAndMakeItCurrent();
-            $sheet->setName($sheetName);
-            $first = false;
-
-            $this->writeSheet($writer, $rows, $languages);
-            $wroteAny = true;
+        } catch (\Throwable $e) {
+            $writer->close(); // уберёт temp-папку writer'а при обрыве
+            throw $e;
         }
 
-        if (!$wroteAny) {
-            $writer->close();
-            @unlink($exportPath);
-            return $this->success('', []);
-        }
-
-        $writer->close();
-
-        $assetsUrl = $this->modx->getOption('assets_url')
-            . 'components/migxpageconfigurator/lexicons-export/' . $exportFilename;
-
-        return $this->success('', [
-            'filePath' => $assetsUrl,
-            'fileName' => $exportFilename,
-        ]);
+        \MpcServices\Helpers\ExportStreamer::finishAndExit($writer);
     }
 
     private function resolveLanguages(string $lexiconBase, string $defaultLang): array
