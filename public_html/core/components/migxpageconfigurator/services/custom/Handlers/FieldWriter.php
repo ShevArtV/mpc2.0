@@ -75,6 +75,11 @@ class FieldWriter
         $culture = !empty($_COOKIE['mpc_lang'])
             ? (string)$_COOKIE['mpc_lang']
             : (string)$this->modx->getOption('cultureKey', null, 'en');
+        // culture идёт в путь к файлу лексикона — валидируем (cookie mpc_lang под
+        // контролем клиента: mpc_lang=../../ дал бы path traversal).
+        if (!preg_match('/^[a-z]{2}(_[A-Z]{2})?$/', $culture)) {
+            $culture = 'en';
+        }
         $this->lexProps = [
             'culture'              => $culture,
             'corePath'             => (string)$this->modx->getOption('core_path', null, ''),
@@ -246,6 +251,9 @@ class FieldWriter
             }
         }
 
+        if (!is_scalar($value)) {
+            return $this->result(false, 'значение поля ресурса должно быть скалярным: ' . $field);
+        }
         $resource->set($field, $value);
         if (!$resource->save()) {
             return $this->result(false, 'failed to save resource ' . $rid);

@@ -305,11 +305,11 @@ class Render extends Base
         $i = 1;
         foreach ($sections as $section) {
             // пропускаем базовую секцию или ту, которую нужно скрыть
-            if ($section['MIGX_formname'] === $this->properties['baseSectionName'] || $section['hide_section']) {
+            if (($section['MIGX_formname'] ?? '') === $this->properties['baseSectionName'] || !empty($section['hide_section'])) {
                 continue;
             }
 
-            if ($section['is_static'] && $staticConfig[$section['section_name']]) {
+            if (!empty($section['is_static']) && !empty($staticConfig[$section['section_name'] ?? ''])) {
                 // Контент static-секции — из staticBlocksPage; настройки/стили
                 // (каскадные поля) — из ресурсного конфига с наследованием.
                 // Покрывает eager-поля, запекаемые parseChunk на рендере;
@@ -326,7 +326,10 @@ class Render extends Base
             $section['sbp_id'] = $this->properties['staticBlocksPageId']; // передаем на страницу id ресурса со статичными блоками
             $section['cp_id'] = $this->properties['contactsPageId']; // передаем на страницу id ресурса с контактами
 
-            $sets = PHP_EOL . "{set \$section = '!getStaticSection'| snippet:['section_name' => '{$section['MIGX_formname']}']}{if \$section}";
+            // имя секции вставляется в Fenom-литерал — ограничиваем символы,
+            // чтобы кавычка/`]`/Fenom-код не дали инъекцию.
+            $formname = preg_replace('/[^a-zA-Z0-9_\-]/', '', (string)($section['MIGX_formname'] ?? ''));
+            $sets = PHP_EOL . "{set \$section = '!getStaticSection'| snippet:['section_name' => '{$formname}']}{if \$section}";
 
             foreach ($section as $key => $value) {
                 if (is_string($value) && strpos($value, '[{') !== false) {
@@ -807,7 +810,7 @@ class Render extends Base
                     continue;
                 }
                 foreach ($item as $k => $v) {
-                    if (!is_array($v) && strpos($v, '[{') !== false) {
+                    if (is_string($v) && strpos($v, '[{') !== false) {
                         $item[$k] = json_decode($v, 1); // преобразуем поля типа migx в массив
                         $item[$k] = $this->jsonDecodeValue($item[$k]);
                     } else {
@@ -837,7 +840,7 @@ class Render extends Base
             $html = $this->convertStaticHashToBrace($html);
             $html = $this->quoteSnippetParamValues($html);
         } else {
-            $html = $resourceData['sections'] ? implode('\n', $resourceData['sections']) : $resourceData['content'];
+            $html = $resourceData['sections'] ? implode("\n", $resourceData['sections']) : $resourceData['content'];
         }
         $html = preg_replace('/ => {(.*?)\| lexicon}/', ' => ($1| lexicon)', $html);
         if (!file_put_contents($pathToFile, $html)) {
@@ -868,9 +871,10 @@ class Render extends Base
                         $typeConfig = $this->reformatConfig(json_decode($typeConfig, 1));
                         if (!empty($config)) {
                             foreach ($config as $key => $item) {
-                                if ($item['copy_from_origin'] && $typeConfig[$item['section_name']]) {
+                                $sectionName = $item['section_name'] ?? '';
+                                if (!empty($item['copy_from_origin']) && !empty($typeConfig[$sectionName])) {
                                     $flag = true;
-                                    $config[$key] = array_merge($item, $typeConfig[$item['section_name']]);
+                                    $config[$key] = array_merge($item, $typeConfig[$sectionName]);
                                 }
                             }
                         }
@@ -900,10 +904,14 @@ class Render extends Base
                 $this->deleteParsedConfigFile($id);
             }
         } else {
-            $fileNames = scandir($basePath);
-            unset($fileNames[0], $fileNames[1]);
-            foreach ($fileNames as $fileName) {
-                unlink($basePath . $fileName);
+            foreach (scandir($basePath) as $fileName) {
+                if ($fileName === '.' || $fileName === '..') {
+                    continue;
+                }
+                $full = $basePath . $fileName;
+                if (is_file($full)) {
+                    unlink($full);
+                }
             }
         }
     }
@@ -929,11 +937,12 @@ class Render extends Base
     {
         $tstart = microtime(true);
         $q->prepare();
-        //$this->modx->log(1, print_r($q->toSQL(), 1));
         if ($q->stmt->execute()) {
             $this->modx->queryTime += microtime(true) - $tstart;
             $this->modx->executedQueries++;
-            return $q->stmt->fetchAll(implode('|', $fetchType));
+            // spread, а не implode('|'): несколько констант давали строку "7|0"
+            // вместо корректного int-режима PDO. fetchAll(mode, ...args).
+            return $q->stmt->fetchAll(...$fetchType);
         }
         return [];
     }
