@@ -677,64 +677,24 @@ class LexiconManager
     }
 
     /**
-     * ЕДИНЫЙ источник формата лексикон-ключа (грабер И редактор зовут ЭТУ функцию,
-     * чтобы ключи не разъезжались). PURE/STATIC — только из $options.
-     * Формат: {prefix}_{parentFieldName}_{fieldName} либо {prefix}_{fieldName};
-     * idx добавляется суффиксом ТОЛЬКО если он не пустой/не 0 (idx=0 → без суффикса).
+     * ЕДИНЫЙ источник формата лексикон-ключа. Логика вынесена в {@see LexiconKeyHelper};
+     * метод сохранён делегатом для обратной совместимости вызовов LexiconManager::getLexiconKey.
      */
     public static function getLexiconKey(array $options): string
     {
-        $fieldName       = $options['fieldName'] ?? '';
-        $idx             = $options['idx'] ?? '';
-        $parentFieldName = $options['parentFieldName'] ?? '';
-        $prefix          = $options['prefix'] ?? '';
-
-        $lexiconKey = $parentFieldName
-            ? "{$prefix}_{$parentFieldName}_$fieldName"
-            : "{$prefix}_$fieldName";
-
-        return $idx ? "{$lexiconKey}_$idx" : $lexiconKey;
+        return LexiconKeyHelper::getLexiconKey($options);
     }
 
-    /**
-     * ЕДИНЫЙ источник КОНСТРУКЦИИ parentFieldName: добавляет один сегмент цепочки.
-     * Вложенный список вносит "{field}" (idx 0) либо "{field}_{idx}" (idx > 0).
-     * Грабер (ContentParser) зовёт инкрементально при рекурсии, редактор
-     * (FieldWriter) — сворачивая путь. Меняешь схему вложенных ключей — ЗДЕСЬ.
-     */
+    /** Делегат → {@see LexiconKeyHelper::appendLexiconParent} (сохранён для совместимости). */
     public static function appendLexiconParent(string $parent, string $field, int $idx): string
     {
-        $segment = $idx ? "{$field}_{$idx}" : $field;
-        return $parent !== '' ? "{$parent}_{$segment}" : $segment;
+        return LexiconKeyHelper::appendLexiconParent($parent, $field, $idx);
     }
 
-    /**
-     * Полный лексикон-ключ поля по ПУТИ строк [{field,idx},…] + имя поля. Сворачивает
-     * путь через appendLexiconParent (parentFieldName) и форматирует листом через
-     * getLexiconKey (idx листа = idx последнего сегмента). Пустой путь → top-level
-     * поле ({prefix}_{field}). Та же схема, что грабер строит при нарезке.
-     */
+    /** Делегат → {@see LexiconKeyHelper::getLexiconKeyForPath} (сохранён для совместимости). */
     public static function getLexiconKeyForPath(string $prefix, array $path, string $fieldName): string
     {
-        if ($prefix === '' || $fieldName === '') {
-            return '';
-        }
-        $parent  = '';
-        $leafIdx = 0;
-        foreach ($path as $seg) {
-            $field = (string)($seg['field'] ?? '');
-            if ($field === '') {
-                continue;
-            }
-            $leafIdx = (int)($seg['idx'] ?? 0);
-            $parent  = self::appendLexiconParent($parent, $field, $leafIdx);
-        }
-        return self::getLexiconKey([
-            'prefix'          => $prefix,
-            'parentFieldName' => $parent,
-            'fieldName'       => $fieldName,
-            'idx'             => $leafIdx,
-        ]);
+        return LexiconKeyHelper::getLexiconKeyForPath($prefix, $path, $fieldName);
     }
 
     /**
