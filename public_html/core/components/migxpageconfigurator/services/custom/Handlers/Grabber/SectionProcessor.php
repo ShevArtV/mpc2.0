@@ -164,16 +164,19 @@ class SectionProcessor
         // (правки сохранены, ушедшие поля/секции убраны, новые добавлены), с
         // updContent — перезапись контентом шаблона. Решает mergeSectionFields.
         if (!empty($sectionValues)) {
+            // array_values: ключи $sectionValues начинаются с 1 ($i++ в начале
+            // цикла) → json_encode дал бы объект {"1":…}. Нормализуем к чистому
+            // JSON-массиву секций с 0-based ключами.
             $this->properties['resource']->setTVValue(
                 $this->properties['commonConfigTvName'],
-                json_encode($sectionValues, JSON_UNESCAPED_UNICODE)
+                json_encode(array_values($sectionValues), JSON_UNESCAPED_UNICODE)
             );
         }
 
         if (!empty($this->properties['sbpSectionValues'])) {
             $staticBlocksResource->setTVValue(
                 $this->properties['commonConfigTvName'],
-                json_encode($this->properties['sbpSectionValues'], JSON_UNESCAPED_UNICODE)
+                json_encode(array_values($this->properties['sbpSectionValues']), JSON_UNESCAPED_UNICODE)
             );
         }
 
