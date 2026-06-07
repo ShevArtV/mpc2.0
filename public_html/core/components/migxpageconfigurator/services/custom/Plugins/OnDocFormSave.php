@@ -21,14 +21,15 @@ class OnDocFormSave extends PluginHandler
         // Аудит правок из админки в лог изменений — ДО re-cut (handleFile его бы
         // перетёр своим ре-грабом). Диффит со снимком OnBeforeDocFormSave.
         $resource = $this->scriptProperties['resource'] ?? null;
-        if ($resource instanceof \modResource) {
-            (new \MpcServices\Handlers\AdminAudit($this->modx))->logChanges(
-                $resource,
-                (int)$this->modx->getOption('mpc_static_block_page_id', null, 1)
-            );
+        if (!$resource instanceof \modResource) {
+            return; // событие без ресурса (или не modResource) — нечего обрабатывать
         }
+        (new \MpcServices\Handlers\AdminAudit($this->modx))->logChanges(
+            $resource,
+            (int)$this->modx->getOption('mpc_static_block_page_id', null, 1)
+        );
 
-        $ctx = $this->scriptProperties['resource']->get('context_key');
+        $ctx = $resource->get('context_key');
         if ($this->modx->context->get('key') !== $ctx) {
             $this->modx->switchContext($ctx);
         }
@@ -81,7 +82,7 @@ class OnDocFormSave extends PluginHandler
             return;
         }
         $resource = $this->modx->getObject('modResource', $staticBlocksPageId);
-        if (!$config = $resource->getTVValue($Mpc->grabber->properties['commonConfigTvName'])) {
+        if (!$resource || !$config = $resource->getTVValue($Mpc->grabber->properties['commonConfigTvName'])) {
             return;
         }
         $lexiconsFiltered[$staticBlocksPageLexiconFilename] = [];
@@ -107,7 +108,7 @@ class OnDocFormSave extends PluginHandler
             return;
         }
         $resource = $this->modx->getObject('modResource', $contactsPageId);
-        if (!$contacts = $resource->getTVValue($Mpc->grabber->properties['contactsTvName'])) {
+        if (!$resource || !$contacts = $resource->getTVValue($Mpc->grabber->properties['contactsTvName'])) {
             return;
         }
         $lexiconsFiltered[$contactsPageLexiconFilename] = [];

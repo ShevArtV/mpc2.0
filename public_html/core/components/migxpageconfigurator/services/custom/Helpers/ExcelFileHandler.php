@@ -104,6 +104,10 @@ class ExcelFileHandler
 
     public function getDataFromFile(string $path): array
     {
+        // существующий .xlsx-файл (не произвольный путь/расширение)
+        if (!is_file($path) || strtolower(pathinfo($path, PATHINFO_EXTENSION)) !== 'xlsx') {
+            return [];
+        }
         $reader = ReaderFactory::createFromType('xlsx');
         $reader->open($path);
 

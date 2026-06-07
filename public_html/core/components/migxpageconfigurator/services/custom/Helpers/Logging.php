@@ -27,9 +27,11 @@ class Logging
     /**
      * @param bool|null $debug
      */
-    public function __construct(?bool $debug = true)
+    public function __construct(?bool $debug = false)
     {
-        $this->debug = $debug;
+        // по умолчанию выключено: иначе логи пишутся и на проде. Кому нужно —
+        // передаёт true явно (или прокидывает mpc_dev_mode).
+        $this->debug = (bool)$debug;
         $this->initialize();
     }
 

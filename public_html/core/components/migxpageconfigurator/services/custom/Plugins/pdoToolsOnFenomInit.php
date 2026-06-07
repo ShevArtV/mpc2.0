@@ -80,7 +80,12 @@ class pdoToolsOnFenomInit extends PluginHandler
     {
         $path = $args[0];
         $dir = $args[1] ?? 'basePath';
-        $filepath = $this->$dir . rtrim(trim($path),'/');
+        // whitelist свойства: иначе $this->$dir дал бы доступ к любому свойству
+        // (modx, scriptProperties, …) через аргумент Fenom.
+        if (!in_array($dir, ['basePath', 'corePath'], true)) {
+            $dir = 'basePath';
+        }
+        $filepath = ($this->$dir ?? '') . rtrim(trim($path), '/');
         if (file_exists($filepath)) {
             $path .= '?v=' . date('dmYHis', filemtime($filepath));
         }
@@ -89,11 +94,15 @@ class pdoToolsOnFenomInit extends PluginHandler
 
     private function include($args)
     {
-        $path = $args[0];
-        $filepath = $this->corePath . $path;
-        if (file_exists($filepath)) {
-            $content = file_get_contents($path);
-            return str_replace('##', '{', $content);
+        $path = (string)$args[0];
+        // Читаем ПРОВЕРЕННЫЙ путь внутри corePath (а не сырой $path) и держим
+        // границу каталога через realpath — иначе LFI (../../, абсолютный путь).
+        $filepath = rtrim($this->corePath, '/') . '/' . ltrim($path, '/');
+        $real     = realpath($filepath);
+        $baseReal = realpath($this->corePath);
+        if ($real !== false && $baseReal !== false
+            && strpos($real, rtrim($baseReal, '/') . '/') === 0 && is_file($real)) {
+            return str_replace('##', '{', (string)file_get_contents($real));
         }
         return '';
     }

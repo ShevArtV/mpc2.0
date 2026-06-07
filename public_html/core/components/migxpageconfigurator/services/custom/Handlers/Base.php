@@ -85,9 +85,13 @@ class Base
         );
         if ($excludeLexiconFilename) {
             $corePath = $this->properties['corePath'] ?? $this->modx->getOption('core_path');
-            $excludeLexiconFieldsPath = $corePath . $excludeLexiconFilename;
-            if (is_file($excludeLexiconFieldsPath)) {
-                include $excludeLexiconFieldsPath;
+            // realpath-граница: настройка mpc_exclude_lexicons_filename с '../'
+            // или абсолютным путём иначе дала бы include произвольного файла (LFI).
+            $real     = realpath($corePath . $excludeLexiconFilename);
+            $baseReal = realpath($corePath);
+            if ($real !== false && $baseReal !== false
+                && strpos($real, rtrim($baseReal, '/') . '/') === 0 && is_file($real)) {
+                include $real;
             }
         }
 
