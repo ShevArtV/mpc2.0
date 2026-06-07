@@ -504,7 +504,9 @@ class Mpc
     public function getResourceLexicons(int $rid, ?int $templateId): array
     {
         $lang = $_lang = [];
-        $cultureKey = $this->modx->getOption('cultureKey');
+        // cultureKey идёт в путь к файлу лексикона — basename отсекает traversal
+        // (defense-in-depth: значение могло прийти не только из mpc_lang-cookie).
+        $cultureKey = basename((string)$this->modx->getOption('cultureKey'));
         $baseLexiconPath = $this->properties['corePath'] . 'components/' . $this->properties['lexiconsNamespace'] . '/lexicon/' . $cultureKey . '/';
         foreach ($this->getLexiconFilenames($rid, $templateId ?: 0) as $filename) {
             $path = $baseLexiconPath . $filename . '.inc.php';
@@ -556,7 +558,10 @@ class Mpc
         }
 
         if (!empty($_COOKIE['mpc_lang'])) {
-            $this->modx->setOption('cultureKey', $_COOKIE['mpc_lang']);
+            // cookie клиентский → попадает в cultureKey, а тот в путь к файлу
+            // лексикона (getResourceLexicons). basename режет traversal, не
+            // ломая формат culture (как в FieldWriter, решение S12).
+            $this->modx->setOption('cultureKey', basename((string)$_COOKIE['mpc_lang']));
         }
     }
 

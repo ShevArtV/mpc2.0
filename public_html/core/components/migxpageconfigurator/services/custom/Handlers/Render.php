@@ -44,7 +44,9 @@ class Render extends Base
             $this->properties['excludeFields'] = json_decode($excludeFields, 1);
         }
         $this->pdo = $this->modx->getService('pdoTools') ?? $this->modx;
-        $this->pdo->config['elementsPath'] = str_replace('\\', '/', $this->pdo->config['elementsPath']);
+        // Фолбэк на $modx (нет pdoTools) не содержит ключа elementsPath —
+        // ?? '' убирает undefined-index/deprecation, поведение прежнее (пустой путь).
+        $this->pdo->config['elementsPath'] = str_replace('\\', '/', $this->pdo->config['elementsPath'] ?? '');
     }
 
     /**
@@ -257,9 +259,14 @@ class Render extends Base
         $staticConfig = '';
         // resourceConfig — конфиг самого ресурса; typeConfig — конфиг типа
         // страницы (mpcType; ключ TV исторически с префиксом donor_).
-        $resourceConfig = $this->reformatConfig(json_decode($resourceData['tvs'][$this->properties['commonConfigTvName']], true));
-        $typeConfig = $resourceData['tvs']['donor_' . $this->properties['commonConfigTvName']]
-            ? $this->reformatConfig(json_decode($resourceData['tvs']['donor_' . $this->properties['commonConfigTvName']], true)) : [];
+        // ?? '' на случай отсутствия TV-ключа: json_decode('') → null →
+        // reformatConfig() → [] (прежнее поведение «пустой конфиг»), но без
+        // undefined-index warning при ресурсе без TV конфигуратора.
+        $cfgTv    = $this->properties['commonConfigTvName'];
+        $donorTv  = 'donor_' . $cfgTv;
+        $resourceConfig = $this->reformatConfig(json_decode((string)($resourceData['tvs'][$cfgTv] ?? ''), true));
+        $typeConfig = !empty($resourceData['tvs'][$donorTv])
+            ? $this->reformatConfig(json_decode((string)$resourceData['tvs'][$donorTv], true)) : [];
         // Приоритет рендера: тип — база, ресурс перекрывает (resource > type).
         $sections = array_merge($typeConfig, $resourceConfig);
 

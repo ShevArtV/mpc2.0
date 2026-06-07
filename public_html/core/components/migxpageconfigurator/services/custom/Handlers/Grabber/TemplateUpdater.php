@@ -47,7 +47,18 @@ class TemplateUpdater
         }
 
         $Template = new Template($this->modx);
+
+        // Атомарность: шаблон + тип-ресурс + TV. Без транзакции сбой
+        // resource->save() оставлял «шаблон без типа». Все операции —
+        // fromArray+save на одном соединении (Base::update), своих коммитов
+        // нет → rollBack откатывает всё. $tx=false (соединение не поднялось)
+        // → деградируем к прежнему не-транзакционному поведению.
+        $tx = $this->modx->beginTransaction();
+
         if (!$template = $Template->update($tplData)) {
+            if ($tx) {
+                $this->modx->rollBack();
+            }
             return null;
         }
 
@@ -73,10 +84,17 @@ class TemplateUpdater
         ]);
 
         if (!$resource->save()) {
+            if ($tx) {
+                $this->modx->rollBack();
+            }
             return null;
         }
 
         $Template->addTemplateVariables($template->get('id'), $tplData['template_var_ids']);
+
+        if ($tx) {
+            $this->modx->commit();
+        }
 
         return $resource;
     }

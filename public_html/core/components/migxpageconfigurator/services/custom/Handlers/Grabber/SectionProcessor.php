@@ -87,7 +87,12 @@ class SectionProcessor
 
         $commonConfig = $result['data']['object'];
         $commonConfigData = $commonConfig->toArray();
-        $this->properties['multipleFormtabs'] = explode('||', $commonConfigData['extended']['multiple_formtabs']);
+        // multiple_formtabs может отсутствовать/быть не строкой (битый/новый
+        // конфиг) → explode по не-строке = TypeError. Гард сохраняет обычный
+        // путь (строка → explode), иначе пустой список.
+        $multipleFormtabs = $commonConfigData['extended']['multiple_formtabs'] ?? '';
+        $this->properties['multipleFormtabs'] = is_string($multipleFormtabs)
+            ? explode('||', $multipleFormtabs) : [];
 
         $i = 0;
         $sectionValues = [];

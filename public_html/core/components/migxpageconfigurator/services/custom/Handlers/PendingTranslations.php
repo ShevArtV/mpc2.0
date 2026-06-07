@@ -37,7 +37,10 @@ class PendingTranslations
     /** Путь к сайдкар-файлу pending для языка/ресурса. */
     private function path(string $lang, string $rid): string
     {
-        return $this->lexiconBasePath . $lang . '/.pending/' . $rid . '.json';
+        // Компоненты пути приходят из вызывающего кода — отсекаем traversal.
+        // basename безопасен: lang = [a-z]{2,8}, rid санитизируется до
+        // [a-zA-Z0-9_-] выше по стеку, так что для валидных значений это no-op.
+        return $this->lexiconBasePath . basename($lang) . '/.pending/' . basename($rid) . '.json';
     }
 
     /** Список непереведённых ключей языка/ресурса (пусто, если файла нет). */
@@ -71,7 +74,7 @@ class PendingTranslations
         if (!is_dir($dir)) {
             mkdir($dir, 0755, true);
         }
-        file_put_contents($p, json_encode($keys, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT));
+        file_put_contents($p, json_encode($keys, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT), LOCK_EX);
     }
 
     /** Снять ключ с pending (перевод введён). No-op, если ключа там нет. */

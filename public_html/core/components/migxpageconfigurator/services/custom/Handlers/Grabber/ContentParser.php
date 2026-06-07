@@ -128,8 +128,13 @@ class ContentParser
                     continue 2;
             }
             foreach ($items as $k => $row) {
-                $lexiconOptions['idx'] = $k;
-                $lexiconOptions['fieldName'] = $fieldName;
+                // Свежий набор (не наследуем остаток от цикла $entries): база
+                // parentFieldName — из $options, как в основном цикле (стр. 53).
+                $lexiconOptions = [
+                    'fieldName'       => $fieldName,
+                    'parentFieldName' => $options['parentFieldName'] ?? '',
+                    'idx'             => $k,
+                ];
                 $value = $this->fieldValueExtractor->$method($row, $lexiconOptions);
                 $value = !is_array($value) ? json_decode($value, true) : $value;
                 $preview = $value[0][$pathKey] ?? '';
