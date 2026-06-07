@@ -90,3 +90,7 @@
 /.idea/modules.xml
 /.idea/php.xml
 /.idea/vcs.xml
+/public_html/core/components/migxpageconfigurator/lexicon/en/tpl-shablon-primer.inc.php
+
+# Рабочие отчёты code review — не в репозиторий
+CODE-REVIEW*.md
