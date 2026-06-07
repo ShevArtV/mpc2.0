@@ -566,6 +566,89 @@ class FieldWriter
         return $this->result(true, 'seeded', ['json' => $newJson]);
     }
 
+    /**
+     * Копирование секций из ресурса-ТИПА в ресурс (кнопка «Скопировать секции из
+     * типа» в гриде mpc_config). Два режима:
+     *   - 'merge'     — добавить секции типа, которых ещё нет у ресурса (по ключу
+     *                   MIGX_formname+lexicon_prefix); существующие правки целы;
+     *   - 'overwrite' — заменить конфиг ресурса конфигом типа целиком.
+     * В обоих режимах копируются лексикон-ключи добавленных секций (по prefix) из
+     * файла типа в файл ресурса. Секции добавляются с НОВЫМИ ключами (append) —
+     * не по индексу типа, чтобы не затирать чужие секции ресурса.
+     *
+     * @return array result(); data.json — новый конфиг ресурса, data.sections —
+     *               сколько секций добавлено/скопировано.
+     */
+    public function copySectionsFromType(\modResource $resource, string $mode = 'merge'): array
+    {
+        $rid = (int)$resource->get('id');
+        $typeRes = $this->resolveLevelResource('type', $rid);
+        if (!$typeRes) {
+            return $this->result(false, 'Ресурс-тип не найден для шаблона');
+        }
+        $typeConfig = json_decode((string)$typeRes->getTVValue($this->configTvName), true);
+        if (!is_array($typeConfig) || !$typeConfig) {
+            return $this->result(false, 'У типа нет секций для копирования');
+        }
+
+        $keyOf = static function ($s): string {
+            return (string)($s['MIGX_formname'] ?? '') . '|'
+                . (string)($s['lexicon_prefix'] ?? ($s['section_name'] ?? ''));
+        };
+
+        $resourceConfig = json_decode((string)$resource->getTVValue($this->configTvName), true);
+        if (!is_array($resourceConfig)) {
+            $resourceConfig = [];
+        }
+
+        if ($mode === 'overwrite') {
+            $newConfig = array_values($typeConfig);
+            $copiedSections = $newConfig;
+        } else {
+            $existing = [];
+            foreach ($resourceConfig as $s) {
+                if (is_array($s)) {
+                    $existing[$keyOf($s)] = true;
+                }
+            }
+            $newConfig = array_values($resourceConfig);
+            $copiedSections = [];
+            foreach ($typeConfig as $s) {
+                if (!is_array($s) || isset($existing[$keyOf($s)])) {
+                    continue;
+                }
+                $newConfig[] = $s;          // append с новым ключом
+                $copiedSections[] = $s;
+            }
+        }
+
+        $newJson = json_encode(array_values($newConfig), JSON_UNESCAPED_UNICODE);
+        $resource->setTVValue($this->configTvName, $newJson);
+
+        // Лексикон-ключи скопированных секций (по lexicon_prefix) тип → ресурс.
+        if ($this->useLexicons && $copiedSections) {
+            $writer    = $this->lexiconWriter();
+            $typeIdent = $writer->identifier((int)$typeRes->get('id'));
+            $resIdent  = $writer->identifier($rid);
+            if ($typeIdent !== '' && $resIdent !== '' && $typeIdent !== $resIdent) {
+                $typeLex = $writer->all($typeIdent);
+                foreach ($copiedSections as $s) {
+                    $prefix = (string)($s['lexicon_prefix'] ?? '');
+                    if ($prefix === '') {
+                        continue;
+                    }
+                    foreach ($typeLex as $key => $val) {
+                        if (strpos((string)$key, $prefix) === 0) {
+                            $writer->set($resIdent, (string)$key, (string)$val);
+                        }
+                    }
+                }
+            }
+        }
+
+        return $this->result(true, 'ok', ['json' => $newJson, 'sections' => count($copiedSections)]);
+    }
+
     /** Есть ли в media-записи лексикон-ключи (существующая запись vs новая). */
     private function recordHasLexiconKeys(LexiconWriter $writer, string $ident, $current): bool
     {

@@ -113,3 +113,10 @@ $_lang['mpctype']                       = 'Тип страницы';
 $_lang['mpctype_create_here']           = 'Создать тип страницы здесь';
 $_lang['mpctypecollection']             = 'Коллекция типов';
 $_lang['mpctypecollection_create_here'] = 'Создать коллекцию типов здесь';
+
+// Кнопки «Дополнить / Перезаписать секции из типа» (тулбар MIGX-грида mpc_config)
+$_lang['mpc_copy_sections_ok_merge']        = 'Добавлено секций из типа: %d';
+$_lang['mpc_copy_sections_ok_overwrite']    = 'Секции перезаписаны из типа';
+$_lang['mpc_copy_sections_ok_clear']        = 'Секции очищены';
+$_lang['mpc_copy_sections_err_no_id']       = 'Не удалось определить ресурс';
+$_lang['mpc_copy_sections_err_no_resource'] = 'Ресурс не найден';

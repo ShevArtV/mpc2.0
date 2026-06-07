@@ -113,3 +113,10 @@ $_lang['mpctype']                       = 'Page type';
 $_lang['mpctype_create_here']           = 'Create page type here';
 $_lang['mpctypecollection']             = 'Types collection';
 $_lang['mpctypecollection_create_here'] = 'Create types collection here';
+
+// "Append / Overwrite sections from type" buttons (mpc_config MIGX grid toolbar)
+$_lang['mpc_copy_sections_ok_merge']        = 'Sections added from type: %d';
+$_lang['mpc_copy_sections_ok_overwrite']    = 'Sections overwritten from type';
+$_lang['mpc_copy_sections_ok_clear']        = 'Sections cleared';
+$_lang['mpc_copy_sections_err_no_id']       = 'Could not determine resource';
+$_lang['mpc_copy_sections_err_no_resource'] = 'Resource not found';

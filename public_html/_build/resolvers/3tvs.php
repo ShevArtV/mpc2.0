@@ -49,15 +49,18 @@ if ($transport->xpdo) {
             ],
             'resources' => ''
         ],
+        // Флаг-хранилище для copyConfig: НЕ привязан к шаблонам → не показывается
+        // в форме ресурса. Управляется кнопкой «Скопировать секции из типа» в
+        // тулбаре MIGX-грида mpc_config (процессор resource/copysections взводит
+        // его через setTVValue, copyConfig сбрасывает). get/setTVValue работают
+        // независимо от привязки к шаблону.
         'copy_sections' => [
             'type' => 'checkbox',
             'caption' => 'Копировать секции из шаблона?',
             'description' => '',
             'category' => 'MigxPageConfigurator',
             'elements' => 'Да==1',
-            'templates' => [
-                'Вывод содержимого'
-            ],
+            'templates' => [],
             'resources' => ''
         ],
         'mpc_config' => [
@@ -98,8 +101,10 @@ if ($transport->xpdo) {
         case xPDOTransport::ACTION_INSTALL:
         case xPDOTransport::ACTION_UPGRADE:
             foreach ($tvs as $name => $data) {
+                // Инициализируем на КАЖДОЙ итерации: иначе TV без templates
+                // унаследовал бы привязки предыдущего TV (пустой массив = отвязать).
+                $templates = ['templates' => []];
                 if ($data['templates'] && is_array($data['templates'])) {
-                    $templates = [];
                     foreach ($data['templates'] as $template) {
                         $temp = _getTemplateId($template, $modx, true);
                         $templates['templates'][$temp['id']] = $temp;
