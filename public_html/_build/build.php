@@ -667,7 +667,7 @@ class modExtraPackage
     protected function events(){
         /** @noinspection PhpIncludeInspection */
         $events = include($this->config['elements'] . 'events.php');
-        if(!empty($vents)){
+        if(empty($events)){ // была опечатка $vents → гард не срабатывал; пропускаем, если событий нет
             return;
         }
         $attributes = [

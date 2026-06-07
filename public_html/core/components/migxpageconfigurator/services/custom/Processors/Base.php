@@ -14,9 +14,9 @@ use MpcServices\Helpers\Response;
 class Base
 {
     /**
-     * @var \ModX
+     * @var \modX
      */
-    public \ModX $modx;
+    public \modX $modx;
     /**
      * @var string
      */
