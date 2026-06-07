@@ -32,4 +32,13 @@ return [
         'value' => 300,
         'area'  => 'main',
     ],
+    // Белый список HTML-атрибутов для sanitizeHtml редактора (csv). Предзаполнен
+    // безопасным набором — разработчику не нужно искать дефолты в коде. Пусто →
+    // fallback DEFAULT_ALLOWED_ATTRS в rte.js. on*/javascript:/опасный style
+    // режутся всегда (жёстко в коде, не через эту настройку).
+    'mpcve_allowed_attrs' => [
+        'xtype' => 'textfield',
+        'value' => 'class,id,title,dir,lang,role,style,href,target,rel,name,download,src,alt,width,height,srcset,sizes,loading,decoding,type,media,start,colspan,rowspan,scope,datetime',
+        'area'  => 'editor',
+    ],
 ];
