@@ -92,6 +92,12 @@ class SpecialTagProcessor
             }
             $symbol     = trim((string)$parse->getAttribute('data-mpc-symbol')) ?: (!empty($properties['isStatic']) ? '##' : '{');
             $params     = trim((string)$parse->getAttribute('data-mpc-parse'));
+            // $params вставляется в {$_modx->parseChunk("...", $params)} — `}` закрыл
+            // бы Fenom-тег и дал инъекцию. Легитимный массив-литерал `}` не содержит;
+            // есть → подменяем пустым массивом (defense поверх trust каттера, V5).
+            if (strpos($params, '}') !== false) {
+                $params = '[]';
+            }
             $path       = $this->properties['pathToChunks'] . $chunk;
             $parseHtml  = $this->parser->getHTMLString($parse);
             $parseHtmlNew = $symbol . '$_modx->parseChunk("@FILE ' . $path . '", ' . $params . ')}';

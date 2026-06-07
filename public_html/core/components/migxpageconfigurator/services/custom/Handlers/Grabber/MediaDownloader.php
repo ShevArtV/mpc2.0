@@ -44,6 +44,7 @@ class MediaDownloader
         curl_setopt($ch, CURLOPT_NOBODY, true);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         curl_setopt_array($ch, $this->curlSecurityOpts());
+        curl_setopt_array($ch, $this->curlResolveOpt($url)); // пин IP (anti-rebinding, V4)
         curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
         curl_setopt($ch, CURLOPT_MAXREDIRS, 5);
         curl_setopt($ch, CURLOPT_TIMEOUT, 10);
@@ -105,7 +106,24 @@ class MediaDownloader
                 return false; // приватный/зарезервированный/loopback/link-local
             }
         }
+        // Пиним проверенный IP — чтобы curl не резолвил DNS заново (anti DNS-rebinding
+        // TOCTOU, V4). Берём первый прошедший проверку адрес.
+        $this->safeIp[strtolower($host)] = $ips[0];
         return true;
+    }
+
+    /** host(lower) => проверенный IP для CURLOPT_RESOLVE (anti-rebinding). */
+    protected array $safeIp = [];
+
+    /** CURLOPT_RESOLVE-пин проверенного IP для хоста URL (порты 80/443). */
+    protected function curlResolveOpt(string $url): array
+    {
+        $host = strtolower((string)(parse_url($url, PHP_URL_HOST) ?? ''));
+        if ($host === '' || empty($this->safeIp[$host])) {
+            return [];
+        }
+        $ip = $this->safeIp[$host];
+        return [CURLOPT_RESOLVE => [$host . ':80:' . $ip, $host . ':443:' . $ip]];
     }
 
     /**
@@ -176,6 +194,7 @@ class MediaDownloader
         $ch = curl_init($url);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         curl_setopt_array($ch, $this->curlSecurityOpts());
+        curl_setopt_array($ch, $this->curlResolveOpt($url)); // пин IP (anti-rebinding, V4)
         curl_setopt($ch, CURLOPT_HEADER, false);
         curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
         curl_setopt($ch, CURLOPT_MAXREDIRS, 5);
@@ -382,6 +401,7 @@ class MediaDownloader
             CURLOPT_CONNECTTIMEOUT => 10,
             CURLOPT_USERAGENT      => 'Mozilla/5.0 (compatible; MPC/2.0)',
         ]);
+        curl_setopt_array($ch, $this->curlResolveOpt($url)); // пин IP (anti-rebinding, V4)
         $content  = curl_exec($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         curl_close($ch);

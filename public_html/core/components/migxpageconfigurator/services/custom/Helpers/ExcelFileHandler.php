@@ -54,6 +54,11 @@ class ExcelFileHandler
 
     private function createFile(array $keys, array $headerLabels, array $data, string $filename, ?string $dir = ''): string
     {
+        // Дефолтный путь тоже в границах assets: $dir/$filename с ../ вышли бы
+        // наружу (override проверяется ниже, а базовый путь — нет) (V7).
+        if (strpos((string)$dir, '..') !== false || strpos($filename, '..') !== false) {
+            return '';
+        }
         $pathToReports = $this->assetsPath . $dir;
         $filePath = $this->assetsPath . $dir . $filename;
 
