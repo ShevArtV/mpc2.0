@@ -29,7 +29,10 @@ export MPC_PHP=/usr/local/php/php-7.4/bin/php
 | `elements <type\|all>` | Создать/обновить элементы из `elements/create/` (snippet/tv/plugin/resource…). |
 | `configs sync` | Применить сид MIGX-конфигов (`migx_configs.json`, merge: новые поля + сохранение правок). |
 | `cache clear [id,…]` | Очистить запечённые `parsed/` (без id — все; безопасно, регенерируются). |
-| `settings apply [файл]` | Системные настройки (upsert по `key`). |
+| `settings apply [файл]` | Настройки MODX: системные (`modSystemSetting`) и контекстные (`modContextSetting`, per-key `'context'` в манифесте). Upsert по ключу. |
+| `settings list [--namespace=ns] [--context=web] [--key=часть]` | Список настроек: системных или контекстных (с `--context`), фильтр по `--namespace` и/или по части ключа `--key` (LIKE). |
+| `clientconfig apply [файл]` | Настройки ClientConfig (`cgSetting` + `cgContextValue` при `'context'`). `'group'` — группа для новой настройки. Требует установленного ClientConfig. |
+| `clientconfig list [--group=имя] [--key=часть]` | Список настроек ClientConfig по группе (id или label) и/или части ключа `--key` (LIKE). |
 | `events apply [файл]` | Привязки плагинов к событиям. Декларативно: набор приводится к указанному (bind недостающих + unbind лишних) для каждого перечисленного плагина. |
 | `packages apply [файл]` | Установка (локальный `.transport.zip` или провайдер по имени) / удаление пакетов. Деструктив → `--force`. |
 | `lexicon export-all` | Экспорт всех лексиконов «всё одним файлом» (XLSX). |
@@ -47,7 +50,12 @@ export MPC_PHP=/usr/local/php/php-7.4/bin/php
 ## Манифесты
 
 PHP-файлы, возвращающие массив (`return [...]`). Шаблоны — в `console/examples/`:
-`resources.example.php`, `settings.example.php`, `events.example.php`, `packages.example.php`.
+`resources.example.php`, `settings.example.php`, `clientconfig.example.php`,
+`events.example.php`, `packages.example.php`.
+
+Настройки (`settings`/`clientconfig`) поддерживают per-key `'context'` в спеке —
+запись идёт в контекстную таблицу (`modContextSetting` / `cgContextValue`);
+без `'context'` — системная/базовая. Для `clientconfig` `'context'` необязателен.
 
 ### База манифестов и дефолты имён
 

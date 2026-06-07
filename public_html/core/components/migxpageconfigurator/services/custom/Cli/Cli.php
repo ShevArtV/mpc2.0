@@ -3,6 +3,9 @@
 namespace MpcServices\Cli;
 
 use MpcServices\Cli\Apply\SettingsApply;
+use MpcServices\Cli\Apply\SettingsList;
+use MpcServices\Cli\Apply\ClientConfigApply;
+use MpcServices\Cli\Apply\ClientConfigList;
 use MpcServices\Cli\Apply\EventsApply;
 use MpcServices\Cli\Apply\ResourcesApply;
 use MpcServices\Cli\Apply\PackagesApply;
@@ -65,6 +68,9 @@ class Cli
         try {
             switch ($group) {
                 case 'settings':
+                    return $this->settings($action, $args, $opts, $out);
+                case 'clientconfig':
+                    return $this->clientConfig($action, $args, $opts, $out);
                 case 'events':
                 case 'resources':
                 case 'packages':
@@ -108,9 +114,6 @@ class Cli
         $only   = (string)($opts['only'] ?? '');
 
         switch ($group) {
-            case 'settings':
-                $res = (new SettingsApply($this->modx))->apply($manifest, $dryRun);
-                break;
             case 'events':
                 $res = (new EventsApply($this->modx))->apply($manifest, $dryRun);
                 break;
@@ -129,6 +132,77 @@ class Cli
             $out->plan($res['data']['plan']);
         }
         return $out->result($res);
+    }
+
+    /**
+     * Настройки MODX: системные (modSystemSetting) и контекстные (modContextSetting).
+     *   settings apply [файл]   — per-key 'context' в манифесте → контекстная;
+     *   settings list [--namespace=ns] [--context=web] — список.
+     */
+    private function settings(string $action, array $args, array $opts, Output $out): int
+    {
+        if ($action === 'list') {
+            $res = (new SettingsList($this->modx))->list(
+                (string)($opts['namespace'] ?? ''),
+                (string)($opts['context'] ?? ''),
+                (string)($opts['key'] ?? '')
+            );
+            if (!empty($res['data']['settings'])) {
+                $out->settings($res['data']['settings']);
+            }
+            return $out->result($res);
+        }
+        if ($action === 'apply') {
+            $file = ManifestLoader::resolve($this->modx, 'settings', (string)($args[0] ?? ''));
+            if (!is_file($file)) {
+                return $out->result(['success' => false, 'message' =>
+                    "Манифест не найден: $file" . PHP_EOL .
+                    'Положите файл в базу манифестов (mpc_manifests_path) или укажите путь явно.']);
+            }
+            $manifest = ManifestLoader::load($file);
+            $res = (new SettingsApply($this->modx))->apply($manifest, !empty($opts['dry-run']));
+            if (!empty($res['data']['plan'])) {
+                $out->plan($res['data']['plan']);
+            }
+            return $out->result($res);
+        }
+        return $out->result(['success' => false, 'message' =>
+            'settings apply [файл] [--dry-run]  |  settings list [--namespace=ns] [--context=web] [--json]']);
+    }
+
+    /**
+     * Настройки ClientConfig (cgSetting / cgContextValue).
+     *   clientconfig apply [файл]  — per-key 'context'/'group' в манифесте;
+     *   clientconfig list [--group=имя|id] — список настроек по группе.
+     */
+    private function clientConfig(string $action, array $args, array $opts, Output $out): int
+    {
+        if ($action === 'list') {
+            $res = (new ClientConfigList($this->modx))->list(
+                (string)($opts['group'] ?? ''),
+                (string)($opts['key'] ?? '')
+            );
+            if (!empty($res['data']['settings'])) {
+                $out->settings($res['data']['settings']);
+            }
+            return $out->result($res);
+        }
+        if ($action === 'apply') {
+            $file = ManifestLoader::resolve($this->modx, 'clientconfig', (string)($args[0] ?? ''));
+            if (!is_file($file)) {
+                return $out->result(['success' => false, 'message' =>
+                    "Манифест не найден: $file" . PHP_EOL .
+                    'Положите файл в базу манифестов (mpc_manifests_path) или укажите путь явно.']);
+            }
+            $manifest = ManifestLoader::load($file);
+            $res = (new ClientConfigApply($this->modx))->apply($manifest, !empty($opts['dry-run']));
+            if (!empty($res['data']['plan'])) {
+                $out->plan($res['data']['plan']);
+            }
+            return $out->result($res);
+        }
+        return $out->result(['success' => false, 'message' =>
+            'clientconfig apply [файл] [--dry-run]  |  clientconfig list [--group=имя] [--json]']);
     }
 
     /** Нарезка шаблона/страницы: mpc cut <file|all> [--upd] [--force] [--ctx=web]. */
@@ -275,7 +349,10 @@ class Cli
             '',
             'Группы:',
             '  resources apply [файл]   — дерево ресурсов (idempotent, матч по context+pagetitle)',
-            '  settings  apply [файл]   — системные настройки (upsert по key)',
+            '  settings  apply [файл]   — настройки MODX: системные + контекстные (per-key "context")',
+            '  settings  list [--namespace=ns] [--context=web] [--key=часть]   — список настроек',
+            '  clientconfig apply [файл]   — настройки ClientConfig (cgSetting/cgContextValue)',
+            '  clientconfig list [--group=имя] [--key=часть]   — список настроек ClientConfig',
             '  events    apply [файл]   — привязки плагинов к событиям (bind/unbind по файлу)',
             '  packages  apply [файл]   — установка/удаление пакетов (нужен --force)',
             '  cut <файл.tpl|all> [--upd]   — нарезка: без --upd умный мерж, с --upd полная перезапись',
