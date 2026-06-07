@@ -140,11 +140,17 @@ class PlaceholderProcessor
                 }
 
                 $html = $this->unwrapBlock($props['html']);
-                $fieldHTMLNew = str_replace(
-                    ['##', 'subject', '^', 'html', 'limit', 'offset'],
-                    [$firstSymbol, $complexName, $props['level'], $html, $limit, $offset],
-                    $this->properties['samples'][$sampleKey]
-                );
+                // strtr (один проход), а не каскадный str_replace: токены
+                // 'html'/'limit'/'offset'/'subject' могут встречаться внутри
+                // подставляемого $complexName/$html и были бы заменены повторно.
+                $fieldHTMLNew = strtr($this->properties['samples'][$sampleKey], [
+                    '##'      => (string)$firstSymbol,
+                    'subject' => $complexName,
+                    '^'       => (string)$props['level'],
+                    'html'    => $html,
+                    'limit'   => (string)$limit,
+                    'offset'  => (string)$offset,
+                ]);
 
                 if (!$field->hasAttribute('data-mpc-unwrap')) {
                     $field->setInnerHtml($fieldHTMLNew);
@@ -574,11 +580,14 @@ class PlaceholderProcessor
      */
     public function wrapInCondition(string $conditions, string $html, ?string $firstSymbol = '{'): string
     {
-        return str_replace(
-            ['##', 'condition', 'html'],
-            [$firstSymbol, $conditions, $html],
-            $this->properties['samples']['if']
-        );
+        // strtr, а не каскадный str_replace: иначе токен 'html' внутри уже
+        // подставленного $conditions (поле вида html_content под data-mpc-if)
+        // повторно заменился бы реальным HTML. strtr заменяет за один проход.
+        return strtr($this->properties['samples']['if'], [
+            '##'        => (string)$firstSymbol,
+            'condition' => $conditions,
+            'html'      => $html,
+        ]);
     }
 
     /**

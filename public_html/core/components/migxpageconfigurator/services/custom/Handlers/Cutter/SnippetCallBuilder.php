@@ -148,16 +148,22 @@ class SnippetCallBuilder
 
     /**
      * Рекурсивно разрешает наследование пресетов (extends).
+     * $seen защищает от циклического extends (A→B→A → переполнение стека).
      */
-    private function getExtends(string $preset, ?array $extends = []): array
+    private function getExtends(string $preset, array $extends = [], array $seen = []): array
     {
+        if (in_array($preset, $seen, true)) {
+            return $extends; // цикл extends — прерываем
+        }
+        $seen[] = $preset;
+
         $parts = explode('.', $preset);
-        $presetData = $this->properties['presets'][$parts[0]][$parts[1]] ?? null;
+        $presetData = $this->properties['presets'][$parts[0]][$parts[1] ?? ''] ?? null;
 
         if ($presetData && is_array($presetData)) {
             $extends = array_merge($extends, $presetData);
             if (!empty($presetData['extends'])) {
-                $extends = $this->getExtends($presetData['extends'], $extends);
+                $extends = $this->getExtends($presetData['extends'], $extends, $seen);
             }
         }
 

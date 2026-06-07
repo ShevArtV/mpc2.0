@@ -128,12 +128,17 @@ class Cutter extends Base
             return;
         }
         $files = scandir($pathToPresets);
-        unset($files[0], $files[1]);
-        if (count($files)) {
-            foreach ($files as $file) {
-                $presetsFilePath = $pathToPresets . $file;
-                $this->properties['presets'][str_replace('.inc.php', '', $file)] = include($presetsFilePath);
+        foreach ($files as $file) {
+            // только .inc.php-файлы: иначе include подхватит .DS_Store, бэкапы
+            // редактора, поддиректории → parse-error и срыв нарезки.
+            if (substr($file, -8) !== '.inc.php') {
+                continue;
             }
+            $presetsFilePath = $pathToPresets . $file;
+            if (!is_file($presetsFilePath)) {
+                continue;
+            }
+            $this->properties['presets'][str_replace('.inc.php', '', $file)] = include($presetsFilePath);
         }
     }
 
@@ -250,13 +255,17 @@ class Cutter extends Base
         $replacement = [];
 
         foreach ($items as $item) {
-            if (!$fields = $this->getItems($this->parser->getHTMLString($item), '[data-mpc-cfield]')) {
+            $itemHtml = $this->parser->getHTMLString($item);
+            if (!$fields = $this->getItems($itemHtml, '[data-mpc-cfield]')) {
                 continue;
             }
             $contactAttrValue = explode('|', trim($item->getAttribute('data-mpc-contact')));
-            if (!$valueField = $this->getItems($this->parser->getHTMLString($item), '[data-mpc-cfield="value"]')[0]) {
+            // getItems может вернуть null (нет совпадений) → null[0] на PHP 8 — fatal.
+            $valueFields = $this->getItems($itemHtml, '[data-mpc-cfield="value"]');
+            if (empty($valueFields[0])) {
                 continue;
             }
+            $valueField = $valueFields[0];
 
             $href  = $valueField->getAttribute('href');
             // ->text() (метод), НЕ ->textContent (свойство): последнее в этой версии

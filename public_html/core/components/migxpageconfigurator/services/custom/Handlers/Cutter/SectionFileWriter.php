@@ -23,6 +23,9 @@ class SectionFileWriter
     private PlaceholderProcessor $placeholderProcessor;
     private SpecialTagProcessor $specialTagProcessor;
 
+    /** Полный HTML шаблона — нужен для wrapper-секций (вставка в <body>). */
+    private string $fullHtml = '';
+
     public function __construct(
         array $properties,
         Parser $parser,
@@ -43,6 +46,9 @@ class SectionFileWriter
         foreach ($innerChunks as $innerChunk) {
             $chunkName = $innerChunk->getAttribute('data-mpc-chunk');
 
+            if ($chunkName === '' || strpos($chunkName, '..') !== false) {
+                continue; // пустое имя или path traversal — пропускаем
+            }
             if (in_array($chunkName, $this->chunkNames)) {
                 continue;
             }
@@ -78,6 +84,9 @@ class SectionFileWriter
     public function createSectionFiles(Element $section): void
     {
         $sectionName = trim((string)$section->getAttribute('data-mpc-section'));
+        if ($sectionName === '' || strpos($sectionName, '..') !== false) {
+            return; // пустое имя или path traversal — не пишем
+        }
         $isStatic = $section->hasAttribute('data-mpc-static');
         $fileName = $sectionName . $this->properties['extension'];
         $sectionsDir = $this->properties['pdotoolsElementsPath'] . $this->properties['pathToSections'];
@@ -92,7 +101,9 @@ class SectionFileWriter
         if ($isStatic) {
             // Создаём _unstatic-вариант: ## → { (standalone) или $var (внутри Fenom-блока)
             $content = file_get_contents($sectionsDir . $fileName);
-            file_put_contents($unstaticFilePath, $this->convertStaticToUnstatic($content));
+            if (file_put_contents($unstaticFilePath, $this->convertStaticToUnstatic($content)) === false) {
+                throw new \RuntimeException('Не удалось записать _unstatic-файл: ' . $unstaticFilePath);
+            }
         } elseif (file_exists($unstaticFilePath)) {
             // Секция больше не статичная — _unstatic не нужен
             unlink($unstaticFilePath);
@@ -222,9 +233,15 @@ class SectionFileWriter
         if (strpos((string)$element->getAttribute('data-mpc-section'), $this->properties['wrapperName']) !== false) {
             $fullHtml = $this->getFullHtml();
             if ($fullHtml) {
-                $properties['html'] = preg_replace(
+                // callback, а не строка-замена: иначе `$1`/`\1` внутри HTML-контента
+                // секции интерпретировались бы preg_replace как backreference и
+                // искажали вывод. $m[1] сохраняет атрибуты <body…>.
+                $sectionHtml = $properties['html'];
+                $properties['html'] = preg_replace_callback(
                     '/<body(.*?)>(.*?)<\/body>/s',
-                    '<body\1>' . $properties['html'] . '</body>',
+                    static function (array $m) use ($sectionHtml): string {
+                        return '<body' . $m[1] . '>' . $sectionHtml . '</body>';
+                    },
                     $fullHtml
                 );
             }
@@ -251,7 +268,9 @@ class SectionFileWriter
         // _edit/_unstatic_edit вариантов (реальному пользователю атрибуты не мешают).
         // На прод-деплое mpc_edit_mode=0 → перенарезка даёт чистые файлы.
         // _unstatic генерится из ЭТОГО же файла (createSectionFiles) → тоже с маркерами.
-        file_put_contents($pathToFile, !empty($this->properties['editMode']) ? $htmlMarked : $properties['html']);
+        if (file_put_contents($pathToFile, !empty($this->properties['editMode']) ? $htmlMarked : $properties['html']) === false) {
+            throw new \RuntimeException('Не удалось записать файл секции/чанка: ' . $pathToFile);
+        }
     }
 
     /**
@@ -261,8 +280,6 @@ class SectionFileWriter
     {
         $this->fullHtml = $html;
     }
-
-    private string $fullHtml = '';
 
     private function getFullHtml(): string
     {

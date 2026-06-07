@@ -86,9 +86,13 @@ class SpecialTagProcessor
         }
 
         foreach ($parses as $parse) {
+            $chunk = trim((string)$parse->getAttribute('data-mpc-chunk'));
+            if ($chunk === '' || strpos($chunk, '..') !== false || strpos($chunk, '"') !== false) {
+                continue; // пустой / path traversal / поломка @FILE-строки кавычкой
+            }
             $symbol     = trim((string)$parse->getAttribute('data-mpc-symbol')) ?: (!empty($properties['isStatic']) ? '##' : '{');
             $params     = trim((string)$parse->getAttribute('data-mpc-parse'));
-            $path       = $this->properties['pathToChunks'] . trim((string)$parse->getAttribute('data-mpc-chunk'));
+            $path       = $this->properties['pathToChunks'] . $chunk;
             $parseHtml  = $this->parser->getHTMLString($parse);
             $parseHtmlNew = $symbol . '$_modx->parseChunk("@FILE ' . $path . '", ' . $params . ')}';
 
@@ -111,7 +115,11 @@ class SpecialTagProcessor
         }
 
         foreach ($includes as $include) {
-            $path        = $this->properties['pathToChunks'] . trim((string)$include->getAttribute('data-mpc-chunk'));
+            $chunk = trim((string)$include->getAttribute('data-mpc-chunk'));
+            if ($chunk === '' || strpos($chunk, '..') !== false || strpos($chunk, '"') !== false) {
+                continue; // пустой / path traversal / поломка file:-пути кавычкой
+            }
+            $path        = $this->properties['pathToChunks'] . $chunk;
             $symbol      = trim((string)$include->getAttribute('data-mpc-symbol')) ?: '{';
             $includeHtml = $this->parser->getHTMLString($include);
             $includeHtmlNew = $symbol . 'include "file:' . $path . '"}';
