@@ -672,7 +672,7 @@ class modExtraPackage
         }
         $attributes = [
             xPDOTransport::PRESERVE_KEYS => true,
-            xPDOTransport::UPDATE_OBJECT => BUILD_EVENT_UPDATE,
+            xPDOTransport::UPDATE_OBJECT => !empty($this->config['update']['events']),
         ];
         foreach($events as $name => $data){
             $event = $this->modx->newObject('modEvent');
