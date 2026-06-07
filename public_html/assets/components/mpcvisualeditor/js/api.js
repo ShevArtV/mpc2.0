@@ -7,6 +7,7 @@ import { toast, choiceDialog } from './dom.js';
 function rawPost(action, payload) {
     var body = new FormData();
     body.append('action', action);
+    body.append('nonce', (S.cfg && S.cfg.nonce) || ''); // CSRF-токен
     Object.keys(payload || {}).forEach(function (k) {
         var v = payload[k];
         body.append(k, typeof v === 'object' ? JSON.stringify(v) : v);
@@ -73,6 +74,7 @@ export var api = {
     upload: function (action, file, extra) {
         var body = new FormData();
         body.append('action', action);
+        body.append('nonce', (S.cfg && S.cfg.nonce) || ''); // CSRF-токен
         body.append('file', file);
         Object.keys(extra || {}).forEach(function (k) {
             var v = extra[k];

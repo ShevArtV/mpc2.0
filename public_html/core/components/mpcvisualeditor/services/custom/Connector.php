@@ -33,6 +33,13 @@ class Connector
             return $this->error($this->modx->lexicon('mpcve_err_permission'));
         }
 
+        // CSRF: только cookie-сессии недостаточно — сверяем nonce из тела запроса
+        // с сессионным (фронт берёт его из window.mpcVEConfig). Внешний сайт
+        // токена не знает → fetch с credentials:'include' отбивается.
+        if (!$this->nonceValid($request)) {
+            return $this->error($this->modx->lexicon('mpcve_err_permission'));
+        }
+
         $action = (string)($request['action'] ?? '');
         switch ($action) {
             case 'fields/types':
@@ -99,6 +106,14 @@ class Connector
             default:
                 return $this->error('Unknown or not-yet-implemented action: ' . $action);
         }
+    }
+
+    /** Сверка CSRF-nonce запроса с сессионным (constant-time). */
+    private function nonceValid(array $request): bool
+    {
+        $sent   = (string)($request['nonce'] ?? '');
+        $stored = isset($_SESSION['mpcve_nonce']) ? (string)$_SESSION['mpcve_nonce'] : '';
+        return $sent !== '' && $stored !== '' && hash_equals($stored, $sent);
     }
 
     private function error(string $message): array

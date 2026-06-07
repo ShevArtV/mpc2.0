@@ -61,9 +61,26 @@ class Mpcve
             'editParam'    => $this->config['editParam'],
             'resourceId'   => $resource ? (int)$resource->get('id') : 0,
             'allowedTags'  => $allowedTags,
+            // CSRF-nonce: коннектор сверяет его с сессией на каждом write-действии.
+            'nonce'        => $this->nonce(),
             // Для кнопки «Открыть в админке» (тулбар).
             'managerUrl'   => (string)$this->modx->getOption('manager_url', null, '/manager/'),
         ];
+    }
+
+    /**
+     * CSRF-nonce редактора: один на сессию (стабилен между вкладками/перезагрузками).
+     * Хранится в сессии MODX (та же, что у коннектора). Пусто, если сессии нет.
+     */
+    public function nonce(): string
+    {
+        if (!isset($_SESSION)) {
+            return '';
+        }
+        if (empty($_SESSION['mpcve_nonce'])) {
+            $_SESSION['mpcve_nonce'] = bin2hex(random_bytes(16));
+        }
+        return (string)$_SESSION['mpcve_nonce'];
     }
 
     /**

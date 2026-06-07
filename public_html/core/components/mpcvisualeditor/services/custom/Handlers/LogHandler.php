@@ -30,6 +30,10 @@ class LogHandler
         if ($rid <= 0) {
             return $this->err('resourceId required');
         }
+        // anti-IDOR: не отдаём журнал (old/new значения) чужого ресурса.
+        if (!(new PermissionChecker($this->modx))->canViewResource($rid)) {
+            return $this->err($this->modx->lexicon('mpcve_err_permission'));
+        }
         $rows = (new ChangeLog($this->modx))->listFor($rid, (int)($request['limit'] ?? 100));
         $entries = array_map(function ($r) {
             // source (editor|admin) и level (resource|type|global) лежат в address.
@@ -73,6 +77,10 @@ class LogHandler
         $address = json_decode((string)$entry['address'], true);
         if (!is_array($address)) {
             return $this->err('некорректный адрес записи');
+        }
+        // anti-IDOR: откат пишет в ресурс из лог-записи — нужно право save на него.
+        if (!(new PermissionChecker($this->modx))->canEditResource((int)($address['resourceId'] ?? 0))) {
+            return $this->err($this->modx->lexicon('mpcve_err_permission'));
         }
         $old = $entry['old_value'];
         $res = $this->mpcve->writeField($address, $old);

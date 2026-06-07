@@ -39,4 +39,43 @@ class PermissionChecker
         }
         return (bool)$this->modx->hasPermission($this->permission);
     }
+
+    /**
+     * Право на запись КОНКРЕТНОГО ресурса (anti-IDOR): глобального mpcve_edit
+     * мало — проверяем resource-level политику save. sudo — bypass.
+     */
+    public function canEditResource(int $rid): bool
+    {
+        return $this->canPolicy($rid, 'save');
+    }
+
+    /**
+     * Право на просмотр КОНКРЕТНОГО ресурса (для log/list — не отдаём значения
+     * чужого ресурса). sudo — bypass.
+     */
+    public function canViewResource(int $rid): bool
+    {
+        return $this->canPolicy($rid, 'view');
+    }
+
+    private function canPolicy(int $rid, string $policy): bool
+    {
+        $user = $this->modx->user;
+        if (!$user || !$user->isAuthenticated('mgr')) {
+            return false;
+        }
+        if ($user->get('sudo')) {
+            return true;
+        }
+        if ($rid <= 0) {
+            return false;
+        }
+        $resource = $this->modx->getObject('modResource', $rid);
+        if (!$resource) {
+            return false;
+        }
+        // view фоллбэчит на load: на ряде политик именно load несёт «видимость».
+        return (bool)$resource->checkPolicy($policy)
+            || ($policy === 'view' && (bool)$resource->checkPolicy('load'));
+    }
 }

@@ -34,6 +34,7 @@ function beaconRelease() {
     if (!navigator.sendBeacon) { return; }
     var body = new FormData();
     body.append('action', 'lock/release');
+    body.append('nonce', (S.cfg && S.cfg.nonce) || ''); // CSRF-токен (как rawPost)
     body.append('resourceId', S.cfg.resourceId || 0);
     navigator.sendBeacon(S.cfg.connectorUrl, body);
 }

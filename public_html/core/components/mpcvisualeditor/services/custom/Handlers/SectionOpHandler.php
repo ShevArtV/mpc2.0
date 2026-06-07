@@ -39,6 +39,10 @@ class SectionOpHandler
         if ($resourceId <= 0) {
             return $this->err('resourceId required');
         }
+        // anti-IDOR: право save на конкретный ресурс.
+        if (!(new PermissionChecker($this->modx))->canEditResource($resourceId)) {
+            return $this->err($this->modx->lexicon('mpcve_err_permission'));
+        }
 
         $read = $this->mpcve->readConfig('resource', $resourceId);
         if (empty($read['success'])) {

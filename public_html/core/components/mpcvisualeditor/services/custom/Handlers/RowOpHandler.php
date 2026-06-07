@@ -34,6 +34,11 @@ class RowOpHandler
             $address['resourceId'] = (int)($request['resourceId'] ?? 0);
         }
 
+        // anti-IDOR: право save на конкретный ресурс, не только глобальный mpcve_edit.
+        if (!(new PermissionChecker($this->modx))->canEditResource((int)$address['resourceId'])) {
+            return ['success' => false, 'message' => $this->modx->lexicon('mpcve_err_permission'), 'data' => []];
+        }
+
         $res = $this->mpcve->rowOp($address);
 
         if (!empty($res['success'])) {

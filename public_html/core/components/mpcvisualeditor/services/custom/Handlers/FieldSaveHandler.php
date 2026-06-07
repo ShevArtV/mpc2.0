@@ -36,6 +36,11 @@ class FieldSaveHandler
             $address['resourceId'] = (int)($request['resourceId'] ?? 0);
         }
 
+        // anti-IDOR: глобального mpcve_edit мало — проверяем право save на сам ресурс.
+        if (!(new PermissionChecker($this->modx))->canEditResource((int)$address['resourceId'])) {
+            return ['success' => false, 'message' => $this->modx->lexicon('mpcve_err_permission'), 'data' => []];
+        }
+
         $value = $request['value'] ?? '';
         // Старое значение редактор присылает сам (`old`) — есть → запись откатываемая.
         $old = array_key_exists('old', $request) ? $request['old'] : null;
