@@ -6,6 +6,7 @@ use DiDom\Document;
 use DiDom\Element;
 use DiDom\Exceptions\InvalidSelectorException;
 use MpcServices\Handlers\Grabber\LexiconManager;
+use MpcServices\Handlers\Grabber\OptionFieldHelper;
 use MpcServices\Handlers\Parser;
 
 /**
@@ -470,7 +471,7 @@ class PlaceholderProcessor
             // фронт-редактор берёт опции из data-mpc-values в DOM, и ему нужны
             // НОРМАЛИЗОВАННЫЕ значения (иначе правка Case B «Собака||Кошка» сохраняла
             // бы сырое «Собака» мимо ключа лексикона `_sobaka`). @SELECT не трогаем.
-            $listValues = LexiconManager::normalizeInputOptionValues($listValues);
+            $listValues = OptionFieldHelper::normalizeInputOptionValues($listValues);
             // @SELECT: резолвим [[+PREFIX]]/[[+DBASE]] в реальные значения прямо в
             // атрибуте — иначе MODX гасит эти плейсхолдеры на рендере, и фронт-редактор
             // получает SQL без префикса таблицы (`FROM site_content`) → 0 опций.
@@ -766,14 +767,14 @@ class PlaceholderProcessor
      */
     private function listboxPlaceholder(Element $row, string $fieldName, string $firstSymbol, string $expr, string $parentFieldName, bool $deferVar, string $rawValues): string
     {
-        $parsed    = LexiconManager::classifyListboxOptions($rawValues);
+        $parsed    = OptionFieldHelper::classifyListboxOptions($rawValues);
         $dynamic   = $parsed['mode'] === 'dynamic';
         $keyPrefix = $this->lexiconManager->getSectionPrefix() . '_' . $fieldName . '_';
 
         // МУЛЬТИВЫБОР: значение — массив ключей. Лексиконы вкл (keyed/list + поле
         // лексиконится) → вывод через foreach (каждый ключ → капшен по лексикону,
         // ключи запекаются eager, `| lexicon` отложен); иначе → join ключей.
-        if (LexiconManager::isMultiOptionFtype((string)$row->getAttribute('data-mpc-ftype'))) {
+        if (OptionFieldHelper::isMultiOptionFtype((string)$row->getAttribute('data-mpc-ftype'))) {
             // Значение — строка нормализованных ключей через "||". Итерируем через split.
             $lex = !$dynamic && $this->shouldLexiconize('text', $fieldName, $parentFieldName);
             return $lex
@@ -784,7 +785,7 @@ class PlaceholderProcessor
         // ОДИНОЧНЫЙ listbox/option: ключ {prefix}_{field}_{$value} | lexicon, если
         // значение из списка опций и лексиконы вкл; иначе сырое {$value}. Значение
         // в БД уже нормализовано (FieldValueExtractor), сравниваем по norm.
-        $current = LexiconManager::normalizeOptionKey(trim($row->innerHtml()));
+        $current = OptionFieldHelper::normalizeOptionKey(trim($row->innerHtml()));
         $lexize  = !$dynamic
             && $this->shouldLexiconize('text', $fieldName, $parentFieldName)
             && in_array($current, array_column($parsed['options'], 'value'), true);

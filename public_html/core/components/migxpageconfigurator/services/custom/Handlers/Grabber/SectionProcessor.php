@@ -717,7 +717,7 @@ class SectionProcessor
         if ($values !== '') {
             // keyed → Caption==norm(value); list → norm(value) (транслит+lowercase);
             // @SELECT — как есть. Значения совпадают с ключами лексикона опций.
-            $def['inputOptionValues'] = LexiconManager::normalizeInputOptionValues($values);
+            $def['inputOptionValues'] = OptionFieldHelper::normalizeInputOptionValues($values);
             // Опции подразумевают тип-с-выбором. Если автор уже задал такой тип
             // (listbox/-multiple/option/radio/checkbox) — сохраняем его; иначе
             // (например ftype не задан) — дефолтим в listbox (выпадайку).

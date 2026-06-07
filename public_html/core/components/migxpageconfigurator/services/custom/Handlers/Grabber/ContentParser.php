@@ -90,7 +90,7 @@ class ContentParser
                 // MODX/migx — admin-сетка корректно round-trip'ит; массив-объект
                 // она бы застрингифила). Нормализуем из шаблонного "tg,ph" / "tg||ph".
                 // Рендер итерирует через `| split:'||'` (см. PlaceholderProcessor).
-                if (LexiconManager::isMultiOptionFtype((string)$row->getAttribute('data-mpc-ftype'))) {
+                if (OptionFieldHelper::isMultiOptionFtype((string)$row->getAttribute('data-mpc-ftype'))) {
                     $keys = preg_split('/\s*(?:,|\|\|)\s*/', (string)$val, -1, PREG_SPLIT_NO_EMPTY);
                     $val = implode('||', $keys ?: []);
                 }

@@ -87,13 +87,13 @@ class ResourceFieldGrabber
                 // из elements TV (БД) → лексикон mpc_resource_tv_<tv>_<value>, значение —
                 // нормализованный ключ опции (совпадает с ключом лексикона и рендером).
                 if ($this->useLexicons && $this->lexiconManager !== null
-                    && LexiconManager::isOptionTvType($tvType)
-                    && LexiconManager::classifyListboxOptions($elements)['mode'] !== 'dynamic') {
+                    && OptionFieldHelper::isOptionTvType($tvType)
+                    && OptionFieldHelper::classifyListboxOptions($elements)['mode'] !== 'dynamic') {
                     $this->lexiconManager->setContext('', false);
                     if ($this->lexiconManager->shouldLexiconize('text', $name)) {
                         $this->lexiconManager->writeTvOptionCaptions((int)$resource->get('id'), $name, $elements);
-                        $multiple = LexiconManager::isMultiOptionFtype($tvType);
-                        $resource->setTVValue($name, LexiconManager::normalizeListboxValue($value, $multiple));
+                        $multiple = OptionFieldHelper::isMultiOptionFtype($tvType);
+                        $resource->setTVValue($name, OptionFieldHelper::normalizeListboxValue($value, $multiple));
                         $written['tvs'][$name] = true;
                         continue;
                     }

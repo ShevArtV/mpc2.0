@@ -13,6 +13,7 @@ use MpcServices\Handlers\Cutter\SnippetCallBuilder;
 use MpcServices\Handlers\Cutter\SpecialTagProcessor;
 use MpcServices\Handlers\Cutter\SectionFileWriter;
 use MpcServices\Handlers\Grabber\LexiconManager;
+use MpcServices\Handlers\Grabber\OptionFieldHelper;
 
 /**
  * @author Arthur Shevchenko (https://t.me/ShevArtV)
@@ -417,13 +418,13 @@ class Cutter extends Base
             $tvType = $tvObj ? (string)$tvObj->get('type') : '';
             // Опционная TV (есть парсящиеся опции) — ЕДИНЫЙ с секциями плейсхолдер
             // капшена (префикс mpc_resource_tv_<tv>_), значение в БД нормализовано.
-            $tvOptions = $tvObj !== null && LexiconManager::isOptionTvType($tvType)
-                && LexiconManager::classifyListboxOptions((string)$tvObj->get('elements'))['mode'] !== 'dynamic';
+            $tvOptions = $tvObj !== null && OptionFieldHelper::isOptionTvType($tvType)
+                && OptionFieldHelper::classifyListboxOptions((string)$tvObj->get('elements'))['mode'] !== 'dynamic';
 
             if ($tvOptions && $lexiconize && !empty($this->properties['useLexicons'])
                 && $this->lexiconManager->shouldLexiconize('text', $name)) {
                 $pls = $this->placeholderProcessor->optionPlaceholder(
-                    'mpc_resource_tv_' . $name . '_', $expr, LexiconManager::isMultiOptionFtype($tvType)
+                    'mpc_resource_tv_' . $name . '_', $expr, OptionFieldHelper::isMultiOptionFtype($tvType)
                 );
             } else {
                 // content-type: для TV — по ТИПУ TV (number/date/email/url/file → без
