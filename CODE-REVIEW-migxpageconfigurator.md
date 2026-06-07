@@ -460,3 +460,24 @@
 4. **S6 (авторизация)** — `hasPermission()` во всех mgr-процессорах.
 5. **S8/S9/S10/S11** — whitelist системных настроек, перенос экспортов за webroot, whitelist класса, `htmlEncode` в гриде.
 6. Затем — функциональные HIGH (циклический `extends`, `null[0]`, `MIGX_formname`-инъекция, `fetchAll`-режим) и далее по списку.
+
+---
+
+## Финальный статус зачистки (после прохода по всем разделам)
+
+Все находки сверены с фактическим кодом и закрыты, кроме сознательно оставленных (с обоснованием). Каждая правка проверена на сохранение логики + `php -l`.
+
+### ✅ Исправлено
+- **Безопасность (CRITICAL/HIGH):** S1 (RCE `var_export`), S2 (webshell), S4 (LFI realpath), S5 (SSRF + content-sniffing), S6 (`hasPermission`), S7 (Fenom-инъекция шаблона), S9 (экспорты стримом, без публичного файла), S10 (whitelist класса), S11 (`htmlEncode`), S12 (culture `basename`), S13 (`json_encode`), MIGX_formname (экранирование), импорт: токен `random_bytes` + ZIP-slip.
+- **§2 Grabber:** background-image regex (любые кавычки), `multiple_formtabs` is_string-гард, `ContentParser` сброс `$lexiconOptions`, `TemplateUpdater` транзакция, SSRF/content-sniffing/`array_values`/null-guards.
+- **§3 Render/FieldWriter:** `elementsPath`/`tvs[commonConfigTvName]` null-guards, `fetchAll`-режим, `clearCache`, `is_scalar`/`is_string`-guards, `implode("\n")` (уже был).
+- **§4 Mpc/Lexicon:** `var_export`, traversal identifier, `cultureKey` basename (cookie+место использования), `PendingTranslations` LOCK_EX + basename, `$_lang` reset, `LOCK_EX`, `sanitizeValue` сохраняет `"0"`, `getCacheManager()`.
+- **§1 Cutter:** токены/backreference/extends/`null[0]`/traversal, экранирование кавычек в пресетах, событие `mpcOnGetNewHtml` (+`PlaceholderProcessor`).
+
+### ⏸️ Оставлено сознательно (правка рискованнее проблемы)
+- **S3 ManifestLoader** (CLI `require` явного пути): достижим только из CLI (после §5-гардов), оператор и так исполняет PHP; ужесточение ломает `apply <файл>`. By-design.
+- **§6 Logging:** уже безопасен — `debug=false` по умолчанию, все вызовы без аргумента (на проде не пишет).
+- **`setImgPlaceholder` `[0]`:** генерация имён плейсхолдеров, большой blast radius на рендер изображений; неочевидно, баг ли (img-поле = массив). Нужно полевое репро перед изменением.
+- **`moveRow` `$to >= $n`:** ложное срабатывание — корректно для переупорядочивания (move в конец = `$to=$n-1` работает).
+- **`writeConfigField` множественный `json_decode`:** микро-оптимизация, рефактор API `ConfigFieldWriter` рискован, выигрыш ничтожен (конфиг одного ресурса).
+- **NIT:** двойной парс DOM (эффективность), `mkdir 0777` (perms web vs CLI в распространяемом пакете), instance-кэш `getCascadeFieldsMap` (per-request — корректен).
