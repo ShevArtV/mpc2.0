@@ -66,7 +66,12 @@ class MigxpageconfiguratorLexiconsImportProcessor extends modProcessor
         $token  = 'imp_' . bin2hex(random_bytes(16));
         $stored = $tmpDir . $token . '.' . $ext;
         if (!@move_uploaded_file($_FILES['file']['tmp_name'], $stored)) {
-            // фолбэк для не-HTTP/тестового контекста
+            // Настоящая загрузка с упавшим move (диск/права) → ошибка, а не
+            // тихий copy в обход is_uploaded_file. copy-фолбэк — только для
+            // не-HTTP/тестового контекста (tmp_name не является uploaded-файлом).
+            if (is_uploaded_file($_FILES['file']['tmp_name'])) {
+                return $this->failure($this->modx->lexicon('mpc_err_cannot_read_file'));
+            }
             @copy($_FILES['file']['tmp_name'], $stored);
         }
 

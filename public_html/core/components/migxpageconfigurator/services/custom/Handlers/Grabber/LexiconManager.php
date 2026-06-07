@@ -245,7 +245,9 @@ class LexiconManager
 
     public function sanitizeValue(?string $value = ''): string
     {
-        if (!$value) {
+        // null/'' — пусто; но НЕ "0" (оно falsy в PHP) — иначе валидное
+        // лексикон-значение "0" терялось бы.
+        if ($value === null || $value === '') {
             return '';
         }
 
@@ -585,7 +587,8 @@ class LexiconManager
         // перевода), orphan-ключи (удалённые поля) выкидываются.
         $this->syncOtherLanguages($allLexicons);
 
-        $this->modx->cacheManager->refresh(['lexicon_topics' => []]);
+        // getCacheManager() гарантирует инстанс (cacheManager мог быть не загружен).
+        $this->modx->getCacheManager()->refresh(['lexicon_topics' => []]);
     }
 
     /**

@@ -169,7 +169,11 @@ class PlaceholderProcessor
 
             $this->modx->invokeEvent('mpcOnGetNewHtml', [
                 'fieldHTMLNew' => $fieldHTMLNew,
+                // 'Grabber' исторически = этот PlaceholderProcessor (имя неточное).
+                // Добавляем корректный ключ, legacy сохраняем для совместимости
+                // со сторонними слушателями события.
                 'Grabber' => $this,
+                'PlaceholderProcessor' => $this,
             ]);
 
             $fieldHTMLNew = isset($this->modx->event->returnedValues) && !empty($this->modx->event->returnedValues['fieldHTMLNew'])

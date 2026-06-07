@@ -78,7 +78,11 @@ class SnippetCallBuilder
                         $params .= "'$k' => $v," . PHP_EOL;
                     }
                 } else {
-                    $params .= "'$k' => '$v'," . PHP_EOL;
+                    // plain-значение в одинарно-кавыченном Fenom-литерале —
+                    // экранируем \ и ', иначе кавычка в значении (O'Reilly)
+                    // разорвёт вызов сниппета. $v не мутируем: ниже его читает toPls.
+                    $escaped = str_replace(['\\', "'"], ['\\\\', "\\'"], $v);
+                    $params .= "'$k' => '$escaped'," . PHP_EOL;
                 }
 
                 if ($k === 'toPls' && $v) {
