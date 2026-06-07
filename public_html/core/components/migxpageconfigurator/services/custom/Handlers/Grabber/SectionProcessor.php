@@ -94,15 +94,44 @@ class SectionProcessor
         $this->properties['multipleFormtabs'] = is_string($multipleFormtabs)
             ? explode('||', $multipleFormtabs) : [];
 
-        $i = 0;
-        $sectionValues = [];
-
         // Существующий конфиг ресурса — для умного мержа при перенарезке: правки
         // админа сохраняем, новые поля добавляем, ушедшие удаляем (см.
         // mergeSectionFields). Индекс по имени секции.
         $existingResourceSections = $this->indexConfigBySection(
             json_decode((string)$this->properties['resource']->getTVValue($this->properties['commonConfigTvName']), true) ?: []
         );
+
+        $sectionValues = $this->collectSectionValues($sections, $defaultFormTabs, $existingResourceSections);
+
+        $this->persistResourceFields($html);
+
+        if (!$this->persistConfigs($sectionValues, $staticBlocksResource, $commonConfig, $commonConfigData)) {
+            return;
+        }
+
+        if (!$this->properties['fromPlugin']) {
+            // overwrite=updContent: без `1` существующие переводы сохраняем (мерж),
+            // с `1` — шаблон перезаписывает (как контент секций).
+            $this->lexiconManager->createLexicons(
+                $this->lexiconManager->lexicons,
+                !empty($this->properties['updContent'])
+            );
+        }
+
+        $this->rebuildTrackedFields($html);
+
+        $this->response->success(__METHOD__, 'Section processing is complete.');
+    }
+
+    /**
+     * Этап цикла по секциям: для каждой data-mpc-section создаёт конфиг секции
+     * (если не копия), грабит значения и умно мержит с существующим конфигом
+     * ресурса. Возвращает значения секций (ключи 1..N, как $i++ в цикле).
+     */
+    private function collectSectionValues(iterable $sections, array $defaultFormTabs, array $existingResourceSections): array
+    {
+        $i = 0;
+        $sectionValues = [];
 
         foreach ($sections as $section) {
             $this->mediaDownloader->setCurrentSectionName('');
@@ -137,8 +166,16 @@ class SectionProcessor
             );
         }
 
-        // Имя файла секции — служебка типа страницы. Для mpcType пишем в
-        // file_name (mpc_type), для прочих ресурсов — в introtext (легаси).
+        return $sectionValues;
+    }
+
+    /**
+     * Этап: пишем имя файла секции (file_name для mpcType, иначе introtext) и,
+     * при updContent, грабим data-mpc-rfield/-tv в нативные поля/TV ресурса
+     * (уровень type, перекрывается контент-ресурсом при рендере).
+     */
+    private function persistResourceFields(string $html): void
+    {
         $grabResource = $this->properties['resource'];
         $fileName = $this->properties['fileName'] ?? '';
         if ($grabResource->get('class_key') === 'mpcType') {
@@ -149,9 +186,7 @@ class SectionProcessor
         $grabResource->save();
 
         // Грабим data-mpc-rfield / data-mpc-tv в нативные поля / TV ресурса.
-        // Это данные уровня type (ресурс-тип), которые при рендере перекрывает
-        // контент-ресурс (приоритет resource > type). Overwrite, кроме
-        // защищённых полей (alias/uri/template + структурный минимум).
+        // Overwrite только при updContent, кроме защищённых полей.
         if ($this->properties['updContent']) {
             // Медиа из rfield/tv складываем в подпапку "resource" источника.
             $this->mediaDownloader->setCurrentSectionName('resource');
@@ -164,10 +199,15 @@ class SectionProcessor
             ))->grab($html, $grabResource);
             $grabResource->save();
         }
+    }
 
-        // Пишем ВСЕГДА (не только при updContent): без updContent это умный мерж
-        // (правки сохранены, ушедшие поля/секции убраны, новые добавлены), с
-        // updContent — перезапись контентом шаблона. Решает mergeSectionFields.
+    /**
+     * Этап записи конфигов: mpc_config ресурса (умный мерж/перезапись — ВСЕГДА),
+     * staticBlocksPage и общий migxConfig (multiple_formtabs). Возвращает false
+     * при сбое save общего конфига (как раньше прерывало handleSections).
+     */
+    private function persistConfigs(array $sectionValues, $staticBlocksResource, $commonConfig, array $commonConfigData): bool
+    {
         if (!empty($sectionValues)) {
             // array_values: ключи $sectionValues начинаются с 1 ($i++ в начале
             // цикла) → json_encode дал бы объект {"1":…}. Нормализуем к чистому
@@ -189,21 +229,9 @@ class SectionProcessor
         $commonConfig->fromArray($commonConfigData);
         if (!$commonConfig->save()) {
             $this->response->error(__METHOD__, 'Failed to save configuration.');
-            return;
+            return false;
         }
-
-        if (!$this->properties['fromPlugin']) {
-            // overwrite=updContent: без `1` существующие переводы сохраняем (мерж),
-            // с `1` — шаблон перезаписывает (как контент секций).
-            $this->lexiconManager->createLexicons(
-                $this->lexiconManager->lexicons,
-                !empty($this->properties['updContent'])
-            );
-        }
-
-        $this->rebuildTrackedFields($html);
-
-        $this->response->success(__METHOD__, 'Section processing is complete.');
+        return true;
     }
 
     /**
