@@ -36,8 +36,6 @@ $_lang['setting_mpc_tmplvar_ids'] = 'List of TV IDs to add by the created templa
 $_lang['setting_mpc_tmplvar_ids_desc'] = 'the default value is set during installation';
 $_lang['setting_mpc_tpl_file_extension'] = 'Extension of files with layout';
 $_lang['setting_mpc_tpl_file_extension_desc'] = 'default value .tpl';
-$_lang['setting_mpc_path_to_create'] = 'The path to the elements being created';
-$_lang['setting_mpc_path_to_create_desc'] = 'the path to the folder with files in which there is a description of the elements to be created.';
 $_lang['setting_mpc_wrapper_name'] = 'Name of the wrapper section';
 $_lang['setting_mpc_wrapper_name_desc'] = 'this is the base section in which all the other sections are wrapped.';
 $_lang['setting_mpc_path_to_samples'] = 'Path to sample files';
@@ -45,19 +43,15 @@ $_lang['setting_mpc_path_to_samples_desc'] = 'default value components/migxpagec
 $_lang['setting_mpc_dev_mode'] = 'Enable development mode?';
 $_lang['setting_mpc_dev_mode_desc'] = 'in this mode, each time mgr_tpl.php is launched, the cache is cleared';
 $_lang['setting_mpc_common_thumb_params'] = 'General Thumbnail Creation Options';
-$_lang['setting_mpc_common_thumb_params_desc'] = 'default value q=60&zc=1&f=webp';
-$_lang['setting_mpc_thumb_format'] = 'Thumbnail format';
-$_lang['setting_mpc_thumb_format_desc'] = 'default value webp';
+$_lang['setting_mpc_common_thumb_params_desc'] = 'default value q=90&zc=1&f=webp';
 $_lang['setting_mpc_thumb_snippet'] = 'Snippet for creating thumbnails';
-$_lang['setting_mpc_thumb_snippet_desc'] = 'default value is pThumb. For a non-cacheable call, prefix the snippet name with a !';
+$_lang['setting_mpc_thumb_snippet_desc'] = 'default value is mpcThumb (bundled wrapper over pThumb). For a non-cacheable call, prefix the snippet name with a !';
 $_lang['setting_mpc_expand_attr'] = 'Attribute for SVG images that need to be added to the markup';
 $_lang['setting_mpc_expand_attr_desc'] = 'default value data-svg.';
 $_lang['setting_mpc_download_paths'] = 'Paths to downloadable files';
 $_lang['setting_mpc_download_paths_desc'] = 'in JSON format; default is {"images":"","videos":"","audios":"","others":""}';
 $_lang['setting_mpc_download_extensions'] = 'Allowed file extensions for auto-download';
 $_lang['setting_mpc_download_extensions_desc'] = 'comma-separated list of extensions; default: jpg,jpeg,png,webp,mp4,mp3,txt';
-$_lang['setting_mpc_mime_to_ext'] = 'MIME type to file extension mapping';
-$_lang['setting_mpc_mime_to_ext_desc'] = 'JSON object; used to detect file extension by Content-Type for URLs without an extension';
 $_lang['setting_mpc_lazyload_enabled'] = 'Enable lazy loading?';
 $_lang['setting_mpc_lazyload_enabled_desc'] = '';
 $_lang['setting_mpc_expand_enabled'] = 'Enable svg expansion?';
@@ -84,8 +78,6 @@ $_lang['setting_mpc_allowed_tags'] = 'Tags allowed in lexicons';
 $_lang['setting_mpc_allowed_tags_desc'] = '';
 $_lang['setting_mpc_allow_modx_tags'] = 'Allow Fenom and Modx tags in lexicons';
 $_lang['setting_mpc_allow_modx_tags_desc'] = '';
-$_lang['setting_mpc_resource_lexicon_keys_path'] = 'Resource lexicon key file path';
-$_lang['setting_mpc_resource_lexicon_keys_path_desc'] = 'must contain an array of $_rlang with keys to store the values of fields such as longtitle, description, and in general any fields that need to be translated but are not in the partitions';
 
 $_lang['mpc_err_no_file']          = 'No file uploaded';
 $_lang['mpc_err_invalid_filetype'] = 'Only .xlsx or .zip files are accepted';
@@ -120,3 +112,23 @@ $_lang['mpc_copy_sections_ok_overwrite']    = 'Sections overwritten from type';
 $_lang['mpc_copy_sections_ok_clear']        = 'Sections cleared';
 $_lang['mpc_copy_sections_err_no_id']       = 'Could not determine resource';
 $_lang['mpc_copy_sections_err_no_resource'] = 'Resource not found';
+
+// --- Settings area headers ---
+$_lang['area_paths']    = 'Paths';
+$_lang['area_media']    = 'Media';
+$_lang['area_lexicons'] = 'Lexicons & languages';
+$_lang['area_contacts'] = 'Contacts';
+$_lang['area_resource'] = 'Resource fields';
+$_lang['area_general']  = 'General';
+
+// --- Missing settings ---
+$_lang['setting_mpc_tv_category'] = 'Category for auto-created TVs';
+$_lang['setting_mpc_tv_category_desc'] = 'owner category for TVs created from data-mpc-tv. Empty = the mpc package own category.';
+$_lang['setting_mpc_cmp_resource_label_field'] = 'Resource label field in lexicons UI';
+$_lang['setting_mpc_cmp_resource_label_field_desc'] = 'resource field shown as label in the lexicon export/import CMP. Default pagetitle.';
+$_lang['setting_mpc_contact_lexicon_fields'] = 'Translatable contact fields';
+$_lang['setting_mpc_contact_lexicon_fields_desc'] = 'contact sub-fields that get lexiconized (caption/value/fvalue/attributes, comma-separated). Default caption.';
+$_lang['setting_mpc_exclude_fields_path'] = 'Path to section service-fields file';
+$_lang['setting_mpc_exclude_fields_path_desc'] = 'JSON list of service fields excluded from content at render. Path relative to the core/ folder.';
+$_lang['setting_mpc_mime_to_ext_path'] = 'Path to MIME-to-extension map';
+$_lang['setting_mpc_mime_to_ext_path_desc'] = 'JSON file mapping MIME types to extensions (for URLs without an extension). Path relative to the core/ folder.';

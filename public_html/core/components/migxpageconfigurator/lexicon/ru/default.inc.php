@@ -36,8 +36,6 @@ $_lang['setting_mpc_tmplvar_ids'] = 'Список ID TV для добавлен�
 $_lang['setting_mpc_tmplvar_ids_desc'] = 'значение по умолчанию задается при установке';
 $_lang['setting_mpc_tpl_file_extension'] = 'Расширение файлов с вёрсткой';
 $_lang['setting_mpc_tpl_file_extension_desc'] = 'значение по умолчанию .tpl';
-$_lang['setting_mpc_path_to_create'] = 'Путь к создаваемым элементам';
-$_lang['setting_mpc_path_to_create_desc'] = 'путь к папке с файлами в которых есть описание элементов, которые нужно создать.';
 $_lang['setting_mpc_wrapper_name'] = 'Имя секции-обёртки';
 $_lang['setting_mpc_wrapper_name_desc'] = 'это базовая секция в которую заворачиваются все остальные секции.';
 $_lang['setting_mpc_path_to_samples'] = 'Путь к файлам-образцам';
@@ -45,11 +43,9 @@ $_lang['setting_mpc_path_to_samples_desc'] = 'значение по умолча
 $_lang['setting_mpc_dev_mode'] = 'Включить режим разработки?';
 $_lang['setting_mpc_dev_mode_desc'] = 'в этом режиме при каждом запуске mgr_tpl.php очищается кэш';
 $_lang['setting_mpc_common_thumb_params'] = 'Общие параметры создания миниатюр';
-$_lang['setting_mpc_common_thumb_params_desc'] = 'значение по умолчанию q=60&zc=1&f=webp';
-$_lang['setting_mpc_thumb_format'] = 'Формат миниатюр';
-$_lang['setting_mpc_thumb_format_desc'] = 'значение по умолчанию webp';
+$_lang['setting_mpc_common_thumb_params_desc'] = 'значение по умолчанию q=90&zc=1&f=webp';
 $_lang['setting_mpc_thumb_snippet'] = 'Сниппет для создания миниатюр';
-$_lang['setting_mpc_thumb_snippet_desc'] = 'значение по умолчанию pThumb. Для некэшируемого вызова добавьте перед названием сниппета знак !';
+$_lang['setting_mpc_thumb_snippet_desc'] = 'значение по умолчанию mpcThumb (встроенная обёртка над pThumb). Для некэшируемого вызова добавьте перед названием сниппета знак !';
 $_lang['setting_mpc_expand_attr'] = 'Атрибут для SVG картинок, которые нужно добавить в разметку';
 $_lang['setting_mpc_expand_attr_desc'] = 'значение по умолчанию data-svg.';
 $_lang['setting_mpc_download_paths'] = 'Пути к загружаемым файлам';
@@ -80,12 +76,8 @@ $_lang['setting_mpc_allowed_tags'] = 'Тэги разрешённые в лек�
 $_lang['setting_mpc_allowed_tags_desc'] = '';
 $_lang['setting_mpc_allow_modx_tags'] = 'Разрешить тэги Fenom и Modx в лексиконах';
 $_lang['setting_mpc_allow_modx_tags_desc'] = '';
-$_lang['setting_mpc_resource_lexicon_keys_path'] = 'Путь к файлу ключей лексиконов ресурса';
-$_lang['setting_mpc_resource_lexicon_keys_path_desc'] = 'должен содержать массив $_rlang с ключами для хранения значений таких полей как longtitle, description и вообще любых полей которые нужно перевести, но которых нет в секциях';
 $_lang['setting_mpc_download_extensions'] = 'Разрешенные к автозагрузке расширения файлов';
 $_lang['setting_mpc_download_extensions_desc'] = 'список расширений разделенных запятыми; по умолчанию jpg,jpeg,png,webp,mp4,mp3,txt';
-$_lang['setting_mpc_mime_to_ext'] = 'Соответствие MIME-типов расширениям файлов';
-$_lang['setting_mpc_mime_to_ext_desc'] = 'JSON-объект; используется для определения расширения по Content-Type для URL без расширения';
 
 $_lang['mpc_err_no_file']          = 'Файл не загружен';
 $_lang['mpc_err_invalid_filetype'] = 'Допустимы только файлы .xlsx или .zip';
@@ -120,3 +112,23 @@ $_lang['mpc_copy_sections_ok_overwrite']    = 'Секции перезаписа
 $_lang['mpc_copy_sections_ok_clear']        = 'Секции очищены';
 $_lang['mpc_copy_sections_err_no_id']       = 'Не удалось определить ресурс';
 $_lang['mpc_copy_sections_err_no_resource'] = 'Ресурс не найден';
+
+// --- Заголовки групп настроек ---
+$_lang['area_paths']    = 'Пути';
+$_lang['area_media']    = 'Медиа';
+$_lang['area_lexicons'] = 'Лексиконы и языки';
+$_lang['area_contacts'] = 'Контакты';
+$_lang['area_resource'] = 'Поля ресурса';
+$_lang['area_general']  = 'Общие';
+
+// --- Недостающие настройки ---
+$_lang['setting_mpc_tv_category'] = 'Категория автосоздаваемых TV';
+$_lang['setting_mpc_tv_category_desc'] = 'категория-владелец TV, создаваемых из data-mpc-tv. Пусто — категория самого пакета mpc.';
+$_lang['setting_mpc_cmp_resource_label_field'] = 'Поле-подпись ресурса в интерфейсе лексиконов';
+$_lang['setting_mpc_cmp_resource_label_field_desc'] = 'поле ресурса, показываемое как подпись в CMP экспорта/импорта лексиконов. По умолчанию pagetitle.';
+$_lang['setting_mpc_contact_lexicon_fields'] = 'Переводимые поля контакта';
+$_lang['setting_mpc_contact_lexicon_fields_desc'] = 'под-поля контакта, которые лексиконятся (caption/value/fvalue/attributes через запятую). По умолчанию caption.';
+$_lang['setting_mpc_exclude_fields_path'] = 'Путь к файлу служебных полей секции';
+$_lang['setting_mpc_exclude_fields_path_desc'] = 'JSON со списком служебных полей, исключаемых из контента при рендере. Путь относительно папки core/.';
+$_lang['setting_mpc_mime_to_ext_path'] = 'Путь к карте MIME→расширение';
+$_lang['setting_mpc_mime_to_ext_path_desc'] = 'JSON-файл соответствия MIME-типов расширениям (для URL без расширения). Путь относительно папки core/.';
