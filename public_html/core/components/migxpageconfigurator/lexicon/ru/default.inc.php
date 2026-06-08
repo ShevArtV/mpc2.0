@@ -114,12 +114,12 @@ $_lang['mpc_copy_sections_err_no_id']       = 'Не удалось опреде�
 $_lang['mpc_copy_sections_err_no_resource'] = 'Ресурс не найден';
 
 // --- Заголовки групп настроек ---
-$_lang['area_paths']    = 'Пути';
-$_lang['area_media']    = 'Медиа';
-$_lang['area_lexicons'] = 'Лексиконы и языки';
-$_lang['area_contacts'] = 'Контакты';
-$_lang['area_resource'] = 'Поля ресурса';
-$_lang['area_general']  = 'Общие';
+$_lang['area_mpc_paths']    = 'Пути';
+$_lang['area_mpc_media']    = 'Медиа';
+$_lang['area_mpc_lexicons'] = 'Лексиконы и языки';
+$_lang['area_mpc_contacts'] = 'Контакты';
+$_lang['area_mpc_resource'] = 'Поля ресурса';
+$_lang['area_mpc_general']  = 'Общие';
 
 // --- Недостающие настройки ---
 $_lang['setting_mpc_tv_category'] = 'Категория автосоздаваемых TV';

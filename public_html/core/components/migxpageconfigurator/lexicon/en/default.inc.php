@@ -114,12 +114,12 @@ $_lang['mpc_copy_sections_err_no_id']       = 'Could not determine resource';
 $_lang['mpc_copy_sections_err_no_resource'] = 'Resource not found';
 
 // --- Settings area headers ---
-$_lang['area_paths']    = 'Paths';
-$_lang['area_media']    = 'Media';
-$_lang['area_lexicons'] = 'Lexicons & languages';
-$_lang['area_contacts'] = 'Contacts';
-$_lang['area_resource'] = 'Resource fields';
-$_lang['area_general']  = 'General';
+$_lang['area_mpc_paths']    = 'Paths';
+$_lang['area_mpc_media']    = 'Media';
+$_lang['area_mpc_lexicons'] = 'Lexicons & languages';
+$_lang['area_mpc_contacts'] = 'Contacts';
+$_lang['area_mpc_resource'] = 'Resource fields';
+$_lang['area_mpc_general']  = 'General';
 
 // --- Missing settings ---
 $_lang['setting_mpc_tv_category'] = 'Category for auto-created TVs';
