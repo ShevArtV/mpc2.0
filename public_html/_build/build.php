@@ -744,10 +744,17 @@ class modExtraPackage
         }
         $this->builder->putVehicle($vehicle);
 
+        // Ядро MODX держит modx_transport_packages.attributes в utf8 (3 байта),
+        // а в changelog есть эмодзи (4-байтные символы) → UPDATE падает с
+        // SQLSTATE 22007 / «Incorrect string value». Вырезаем 4-байтные символы
+        // на сборке, исходные доки не трогаем.
+        $strip4byte = static function ($text) {
+            return preg_replace('/[\x{10000}-\x{10FFFF}]/u', '', (string)$text);
+        };
         $attributes = [
-            'changelog' => file_get_contents($this->config['core'] . 'docs/changelog.txt'),
-            'license' => file_get_contents($this->config['core'] . 'docs/license.txt'),
-            'readme' => file_get_contents($this->config['core'] . 'docs/readme.txt'),
+            'changelog' => $strip4byte(file_get_contents($this->config['core'] . 'docs/changelog.txt')),
+            'license' => $strip4byte(file_get_contents($this->config['core'] . 'docs/license.txt')),
+            'readme' => $strip4byte(file_get_contents($this->config['core'] . 'docs/readme.txt')),
         ];
         // Модалка параметров при установке — только если у пакета есть форма
         // (_build[/<pkg>]/setup.options.php). Значения сабмитятся в $options

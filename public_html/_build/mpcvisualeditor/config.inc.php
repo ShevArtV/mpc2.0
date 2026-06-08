@@ -24,7 +24,7 @@ return [
     'name' => 'mpcVisualEditor',
     'name_lower' => 'mpcvisualeditor',
     'version' => '1.0.1',
-    'release' => 'alpha',
+    'release' => 'rc',
 
     // Пакетные ресурсы и сборочные каталоги — свои, не общие с mpc.
     'build' => dirname(__FILE__) . '/',
