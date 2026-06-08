@@ -146,9 +146,21 @@ class OnDocFormSave extends PluginHandler
         $allGrabberLexicons = array_merge(...array_values($Mpc->grabber->lexicons ?: [[]]));
 
         foreach ($config as $item) {
-            $result = $this->filterByPrefix($allGrabberLexicons, $item['lexicon_prefix'] ?? $item['MIGX_formname']);
+            $prefix = $item['lexicon_prefix'] ?? $item['MIGX_formname'];
+            $result = $this->filterByPrefix($allGrabberLexicons, $prefix);
             if ($item['is_static']) {
                 $lexicons[$staticBlocksPageLexiconFilename] = array_merge($result, $lexicons[$staticBlocksPageLexiconFilename]);
+                // Секция статична → её переводы живут на уровне page-types. При
+                // рендере ресурсный лексикон перебивает page-types (resource > type
+                // в Mpc::getLexiconFilenames), поэтому осиротевшие ключи этой секции
+                // в ресурсном файле НАДО вычистить — иначе они маскируют значения из
+                // page-types (значение «прилипало» к ресурсу после перевода секции в
+                // статику). $lexicons[resource] засеян всем старым содержимым файла с
+                // диска (выше), а createLexicons перепишет файл этим массивом.
+                $lexicons[$resourceLexiconFilename] = array_diff_key(
+                    $lexicons[$resourceLexiconFilename],
+                    $this->filterByPrefix($lexicons[$resourceLexiconFilename], $prefix)
+                );
             } else {
                 $lexicons[$resourceLexiconFilename] = array_merge($result, $lexicons[$resourceLexiconFilename]);
             }
