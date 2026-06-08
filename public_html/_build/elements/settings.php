@@ -153,7 +153,7 @@ return [
     ],
     'mpc_thumb_snippet' => [
         'xtype' => 'textfield',
-        'value' => 'pThumb',
+        'value' => 'mpcThumb',
         'area' => 'default',
     ],
     'mpc_expand_attr' => [
