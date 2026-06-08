@@ -35,9 +35,9 @@ class Base
     protected Response $response;
 
     /**
-     * @param \ModX $modx
+     * @param \modX $modx
      */
-    public function __construct(\ModX $modx)
+    public function __construct(\modX $modx)
     {
         $this->modx = $modx;
         $this->logging = new Logging();

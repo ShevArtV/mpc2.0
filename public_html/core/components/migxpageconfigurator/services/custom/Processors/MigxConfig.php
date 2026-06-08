@@ -11,7 +11,7 @@ namespace MpcServices\Processors;
  */
 class MigxConfig extends Base
 {
-    public function __construct(\ModX $modx)
+    public function __construct(\modX $modx)
     {
         parent::__construct($modx);
         $modx->addPackage('migx', MODX_CORE_PATH . 'components/migx/model/');

@@ -13,9 +13,9 @@ use OpenSpout\Writer\Common\Creator\WriterEntityFactory;
 class ExcelFileHandler
 {
     /**
-     * @var \Modx $modx
+     * @var \modX $modx
      */
-    public \ModX $modx;
+    public \modX $modx;
     /**
      * @var array $fields
      */
@@ -29,7 +29,7 @@ class ExcelFileHandler
      */
     private string $basePath;
 
-    public function __construct(\Modx $modx)
+    public function __construct(\modX $modx)
     {
         $this->modx = $modx;
         $this->initialize();
