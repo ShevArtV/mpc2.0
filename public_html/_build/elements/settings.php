@@ -91,11 +91,6 @@ return [
         'value' => 'chunks/',
         'area' => 'default',
     ],
-    'mpc_path_to_create' => [
-        'xtype' => 'textfield',
-        'value' => 'create/',
-        'area' => 'default',
-    ],
     'mpc_path_to_dist' => [
         'xtype' => 'textfield',
         'value' => 'parsed/',
@@ -129,11 +124,6 @@ return [
     'mpc_static_block_page_id' => [
         'xtype' => 'textfield',
         'value' => '',
-        'area' => 'default',
-    ],
-    'mpc_thumb_format' => [
-        'xtype' => 'textfield',
-        'value' => 'webp',
         'area' => 'default',
     ],
     'mpc_tmplvar_ids' => [
@@ -171,9 +161,9 @@ return [
         'value' => 'jpg,jpeg,png,webp,mp4,mp3,txt',
         'area' => 'default',
     ],
-    'mpc_mime_to_ext' => [
-        'xtype' => 'textarea',
-        'value' => '{"image/jpeg":"jpg","image/png":"png","image/gif":"gif","image/webp":"webp","image/svg+xml":"svg","image/avif":"avif","video/mp4":"mp4","video/webm":"webm","video/ogg":"ogv","audio/mpeg":"mp3","audio/ogg":"ogg","audio/wav":"wav","audio/webm":"webm","text/plain":"txt","application/pdf":"pdf"}',
+    'mpc_mime_to_ext_path' => [
+        'xtype' => 'textfield',
+        'value' => 'components/migxpageconfigurator/elements/media/mime_to_ext.json',
         'area' => 'default',
     ],
     'mpc_lazyload_enabled' => [
@@ -194,6 +184,11 @@ return [
     'mpc_exclude_lexicons_filename' => [
         'xtype' => 'textarea',
         'value' => 'components/migxpageconfigurator/services/exclude_lexicons.inc.php',
+        'area' => 'default',
+    ],
+    'mpc_exclude_fields_path' => [
+        'xtype' => 'textfield',
+        'value' => 'components/migxpageconfigurator/elements/fields/exclude_fields.json',
         'area' => 'default',
     ],
     'mpc_translated_content' => [
@@ -256,11 +251,6 @@ return [
     'mpc_path_to_samples' => [
         'xtype' => 'textfield',
         'value' => 'components/migxpageconfigurator/elements/samples/',
-        'area' => 'default',
-    ],
-    'mpc_resource_lexicon_keys_path' => [
-        'xtype' => 'textfield',
-        'value' => 'components/migxpageconfigurator/services/resource_lexicon_keys.inc.php',
         'area' => 'default',
     ],
 ];

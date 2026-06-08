@@ -1,3 +1,15 @@
+2.5.27-rc
+==============
+Чистка настроек и ретайр механизма create/.
+
+- Аудит системных настроек: набор приведён к реально используемому в коде; на свежих установках лишние удаляются резолвером 6removesettings.php (image_extensions, service_info_tv_name, copy_config_tv_name, images_path, mime_to_ext, resource_lexicon_keys_path, path_to_create, thumb_format).
+- `mpc_mime_to_ext` (большой JSON в настройке) вынесена в файл `elements/media/mime_to_ext.json`; настройка теперь `mpc_mime_to_ext_path` (путь относительно core/). Убран дублировавшийся хардкод-JSON из Grabber.
+- Ретайр `mpc_resource_lexicon_keys_path` + файла `resource_lexicon_keys.inc.php` + ветки $_rlang в LexiconManager::createLexicons — роль закрыта автогенерацией ключей mpc_resource_* (ResourceFieldGrabber).
+- `mpc_exclude_fields_path` объявлена в settings.php; Render читает путь относительно core/ (единый паттерн с mime/lexicon).
+- `mpc_thumb_format` ретайрнута — была мёртвой (формат идёт из `f=` в mpc_common_thumb_params); убрано чтение в Cutter.
+- Ретайр механизма `create/`: удалены `Mpc::manageElement` + процессоры, `console/mgr_elems.php`, CLI-команда `elements`, настройка `mpc_path_to_create`, `examples/create/`. Чем закрыто: TV → авто-провижн `data-mpc-tv`; ресурсы → `resources apply`; сниппеты → файловые; плагины → новая CLI-группа `plugins`.
+- CLI: группа `events` переименована в `plugins` и расширена — `PluginsApply` (заменил `EventsApply`) создаёт/обновляет плагин (код из файла, категория, static) и синхронизирует события. Манифест `console/examples/plugins.example.php`. Старый list-формат событий поддержан для совместимости.
+
 2.5.26-rc
 ==============
 Фикс: дефолт настройки mpc_thumb_snippet.

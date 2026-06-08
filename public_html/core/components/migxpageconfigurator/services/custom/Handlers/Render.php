@@ -29,11 +29,12 @@ class Render extends Base
     protected function initialize(): void
     {
         parent::initialize();
-        $excludeFieldsPath = $this->modx->getOption(
+        $excludeFieldsRel = $this->modx->getOption(
             'mpc_exclude_fields_path',
             null,
-            $this->properties['corePath'] . 'components/migxpageconfigurator/elements/fields/exclude_fields.json'
+            'components/migxpageconfigurator/elements/fields/exclude_fields.json'
         );
+        $excludeFieldsPath = $this->properties['corePath'] . $excludeFieldsRel;
         $properties = [
             'commonConfigTvId' => $this->modx->getOption('mpc_config_tv_id', '', 0),
             'extension' => $this->modx->getOption('mpc_tpl_file_extension', '', '.tpl'),

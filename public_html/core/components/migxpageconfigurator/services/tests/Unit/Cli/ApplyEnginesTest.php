@@ -2,7 +2,7 @@
 
 namespace MpcTests\Unit\Cli;
 
-use MpcServices\Cli\Apply\EventsApply;
+use MpcServices\Cli\Apply\PluginsApply;
 use MpcServices\Cli\Apply\SettingsApply;
 use PHPUnit\Framework\TestCase;
 
@@ -11,11 +11,11 @@ use PHPUnit\Framework\TestCase;
  */
 class ApplyEnginesTest extends TestCase
 {
-    // EventsApply::diff ----------------------------------------------
+    // PluginsApply::diff ----------------------------------------------
 
     public function testEventsDiffBindUnbindKeep(): void
     {
-        $d = EventsApply::diff(['A', 'B', 'C'], ['B', 'C', 'D']);
+        $d = PluginsApply::diff(['A', 'B', 'C'], ['B', 'C', 'D']);
         $this->assertSame(['A'], $d['bind']);     // в желаемом, нет в текущем
         $this->assertSame(['D'], $d['unbind']);   // в текущем, нет в желаемом
         $this->assertSame(['B', 'C'], $d['keep']);
@@ -23,14 +23,14 @@ class ApplyEnginesTest extends TestCase
 
     public function testEventsDiffNoChange(): void
     {
-        $d = EventsApply::diff(['A', 'B'], ['B', 'A']);
+        $d = PluginsApply::diff(['A', 'B'], ['B', 'A']);
         $this->assertSame([], $d['bind']);
         $this->assertSame([], $d['unbind']);
     }
 
     public function testEventsDiffDedupes(): void
     {
-        $d = EventsApply::diff(['A', 'A'], []);
+        $d = PluginsApply::diff(['A', 'A'], []);
         $this->assertSame(['A'], $d['bind']);
     }
 

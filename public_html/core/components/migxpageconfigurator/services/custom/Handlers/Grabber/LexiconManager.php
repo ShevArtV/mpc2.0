@@ -356,13 +356,7 @@ class LexiconManager
 
     public function createLexicons(array $allLexicons, bool $overwrite = true): void
     {
-        $basePathToLexiconFile   = $this->properties['basePathToLexiconFile'];
-        $resourceLexiconKeysPath = $this->properties['corePath'] . $this->properties['resourceLexiconKeysPath'];
-
-        $_rlang = $_lang = [];
-        if (file_exists($resourceLexiconKeysPath)) {
-            include $resourceLexiconKeysPath;
-        }
+        $basePathToLexiconFile = $this->properties['basePathToLexiconFile'];
 
         foreach ($allLexicons as $rid => $lexicons) {
             $pathToLexiconFile = $basePathToLexiconFile . $rid . '.inc.php';
@@ -381,14 +375,6 @@ class LexiconManager
                         }
                     }
                 }
-            } elseif (file_exists($pathToLexiconFile) && !empty($_rlang)) {
-                $_lang = []; // сброс: иначе $_lang от прошлой итерации/include загрязнит intersect
-                include $pathToLexiconFile;
-                $tmp = array_intersect_key($_lang, $_rlang);
-                if (empty($tmp)) {
-                    $tmp = $_rlang;
-                }
-                $lexicons = array_merge($tmp, $lexicons);
             }
 
             if (!empty($lexicons)) {

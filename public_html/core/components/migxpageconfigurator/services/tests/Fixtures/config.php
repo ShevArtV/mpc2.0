@@ -36,7 +36,6 @@ return [
     // ===== Cutter.php =====
     'mpc_path_to_chunks'     => 'output/chunks/',
     'mpc_wrapper_name'       => 'wrapper',
-    'mpc_thumb_format'       => 'png',
     'mpc_fake_img_path'      => 'assets/components/migxpageconfigurator/images/fake-img.png',
     'mpc_path_to_presets'    => 'presets-nonexistent/', // папки нет — пресеты не загружаются
     'mpc_path_to_samples'    => 'components/migxpageconfigurator/elements/samples/',

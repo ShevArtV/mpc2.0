@@ -6,7 +6,7 @@ use MpcServices\Cli\Apply\SettingsApply;
 use MpcServices\Cli\Apply\SettingsList;
 use MpcServices\Cli\Apply\ClientConfigApply;
 use MpcServices\Cli\Apply\ClientConfigList;
-use MpcServices\Cli\Apply\EventsApply;
+use MpcServices\Cli\Apply\PluginsApply;
 use MpcServices\Cli\Apply\ResourcesApply;
 use MpcServices\Cli\Apply\PackagesApply;
 
@@ -16,7 +16,7 @@ use MpcServices\Cli\Apply\PackagesApply;
  *
  *   php console/mpc.php <группа> apply <файл> [--dry-run] [--force] [--only=ref] [--json]
  *
- * Группы: resources, settings, events, packages, lexicon, help.
+ * Группы: resources, settings, plugins, packages, lexicon, help.
  */
 class Cli
 {
@@ -71,14 +71,12 @@ class Cli
                     return $this->settings($action, $args, $opts, $out);
                 case 'clientconfig':
                     return $this->clientConfig($action, $args, $opts, $out);
-                case 'events':
+                case 'plugins':
                 case 'resources':
                 case 'packages':
                     return $this->applyGroup($group, $action, $args, $opts, $out);
                 case 'cut':
                     return $this->cut($action, $args, $opts, $out);
-                case 'elements':
-                    return $this->elements($action, $args, $opts, $out);
                 case 'configs':
                     return $this->configs($action, $args, $opts, $out);
                 case 'cache':
@@ -114,8 +112,8 @@ class Cli
         $only   = (string)($opts['only'] ?? '');
 
         switch ($group) {
-            case 'events':
-                $res = (new EventsApply($this->modx))->apply($manifest, $dryRun);
+            case 'plugins':
+                $res = (new PluginsApply($this->modx))->apply($manifest, $dryRun);
                 break;
             case 'resources':
                 // render → copyConfig (наследование mpc_config типа)
@@ -234,19 +232,6 @@ class Cli
             . ($upd ? ' (с обновлением контента)' : '') . ' [контекст ' . $ctxKey . ']']);
     }
 
-    /** Создание/обновление элементов из elements/create: mpc elements <type|all>. */
-    private function elements(string $action, array $args, array $opts, Output $out): int
-    {
-        $this->useContext($opts);
-        $type = $action !== '' ? $action : ($args[0] ?? '');
-        if ($type === '' || $type === 'all') {
-            $this->mpc()->manageElement('');
-            return $out->result(['success' => true, 'message' => 'Элементы обновлены: все типы из create/']);
-        }
-        $this->mpc()->manageElement($type);
-        return $out->result(['success' => true, 'message' => 'Элементы обновлены: ' . $type]);
-    }
-
     /** Синхронизация MIGX-конфигов из сида (только sync): mpc configs sync. */
     private function configs(string $action, array $args, array $opts, Output $out): int
     {
@@ -353,10 +338,9 @@ class Cli
             '  settings  list [--namespace=ns] [--context=web] [--key=часть]   — список настроек',
             '  clientconfig apply [файл]   — настройки ClientConfig (cgSetting/cgContextValue)',
             '  clientconfig list [--group=имя] [--key=часть]   — список настроек ClientConfig',
-            '  events    apply [файл]   — привязки плагинов к событиям (bind/unbind по файлу)',
+            '  plugins   apply [файл]   — создать/обновить плагины (код+категория+static) и синк событий',
             '  packages  apply [файл]   — установка/удаление пакетов (нужен --force)',
             '  cut <файл.tpl|all> [--upd]   — нарезка: без --upd умный мерж, с --upd полная перезапись',
-            '  elements <type|all>      — создать/обновить элементы из elements/create/',
             '  configs sync             — применить сид MIGX-конфигов (merge)',
             '  cache clear [id,…]       — очистить запечённые parsed/ (без id — все)',
             '  lexicon   export-all | export-untranslated <filename> | list',

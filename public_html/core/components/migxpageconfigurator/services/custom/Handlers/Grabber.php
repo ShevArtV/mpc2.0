@@ -69,9 +69,19 @@ class Grabber extends Base
         $downloadPaths = $this->modx->getOption('mpc_download_paths', '', ['images' => '', 'videos' => '', 'audios' => '', 'others' => '']);
         $downloadPaths = is_array($downloadPaths) ? $downloadPaths : (json_decode($downloadPaths, true) ?: []);
 
-        $defaultMimeToExt = '{"image/jpeg":"jpg","image/png":"png","image/gif":"gif","image/webp":"webp","image/svg+xml":"svg","image/avif":"avif","video/mp4":"mp4","video/webm":"webm","video/ogg":"ogv","audio/mpeg":"mp3","audio/ogg":"ogg","audio/wav":"wav","audio/webm":"webm","text/plain":"txt","application/pdf":"pdf"}';
-        $mimeToExt = $this->modx->getOption('mpc_mime_to_ext', '', $defaultMimeToExt);
-        $mimeToExt = is_array($mimeToExt) ? $mimeToExt : (json_decode($mimeToExt, true) ?: []);
+        // Карта MIME → расширение вынесена в файл (mpc_mime_to_ext_path), как
+        // exclude_fields/exclude_lexicons — большой структурный список не место
+        // в значении настройки. Путь относительный core/.
+        $mimeToExtRel = $this->modx->getOption(
+            'mpc_mime_to_ext_path',
+            null,
+            'components/migxpageconfigurator/elements/media/mime_to_ext.json'
+        );
+        $mimeToExtPath = $this->properties['corePath'] . $mimeToExtRel;
+        $mimeToExt = [];
+        if (file_exists($mimeToExtPath) && $mimeToExtRaw = file_get_contents($mimeToExtPath)) {
+            $mimeToExt = json_decode($mimeToExtRaw, true) ?: [];
+        }
 
         $this->properties = array_merge($this->properties, [
             'startPageId'             => $this->modx->getOption('site_start', null, 1),
@@ -81,7 +91,6 @@ class Grabber extends Base
             'mediaSourceId'           => (int)$this->modx->getOption('mpc_media_source', null, 0),
             'mediaPath'               => $this->modx->getOption('mpc_media_path', null, 'assets/components/migxpageconfigurator/media/'),
             'lexiconPath'             => $this->modx->getOption('mpc_lexicon_path', '', 'components/migxpageconfigurator/lexicon/'),
-            'resourceLexiconKeysPath' => $this->modx->getOption('mpc_resource_lexicon_keys_path', '', 'components/migxpageconfigurator/services/resource_lexicon_keys.inc.php'),
             'allowModxTags'           => $this->modx->getOption('mpc_allow_modx_tags', '', false),
             'downloadExtensions'      => explode(',', $this->modx->getOption('mpc_download_extensions', '', '')),
             'mimeToExt'               => $mimeToExt,
