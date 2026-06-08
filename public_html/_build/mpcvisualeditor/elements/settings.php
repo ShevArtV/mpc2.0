@@ -5,32 +5,32 @@ return [
     'mpcve_active' => [
         'xtype' => 'combo-boolean',
         'value' => true,
-        'area'  => 'main',
+        'area'  => 'mpcve_general',
     ],
     // Query-параметр включения edit-режима (?mpcedit=1)
     'mpcve_edit_param' => [
         'xtype' => 'textfield',
         'value' => 'mpcedit',
-        'area'  => 'main',
+        'area'  => 'mpcve_general',
     ],
     // Имя permission, требуемого для редактирования
     'mpcve_permission' => [
         'xtype' => 'textfield',
         'value' => 'mpcve_edit',
-        'area'  => 'main',
+        'area'  => 'mpcve_general',
     ],
     // Лимит размера загружаемого изображения (байт), 0 — без лимита
     'mpcve_max_upload' => [
         'xtype' => 'numberfield',
         'value' => 10485760,
-        'area'  => 'upload',
+        'area'  => 'mpcve_editor',
     ],
     // Блокировка ресурса: TTL лока (сек) = idle-таймаут. Heartbeat продлевает,
     // пока идёт правка; без активности лок протухает и режим авто-завершается.
     'mpcve_lock_ttl' => [
         'xtype' => 'numberfield',
         'value' => 300,
-        'area'  => 'main',
+        'area'  => 'mpcve_general',
     ],
     // Белый список HTML-атрибутов для sanitizeHtml редактора (csv). Применяется
     // ТОЛЬКО к содержимому редактируемого поля (richtext/text/textarea), не ко
@@ -39,6 +39,6 @@ return [
     'mpcve_allowed_attrs' => [
         'xtype' => 'textfield',
         'value' => 'class,href,src,alt,title',
-        'area'  => 'editor',
+        'area'  => 'mpcve_editor',
     ],
 ];
