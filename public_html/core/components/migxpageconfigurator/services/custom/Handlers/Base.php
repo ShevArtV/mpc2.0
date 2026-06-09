@@ -115,6 +115,13 @@ class Base
                 'trim',
                 explode(',', (string)$this->modx->getOption('mpc_contact_lexicon_fields', null, 'caption'))
             ))),
+            // Нативные поля ресурса, которые можно наследовать от «типа страницы»
+            // (каскад тип→ресурс) и писать через rfield. Структурные поля сюда
+            // не входят и каскадом не затрагиваются.
+            'editableResourceFields' => array_values(array_filter(array_map(
+                'trim',
+                explode(',', (string)$this->modx->getOption('mpc_editable_resource_fields', null, 'pagetitle,longtitle,description,introtext,content,menutitle'))
+            ))),
             'assetsPath' => $this->modx->getOption('assets_path', null, ''),
             'useLexicons' => $this->modx->getOption('mpc_use_lexicons', '', false),
             'defaultLanguageKey' => $this->modx->getOption('mpc_default_language', '', 'ru'),

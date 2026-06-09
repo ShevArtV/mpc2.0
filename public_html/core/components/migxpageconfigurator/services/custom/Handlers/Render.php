@@ -84,6 +84,7 @@ class Render extends Base
         if ($type = $this->getTypeResource($resourceData['template'])) {
             $typeResourceData = $this->updateResourceData($type->toArray());
             $resourceData = array_merge($typeResourceData, $resourceData);
+            $resourceData = $this->inheritEditableFields($resourceData, $typeResourceData);
             $resourceData['tvs'] = array_merge($this->getResourceTVs($typeResourceData['id'], true), $resourceData['tvs']);
         }
         $resourceData['contacts'] = $this->contacts;
@@ -199,6 +200,27 @@ class Render extends Base
      * @param array $resourceData
      * @return array
      */
+    /**
+     * Каскад контентных полей «тип страницы → ресурс»: если у ресурса поле
+     * пустое, наследуем значение типа. Затрагиваются ТОЛЬКО поля из белого
+     * списка mpc_editable_resource_fields; структурные поля
+     * (id/alias/uri/template/parent) сюда не входят и не каскадятся.
+     *
+     * @param array $resourceData     данные ресурса (после merge с типом)
+     * @param array $typeResourceData данные «типа страницы»
+     */
+    private function inheritEditableFields(array $resourceData, array $typeResourceData): array
+    {
+        foreach (($this->properties['editableResourceFields'] ?? []) as $field) {
+            $hasOwn = isset($resourceData[$field]) && trim((string)$resourceData[$field]) !== '';
+            if (!$hasOwn && isset($typeResourceData[$field]) && trim((string)$typeResourceData[$field]) !== '') {
+                $resourceData[$field] = $typeResourceData[$field];
+            }
+        }
+
+        return $resourceData;
+    }
+
     private function updateResourceData(array $resourceData): array
     {
         foreach ($resourceData as $k => $v) {

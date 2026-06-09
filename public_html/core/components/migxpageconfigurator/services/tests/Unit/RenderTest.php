@@ -205,4 +205,59 @@ class RenderTest extends TestCase
         $out = "{'s' | snippet: ['x' => \$a ?: \$b, 'y' => 'foo']}";
         $this->assertSame($out, $this->quoteParams($in));
     }
+
+    private function inheritFields(array $resource, array $type, array $editable): array
+    {
+        $ref      = new ReflectionClass(Render::class);
+        $instance = $ref->newInstanceWithoutConstructor();
+        $instance->properties = ['editableResourceFields' => $editable];
+        $method = $ref->getMethod('inheritEditableFields');
+        $method->setAccessible(true);
+
+        return $method->invoke($instance, $resource, $type);
+    }
+
+    /** Пустое контентное поле ресурса наследует значение «типа страницы». */
+    public function testInheritsEmptyEditableFieldFromType(): void
+    {
+        $out = $this->inheritFields(
+            ['content' => '', 'pagetitle' => 'Страница'],
+            ['content' => 'Текст из типа', 'pagetitle' => 'Тип'],
+            ['content', 'pagetitle']
+        );
+        $this->assertSame('Текст из типа', $out['content']);
+    }
+
+    /** Заполненное поле ресурса НЕ перетирается значением типа. */
+    public function testKeepsFilledEditableField(): void
+    {
+        $out = $this->inheritFields(
+            ['content' => 'Свой текст'],
+            ['content' => 'Текст из типа'],
+            ['content']
+        );
+        $this->assertSame('Свой текст', $out['content']);
+    }
+
+    /** Поля вне белого списка (структурные) каскадом не затрагиваются. */
+    public function testDoesNotInheritNonEditableField(): void
+    {
+        $out = $this->inheritFields(
+            ['alias' => ''],
+            ['alias' => 'type-alias'],
+            ['content', 'pagetitle']
+        );
+        $this->assertSame('', $out['alias']);
+    }
+
+    /** Пустое поле у ресурса и пустое у типа — остаётся пустым (нечего наследовать). */
+    public function testKeepsEmptyWhenTypeAlsoEmpty(): void
+    {
+        $out = $this->inheritFields(
+            ['content' => ''],
+            ['content' => '   '],
+            ['content']
+        );
+        $this->assertSame('', $out['content']);
+    }
 }
