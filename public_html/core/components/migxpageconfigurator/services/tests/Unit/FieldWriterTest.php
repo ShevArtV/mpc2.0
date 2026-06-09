@@ -72,7 +72,7 @@ class FieldWriterTest extends TestCase
      * Лексиконный режим: если у TV есть ключ mpc_resource_tv_<name> — правка
      * уходит в ЛЕКСИКОН, а само TV-значение (колонку) не трогаем (зеркало rfield).
      */
-    public function testWritesTvLexiconWhenKeyExists(): void
+    public function testWritesTvLexicon(): void
     {
         $resource = new ModxObjectStub('modResource', ['id' => 5, 'context_key' => 'web']);
         $writer = new FieldWriter($this->makeModx($resource));
@@ -82,7 +82,6 @@ class FieldWriterTest extends TestCase
             private array $log;
             public function __construct(array &$log) { $this->log = &$log; }
             public function identifier(int $rid): string { return 'res' . $rid; }
-            public function has(string $identifier, string $key): bool { return $key === 'mpc_resource_tv_subtitle'; }
             public function set(string $identifier, string $key, string $value): bool { $this->log[$key] = $value; return true; }
         };
 
@@ -94,8 +93,33 @@ class FieldWriterTest extends TestCase
         $result = $writer->write(['type' => 'tv', 'resourceId' => 5, 'fieldName' => 'subtitle'], 'Перевод');
 
         $this->assertTrue($result['success'], $result['message']);
-        $this->assertSame('Перевод', $log['mpc_resource_tv_subtitle']); // ушло в лексикон по tv-ключу
-        $this->assertSame('', $resource->getTVValue('subtitle'));       // TV-значение (колонку) не трогали
+        $this->assertSame('Перевод', $log['mpc_resource_tv_subtitle']);                  // значение → словарь
+        $this->assertSame('mpc_resource_tv_subtitle', $resource->getTVValue('subtitle')); // в TV-значение → ключ
+    }
+
+    /** rfield при лексиконах: значение → словарь, в колонку ресурса → ключ. */
+    public function testWritesRfieldLexicon(): void
+    {
+        $resource = new ModxObjectStub('modResource', ['id' => 5, 'context_key' => 'web']);
+        $writer = new FieldWriter($this->makeModx($resource));
+
+        $log = [];
+        $lex = new class($log) extends \MpcServices\Handlers\LexiconWriter {
+            private array $log;
+            public function __construct(array &$log) { $this->log = &$log; }
+            public function identifier(int $rid): string { return 'res' . $rid; }
+            public function set(string $identifier, string $key, string $value): bool { $this->log[$key] = $value; return true; }
+        };
+
+        $ref = new \ReflectionObject($writer);
+        $ul = $ref->getProperty('useLexicons');       $ul->setAccessible(true); $ul->setValue($writer, true);
+        $lw = $ref->getProperty('lexWriterInstance');  $lw->setAccessible(true); $lw->setValue($writer, $lex);
+
+        $result = $writer->write(['type' => 'rfield', 'resourceId' => 5, 'fieldName' => 'content'], 'Текст');
+
+        $this->assertTrue($result['success'], $result['message']);
+        $this->assertSame('Текст', $log['mpc_resource_content']);          // значение → словарь
+        $this->assertSame('mpc_resource_content', $resource->get('content')); // в колонку → ключ
     }
 
     /** Канон: rfield/tv тоже учитывают mpc_translated_content. Если content-type не

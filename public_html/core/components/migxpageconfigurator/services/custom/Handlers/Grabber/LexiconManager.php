@@ -415,59 +415,28 @@ class LexiconManager
     {
         $default = (string)($this->properties['defaultLanguageKey'] ?? '');
         $langs   = array_filter(array_map('trim', explode(',', (string)$this->modx->getOption('mpc_available_languages'))));
-        $langs   = array_diff($langs, [$default, '']);
-        if (empty($langs) || empty($allLexicons)) {
+        if (empty(array_diff($langs, [$default, ''])) || empty($allLexicons)) {
             return;
         }
         $baseLexiconPath = ($this->properties['corePath'] ?? '') . ($this->properties['lexiconPath'] ?? '');
         if ($baseLexiconPath === '') {
             return;
         }
-        $defaultBase     = $baseLexiconPath . $default . '/';
-        $pending         = new \MpcServices\Handlers\PendingTranslations($baseLexiconPath);
-        foreach ($langs as $lang) {
-            $langBase = $baseLexiconPath . $lang . '/';
-            if (!is_dir($langBase)) {
-                mkdir($langBase, 0755, true);
+        // Синхронизация языков + pending — через общий сервis (тот же, что зовёт
+        // редактор), чтобы логика была единой.
+        $sync        = new \MpcServices\Handlers\LexiconSync($baseLexiconPath, $default, $langs);
+        $defaultBase = rtrim($baseLexiconPath, '/') . '/' . $default . '/';
+        foreach (array_keys($allLexicons) as $rid) {
+            // Источник истины — ТОЛЬКО ЧТО записанный файл дефолтного языка
+            // (полный набор ключей, включая смерженные $_rlang — pagetitle/longtitle/
+            // description, которых нет в $allLexicons из-за пустых значений).
+            $_lang = [];
+            $defaultFile = $defaultBase . $rid . '.inc.php';
+            if (is_file($defaultFile)) {
+                include $defaultFile;
             }
-            foreach (array_keys($allLexicons) as $rid) {
-                // Источник истины — ТОЛЬКО ЧТО записанный файл дефолтного языка
-                // (в нём полный набор ключей, включая смерженные $_rlang — pagetitle/
-                // longtitle/description, которых нет в $allLexicons из-за пустых значений).
-                $_lang = [];
-                $defaultFile = $defaultBase . $rid . '.inc.php';
-                if (is_file($defaultFile)) {
-                    include $defaultFile;
-                }
-                $defaultLex = is_array($_lang) ? $_lang : [];
-                if (empty($defaultLex)) {
-                    continue;
-                }
-
-                $_lang = [];
-                $file = $langBase . $rid . '.inc.php';
-                if (is_file($file)) {
-                    include $file;
-                }
-                $existing = is_array($_lang) ? $_lang : [];
-
-                $out = [];
-                foreach ($defaultLex as $k => $defVal) {
-                    $out[$k] = array_key_exists($k, $existing) ? $existing[$k] : $defVal;
-                }
-                $this->writeLexiconFile($file, $out);
-
-                // Реестр непереведённых: новые ключи (не было в файле языка) →
-                // pending; переведённые ранее остаются вне; orphan выкидывается.
-                // (string)$k — ключи лексикона числовыми не бывают, но array_keys
-                // мог бы вернуть int для «12»-подобных — приводим к строке.
-                $pending->sync(
-                    $lang,
-                    (string)$rid,
-                    array_map('strval', array_keys($defaultLex)),
-                    array_map('strval', array_keys($existing))
-                );
-            }
+            $defaultLex = is_array($_lang) ? $_lang : [];
+            $sync->syncResource((string)$rid, $defaultLex);
         }
     }
 

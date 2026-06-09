@@ -59,7 +59,7 @@ class FieldWriter
         $list = $properties['editableResourceFields'] ?? $this->modx->getOption(
             'mpc_editable_resource_fields',
             null,
-            'pagetitle,longtitle,description,introtext,content,menutitle'
+            'longtitle,description,introtext,content,menutitle'
         );
         $this->editableResourceFields = is_array($list)
             ? $list
@@ -124,6 +124,20 @@ class FieldWriter
             $this->lmInstance = new \MpcServices\Handlers\Grabber\LexiconManager($this->modx, $props);
         }
         return $this->lmInstance;
+    }
+
+    private ?\MpcServices\Handlers\LexiconSync $lexSyncInstance = null;
+
+    /** Общий сервис синхронизации языков + pending (ленивый). */
+    private function lexiconSync(): \MpcServices\Handlers\LexiconSync
+    {
+        if ($this->lexSyncInstance === null) {
+            $base    = $this->lexProps['corePath'] . $this->lexProps['lexiconPath'];
+            $default = (string)$this->modx->getOption('mpc_default_language', null, 'ru');
+            $langs   = explode(',', (string)$this->modx->getOption('mpc_available_languages', null, ''));
+            $this->lexSyncInstance = new \MpcServices\Handlers\LexiconSync($base, $default, $langs);
+        }
+        return $this->lexSyncInstance;
     }
 
     /**
@@ -235,23 +249,27 @@ class FieldWriter
             return $this->result(false, 'resource not found: ' . $rid);
         }
 
-        // Лексиконный режим: rfield переводится через ключ mpc_resource_<field>
-        // в файле лексикона ресурса (per-resource перевод). Пишем туда ТОЛЬКО
-        // если у целевого ресурса этот ключ уже есть (т.е. ресурс mpc-управляемый/
-        // лексиконизированный). Иначе (обычная статья из сниппета, ключа нет) —
-        // пишем в колонку. Колонку при лексиконе не трогаем — рендер берёт перевод.
-        // Гейт mpc_translated_content + exclude (как нарезка): rfield = content-type
-        // 'text'; если 'text' не переводим / поле исключено — в колонку, не в лексикон.
+        // Лексиконный режим (единое решение: useLexicons + content-type 'text' +
+        // exclude_lexicons): значение уезжает в словарь под ключом
+        // mpc_resource_<field>, а в КОЛОНКУ ресурса пишется сам этот ключ. Рендер
+        // резолвит ключ через `| lexicon` (per-resource перевод). Без лексиконов —
+        // значение пишется в колонку как есть.
         if ($this->useLexicons && $this->shouldLexiconizeField('text', $field, [], '', false)) {
             $writer = $this->lexiconWriter();
             $ident  = $writer->identifier($rid);
-            if ($writer->has($ident, 'mpc_resource_' . $field)) {
-                if ($writer->set($ident, 'mpc_resource_' . $field, is_scalar($value) ? (string)$value : '')) {
-                    $this->afterSave($resource, ['type' => 'rfield', 'fieldName' => $field, 'lexicon' => true]);
-                    return $this->result(true, 'saved', ['type' => 'rfield', 'resourceId' => $rid, 'fieldName' => $field, 'lexicon' => true]);
-                }
+            $key    = 'mpc_resource_' . $field;
+            if (!$writer->set($ident, $key, is_scalar($value) ? (string)$value : '')) {
                 return $this->result(false, 'failed to write lexicon entry');
             }
+            $resource->set($field, $key); // в колонку — ключ словаря
+            if (!$resource->save()) {
+                return $this->result(false, 'failed to save resource ' . $rid);
+            }
+            // Синхронизация: перевод снимаем с pending; новый оригинал (дефолтный
+            // язык) распространяем плейсхолдером по другим языкам + pending.
+            $this->lexiconSync()->syncKey((string)$ident, $key, is_scalar($value) ? (string)$value : '', $this->lexProps['culture']);
+            $this->afterSave($resource, ['type' => 'rfield', 'fieldName' => $field, 'lexicon' => true]);
+            return $this->result(true, 'saved', ['type' => 'rfield', 'resourceId' => $rid, 'fieldName' => $field, 'lexicon' => true]);
         }
 
         if (!is_scalar($value)) {
@@ -276,21 +294,22 @@ class FieldWriter
             return $this->result(false, 'setTVValue unavailable on resource');
         }
 
-        // Лексиконный режим (зеркало writeResourceField): TV переводится через
-        // ключ mpc_resource_tv_<name> в файле лексикона ресурса. Пишем в лексикон
-        // ТОЛЬКО если ключ у ресурса уже есть (TV лексиконизирован при нарезке);
-        // иначе — прямой setTVValue. Значение TV (колонку) при лексиконе не трогаем.
-        // Гейт mpc_translated_content + exclude: content-type TV из БД (modTemplateVar.type).
+        // Лексиконный режим (зеркало writeResourceField): значение TV уезжает в
+        // словарь под ключом mpc_resource_tv_<name>, а в значение TV пишется сам
+        // этот ключ. Рендер резолвит его через `| lexicon`. Решение «лексиконизи-
+        // ровать» — ЕДИНОЕ (useLexicons + content-type TV + exclude), content-type
+        // берётся из БД (modTemplateVar.type). Без лексиконов — значение в TV как есть.
         if ($this->useLexicons && $this->shouldLexiconizeField($this->tvContentType($tv), $tv, [], '', false)) {
             $writer = $this->lexiconWriter();
             $ident  = $writer->identifier($rid);
-            if ($writer->has($ident, 'mpc_resource_tv_' . $tv)) {
-                if ($writer->set($ident, 'mpc_resource_tv_' . $tv, is_scalar($value) ? (string)$value : '')) {
-                    $this->afterSave($resource, ['type' => 'tv', 'fieldName' => $tv, 'lexicon' => true]);
-                    return $this->result(true, 'saved', ['type' => 'tv', 'resourceId' => $rid, 'fieldName' => $tv, 'lexicon' => true]);
-                }
+            $key    = 'mpc_resource_tv_' . $tv;
+            if (!$writer->set($ident, $key, is_scalar($value) ? (string)$value : '')) {
                 return $this->result(false, 'failed to write lexicon entry');
             }
+            $resource->setTVValue($tv, $key); // в значение TV — ключ словаря
+            $this->lexiconSync()->syncKey((string)$ident, $key, is_scalar($value) ? (string)$value : '', $this->lexProps['culture']);
+            $this->afterSave($resource, ['type' => 'tv', 'fieldName' => $tv, 'lexicon' => true]);
+            return $this->result(true, 'saved', ['type' => 'tv', 'resourceId' => $rid, 'fieldName' => $tv, 'lexicon' => true]);
         }
 
         $resource->setTVValue($tv, $value);
