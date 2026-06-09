@@ -62,6 +62,9 @@ class TvProvisioner
         // keyed-форма (Caption==norm(value)) — сохраняет оригинальный капшен в TV
         // (источник лексикона), value нормализован (совпадает с ключом/рендером).
         $elements = $values !== '' ? OptionFieldHelper::normalizeInputOptionValues($values) : '';
+        // Подпись/описание TV из разметки (симметрично data-mpc-fcap/fdesc у полей).
+        $fcap     = trim((string)$el->getAttribute('data-mpc-fcap'));
+        $fdesc    = trim((string)$el->getAttribute('data-mpc-fdesc'));
 
         /** @var \modTemplateVar|null $tv */
         $tv = $this->modx->getObject('modTemplateVar', ['name' => $name]);
@@ -77,18 +80,27 @@ class TvProvisioner
             // Своя TV — синкаем тип/опции из шаблона (шаблон — истина).
             $tv->set('type', $type);
             $tv->set('elements', $elements);
+            // Подпись/описание обновляем, только если заданы в разметке —
+            // иначе не перетираем уже настроенные в админке значения.
+            if ($fcap !== '') {
+                $tv->set('caption', $fcap);
+            }
+            if ($fdesc !== '') {
+                $tv->set('description', $fdesc);
+            }
             $tv->save();
         } else {
             /** @var \modTemplateVar $tv */
             $tv = $this->modx->newObject('modTemplateVar');
             $tv->fromArray([
-                'name'     => $name,
-                'caption'  => $name,
-                'type'     => $type,
-                'elements' => $elements,
-                'category' => $this->mpcCategoryId(),
-                'rank'     => 0,
-                'display'  => 'default',
+                'name'        => $name,
+                'caption'     => $fcap !== '' ? $fcap : $name,
+                'description' => $fdesc,
+                'type'        => $type,
+                'elements'    => $elements,
+                'category'    => $this->mpcCategoryId(),
+                'rank'        => 0,
+                'display'     => 'default',
             ]);
             if (!$tv->save()) {
                 $this->modx->log(\modX::LOG_LEVEL_ERROR, "[mpc] Не удалось создать TV «{$name}».");
