@@ -28,6 +28,9 @@ return [
     'mpcOnGetSectionHtml' => [
         'groupname' => 'MigxPageConfigurator',
     ],
+    'mpcOnFieldSave' => [
+        'groupname' => 'MigxPageConfigurator',
+    ],
 
     'mpcOnImportLexiconValue' => [
         'groupname' => 'MigxPageConfigurator',
