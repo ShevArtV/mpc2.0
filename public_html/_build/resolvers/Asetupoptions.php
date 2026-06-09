@@ -15,8 +15,13 @@ if ($transport->xpdo) {
     if (($options[xPDOTransport::PACKAGE_ACTION] ?? null) === xPDOTransport::ACTION_INSTALL) {
         $keys = [
             'mpc_use_lexicons',
+            'mpc_lexicons_namespace',
+            'mpc_lexicon_path',
+            'mpc_exclude_lexicons_filename',
             'mpc_available_languages',
             'mpc_default_language',
+            'mpc_lazyload_enabled',
+            'mpc_expand_enabled',
             'mpc_manifests_path',
         ];
         foreach ($keys as $key) {
