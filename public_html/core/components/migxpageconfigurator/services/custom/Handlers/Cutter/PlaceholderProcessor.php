@@ -228,7 +228,17 @@ class PlaceholderProcessor
             $row->setAttribute($this->properties['lazyloadAttr'], 'bg:' . $src);
             $row->removeAttribute('style');
         } else {
-            $style = preg_replace('/url\(\'(.*?)\'\)/', "url('" . $src . "')", $style);
+            // url() с любыми кавычками/без и пробелами внутри (симметрично
+            // извлечению в FieldValueExtractor). callback — чтобы спецсимволы
+            // в $src (Fenom-плейсхолдер с $ / {}) не интерпретировались как
+            // ссылки на группы в replacement-строке.
+            $style = preg_replace_callback(
+                '/url\(\s*(["\']?)(?:.*?)\1\s*\)/is',
+                static function () use ($src) {
+                    return "url('" . $src . "')";
+                },
+                $style
+            );
             $row->setAttribute('style', $style);
         }
 

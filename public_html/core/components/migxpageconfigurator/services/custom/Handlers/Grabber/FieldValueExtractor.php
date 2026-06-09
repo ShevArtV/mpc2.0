@@ -221,7 +221,7 @@ class FieldValueExtractor
             if (strpos($style, 'background') !== false) {
                 // url() с любыми кавычками или без: группа 1 — открывающая кавычка
                 // (\1 требует парной на закрытии), группа 2 — сам URL (индекс прежний).
-                preg_match('/(?:background|background-image)\s*:.*?url\(\s*(["\']?)(.*?)\1\s*\)/i', $style, $matches);
+                preg_match('/(?:background|background-image)\s*:.*?url\(\s*(["\']?)(.*?)\1\s*\)/is', $style, $matches);
                 $value = $matches[2] ?? '';
                 if (strpos($value, 'http') !== false) {
                     $value = $this->mediaDownloader->downloadImage($value);

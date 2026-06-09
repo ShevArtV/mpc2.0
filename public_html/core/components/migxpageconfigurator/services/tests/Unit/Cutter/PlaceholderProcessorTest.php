@@ -469,6 +469,26 @@ class PlaceholderProcessorTest extends TestCase
         $this->assertStringContainsString("##'{\$bg_img}' | lexicon}", $html);
     }
 
+    /** Фон в двойных кавычках url("…") тоже распознаётся и заменяется. */
+    public function testSetPlaceholdersBgImgDoubleQuotesReplaced(): void
+    {
+        $html = $this->lexHtml(
+            '<section data-mpc-section="test"><div data-mpc-field="bg_img" style=\'background:url("x.jpg")\'></div></section>'
+        );
+        $this->assertStringContainsString('| lexicon}', $html);
+        $this->assertStringNotContainsString('x.jpg', $html);
+    }
+
+    /** Фон без кавычек url(…) тоже распознаётся и заменяется. */
+    public function testSetPlaceholdersBgImgNoQuotesReplaced(): void
+    {
+        $html = $this->lexHtml(
+            '<section data-mpc-section="test"><div data-mpc-field="bg_img" style="background:url(x.jpg)"></div></section>'
+        );
+        $this->assertStringContainsString('| lexicon}', $html);
+        $this->assertStringNotContainsString('x.jpg', $html);
+    }
+
     // ---------------------------------------------------------------
     // Cutter учитывает excludeLexiconFields — не ставит `| lexicon`
     // на поля, которые грабер пропустил бы (иначе пустота на сайте).
