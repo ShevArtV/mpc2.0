@@ -12,10 +12,15 @@ class mpcLanguages {
   constructor(config = {}) {
     if (window.mpcLanguages) return window.mpcLanguages;
 
+    // Имя/домен cookie приходят из PHP (window.mpcLangConfig), чтобы JS и
+    // сервер ставили cookie одинаково (одно имя, один домен) — иначе на
+    // поддоменах появляются два конфликтующих cookie языка.
+    const langConfig = window.mpcLangConfig || {};
     const defaults = {
       rootSelector: '[data-choose-lang]',
       rootAttr: 'data-choose-lang',
-      cookieName: 'mpc_lang'
+      cookieName: langConfig.cookieName || 'mpc_lang',
+      cookieDomain: langConfig.cookieDomain || ''
     }
     this.events = {
       onChoose: 'mpc:change:language'
@@ -56,11 +61,12 @@ class mpcLanguages {
   }
 
   setCookie(name, value, options = {}) {
-    const fullDomain = window.location.hostname;
-    const rootDomain = fullDomain.replace(/^[^.]*\./, '');
+    // Домен берём из настройки (как PHP). Пусто → текущий хост, чтобы JS и
+    // сервер ставили cookie на один и тот же домен.
+    const domain = this.config.cookieDomain || window.location.hostname;
     options = {
       path: '/',
-      domain: '.' + rootDomain,
+      domain: domain,
       ...options
     };
 

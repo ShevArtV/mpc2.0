@@ -15,12 +15,12 @@ return [
     ],
     'mpc_editable_resource_fields' => [
         'xtype' => 'textfield',
-        'value' => 'pagetitle,longtitle,description,introtext,content,menutitle',
+        'value' => 'longtitle,description,introtext,content,menutitle',
         'area' => 'mpc_resource',
     ],
     'mpc_protected_resource_fields' => [
         'xtype' => 'textfield',
-        'value' => 'id,class_key,context_key,parent,uri_override,alias,uri,template',
+        'value' => 'id,class_key,context_key,parent,uri_override,alias,uri,template,pagetitle',
         'area' => 'mpc_resource',
     ],
     'mpc_edit_mode' => [
@@ -224,6 +224,16 @@ return [
     'mpc_default_language' => [
         'xtype' => 'textfield',
         'value' => 'ru',
+        'area' => 'mpc_lexicons',
+    ],
+    'mpc_lang_cookie_name' => [
+        'xtype' => 'textfield',
+        'value' => 'mpc_lang',
+        'area' => 'mpc_lexicons',
+    ],
+    'mpc_lang_cookie_domain' => [
+        'xtype' => 'textfield',
+        'value' => '',
         'area' => 'mpc_lexicons',
     ],
     // База манифестов mpc CLI (относительно папки core/ или абсолют). Читается

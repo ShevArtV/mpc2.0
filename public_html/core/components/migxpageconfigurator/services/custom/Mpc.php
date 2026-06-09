@@ -232,8 +232,16 @@ class Mpc
         }
 
         if ($this->properties['useLexicons']) {
+            // Имя/домен cookie языка прокидываем во фронт, чтобы JS-селектор
+            // ставил cookie ровно так же, как PHP (одно имя, один домен) —
+            // иначе на поддоменах появляются два конфликтующих cookie.
+            $cookieName   = json_encode($this->getContextSettingValue('mpc_lang_cookie_name') ?: 'mpc_lang', $jsFlags);
+            $cookieDomain = json_encode((string)$this->getContextSettingValue('mpc_lang_cookie_domain'), $jsFlags);
             $this->modx->regClientScript(
-                "                
+                "
+                <script>
+                window.mpcLangConfig = {cookieName: {$cookieName}, cookieDomain: {$cookieDomain}};
+                </script>
                 <script type=\"module\" src=\"assets/components/migxpageconfigurator/js/web/languages.js\"></script>",
                 true
             );
@@ -295,20 +303,25 @@ class Mpc
 
     public function setLanguageSettings()
     {
-        $availableLanguages = $this->getContextSettingValue('mpc_available_languages');
-        $availableLanguages = explode(',', $availableLanguages);
-        if (!isset($_COOKIE['mpc_lang']) || !in_array($_COOKIE['mpc_lang'], $availableLanguages)) {
+        // Имя и домен cookie языка — из настроек (контекстно-переопределяемых).
+        // Имя: одинаковое на домене/поддоменах → язык общий; разное (контекстная
+        // настройка) → независимый. Домен: пусто → текущий http_host; задан
+        // (например .site.ru) → cookie доступна на всех поддоменах.
+        $cookieName   = $this->getContextSettingValue('mpc_lang_cookie_name') ?: 'mpc_lang';
+        $cookieDomain = $this->getContextSettingValue('mpc_lang_cookie_domain') ?: $this->getContextSettingValue('http_host');
+
+        $availableLanguages = array_map('trim', explode(',', (string)$this->getContextSettingValue('mpc_available_languages')));
+        if (!isset($_COOKIE[$cookieName]) || !in_array($_COOKIE[$cookieName], $availableLanguages, true)) {
             $defaultLang = $this->getContextSettingValue('mpc_default_language');
-            $host = $this->getContextSettingValue('http_host');
-            setcookie('mpc_lang', $defaultLang, 0, '/', $host);
-            $_COOKIE['mpc_lang'] = $defaultLang;
+            setcookie($cookieName, $defaultLang, 0, '/', $cookieDomain);
+            $_COOKIE[$cookieName] = $defaultLang;
         }
 
-        if (!empty($_COOKIE['mpc_lang'])) {
+        if (!empty($_COOKIE[$cookieName])) {
             // cookie клиентский → попадает в cultureKey, а тот в путь к файлу
             // лексикона (getResourceLexicons). basename режет traversal, не
             // ломая формат culture (как в FieldWriter, решение S12).
-            $this->modx->setOption('cultureKey', basename((string)$_COOKIE['mpc_lang']));
+            $this->modx->setOption('cultureKey', basename((string)$_COOKIE[$cookieName]));
         }
     }
 

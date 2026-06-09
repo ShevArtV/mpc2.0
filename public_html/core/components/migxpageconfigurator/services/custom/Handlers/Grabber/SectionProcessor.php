@@ -900,7 +900,7 @@ class SectionProcessor
         $list = $this->modx->getOption(
             'mpc_protected_resource_fields',
             null,
-            'id,class_key,context_key,parent,uri_override,alias,uri,template'
+            'id,class_key,context_key,parent,uri_override,alias,uri,template,pagetitle'
         );
         return array_values(array_filter(array_map('trim', explode(',', (string)$list))));
     }

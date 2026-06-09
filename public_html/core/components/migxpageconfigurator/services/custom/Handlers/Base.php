@@ -120,7 +120,7 @@ class Base
             // не входят и каскадом не затрагиваются.
             'editableResourceFields' => array_values(array_filter(array_map(
                 'trim',
-                explode(',', (string)$this->modx->getOption('mpc_editable_resource_fields', null, 'pagetitle,longtitle,description,introtext,content,menutitle'))
+                explode(',', (string)$this->modx->getOption('mpc_editable_resource_fields', null, 'longtitle,description,introtext,content,menutitle'))
             ))),
             'assetsPath' => $this->modx->getOption('assets_path', null, ''),
             'useLexicons' => $this->modx->getOption('mpc_use_lexicons', '', false),
