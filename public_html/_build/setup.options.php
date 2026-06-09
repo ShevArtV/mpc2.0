@@ -22,6 +22,7 @@ $lexPath   = $get('mpc_lexicon_path', 'components/migxpageconfigurator/lexicon/'
 $exclLex   = $get('mpc_exclude_lexicons_filename', 'components/migxpageconfigurator/services/exclude_lexicons.inc.php');
 $lazyload  = $get('mpc_lazyload_enabled', '1');
 $expand    = $get('mpc_expand_enabled', '1');
+$presets   = $get('mpc_path_to_presets', 'presets/');
 
 $esc = function ($s) { return htmlspecialchars((string)$s, ENT_QUOTES); };
 // boolean-select Да/Нет с предвыбором текущего значения ('1' = Да)
@@ -84,6 +85,11 @@ $output = '
   </label>
 
   <h4 style="margin:18px 0 8px;border-bottom:1px solid #eee;padding-bottom:4px">Пути</h4>
+
+  <label style="display:block;margin-bottom:12px">
+    <b>Путь к пресетам</b> <span style="color:#888">(относительно pdotools_elements_path; задайте вне папки пакета, чтобы пресеты не затёрлись при обновлении)</span><br>
+    <input type="text" name="mpc_path_to_presets" value="' . $esc($presets) . '" style="width:100%">
+  </label>
 
   <label style="display:block;margin-bottom:4px">
     <b>Путь к манифестам mpc CLI</b> <span style="color:#888">(относительно core/ или абсолютный)</span><br>

@@ -22,6 +22,7 @@ if ($transport->xpdo) {
             'mpc_default_language',
             'mpc_lazyload_enabled',
             'mpc_expand_enabled',
+            'mpc_path_to_presets',
             'mpc_manifests_path',
         ];
         foreach ($keys as $key) {
