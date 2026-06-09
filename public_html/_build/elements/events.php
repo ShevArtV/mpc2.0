@@ -7,7 +7,7 @@ return [
     'mpcOnHandleContact' => [
         'groupname' => 'MigxPageConfigurator',
     ],
-    'mpcOnBeforeDownloadImage' => [
+    'mpcOnBeforeDownloadFile' => [
         'groupname' => 'MigxPageConfigurator',
     ],
     'mpcOnBeforeParseConfig' => [
