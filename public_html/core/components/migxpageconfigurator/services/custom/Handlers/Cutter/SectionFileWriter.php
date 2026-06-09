@@ -49,6 +49,13 @@ class SectionFileWriter
             if ($chunkName === '' || strpos($chunkName, '..') !== false) {
                 continue; // пустое имя или path traversal — пропускаем
             }
+            // data-mpc-copy: это копия — файл НЕ нарезаем (оригинал лежит в файле
+            // из значения copy либо в одноимённом). Подключение (include/parse)
+            // ставится отдельно в SpecialTagProcessor. Так разработчик явно
+            // указывает оригинал и не зависит от порядка/режима нарезки.
+            if ($innerChunk->hasAttribute('data-mpc-copy')) {
+                continue;
+            }
             if (in_array($chunkName, $this->chunkNames)) {
                 continue;
             }
