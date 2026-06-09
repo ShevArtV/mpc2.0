@@ -31,6 +31,19 @@ class OnWebPagePrerender extends PluginHandler
             return;
         }
 
+        // Связка с mpc_edit_mode (пакет migxpageconfigurator): без него каттер
+        // вырезает data-mpc-* маркеры из чанков и редактору нечего цеплять.
+        // Не подключаем бесполезный overlay, но явно сообщаем редактору почему.
+        if (!(bool)$this->modx->getOption('mpc_edit_mode', null, false)) {
+            $this->modx->log(
+                \modX::LOG_LEVEL_WARN,
+                '[mpcVisualEditor] Редактор включён (mpcve_active=1), но mpc_edit_mode=0 — '
+                . 'в чанках нет data-mpc-* маркеров. Включите системную настройку mpc_edit_mode '
+                . 'и перенарежьте страницы, иначе режим редактирования работать не будет.'
+            );
+            return;
+        }
+
         $resource = $this->modx->resource;
         if (!$resource || !is_string($resource->_output) || stripos($resource->_output, '</body>') === false) {
             return;

@@ -31,7 +31,7 @@ $_lang['area_mpcve_editor']  = 'Editor';
 
 // --- Settings ---
 $_lang['setting_mpcve_active'] = 'Enable mpcVisualEditor';
-$_lang['setting_mpcve_active_desc'] = 'Package master switch. Off — edit mode is unavailable and nothing is loaded on the frontend.';
+$_lang['setting_mpcve_active_desc'] = 'Package master switch. Off — edit mode is unavailable and nothing is loaded on the frontend. It also requires the mpc_edit_mode setting (MigxPageConfigurator package) to be enabled and pages re-cut — otherwise chunks contain no data-mpc-* markers and the editor will not load (a warning is written to the system log).';
 $_lang['setting_mpcve_edit_param'] = 'Edit-mode query parameter';
 $_lang['setting_mpcve_edit_param_desc'] = 'GET parameter name that turns the editor on for a page. Default mpcedit (→ ?mpcedit=1).';
 $_lang['setting_mpcve_permission'] = 'Permission required to edit';
