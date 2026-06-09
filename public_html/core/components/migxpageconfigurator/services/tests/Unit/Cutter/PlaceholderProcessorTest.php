@@ -224,6 +224,83 @@ class PlaceholderProcessorTest extends TestCase
         $this->assertStringContainsString('{/if}', $result['html']);
     }
 
+    public function testSetPlaceholdersNestedFieldInLink(): void
+    {
+        $proc = $this->makeProcessor();
+        $html = '<section data-mpc-section="test">'
+            . '<a data-mpc-field="link" href="/contacts">'
+            . '<span data-mpc-field="link_text" data-mpc-unwrap="1">Связаться</span>'
+            . '</a></section>';
+
+        $properties = [
+            'html'          => $html,
+            'element'       => (new Document($html))->find('[data-mpc-section]')[0],
+            'fieldAttrName' => 'data-mpc-field',
+            'itemAttrName'  => 'data-mpc-item',
+            'level'         => 0,
+            'isStatic'      => false,
+        ];
+
+        $result = $proc->setPlaceholders($properties)['html'];
+        $result = $proc->unwrapBlock($result); // этап снятия обёрток (как в SectionFileWriter)
+
+        // href ссылки и её текст — два независимых поля
+        $this->assertStringContainsString('href="{$link}"', $result);
+        $this->assertStringContainsString('{$link_text}', $result);
+        // data-mpc-unwrap снял вложенный <span>, оставив только плейсхолдер текста
+        $this->assertStringNotContainsString('<span', $result);
+    }
+
+    public function testSetPlaceholdersImgInsideListUsesOwnAttrs(): void
+    {
+        // img внутри списка остаётся массивом img[0], alt берётся из самого
+        // медиа-поля (img[0].alt), а не из чужого поля.
+        $proc = $this->makeProcessor();
+        $html = '<section data-mpc-section="test">'
+            . '<div data-mpc-field="cards"><div data-mpc-item>'
+            . '<img data-mpc-field-1="img" src="1.png" alt="Фото" width="10" height="10">'
+            . '<h3 data-mpc-field-1="title">Карточка</h3>'
+            . '</div></div></section>';
+        $properties = [
+            'html'          => $html,
+            'element'       => (new Document($html))->find('[data-mpc-section]')[0],
+            'fieldAttrName' => 'data-mpc-field',
+            'itemAttrName'  => 'data-mpc-item',
+            'level'         => 0,
+            'isStatic'      => false,
+        ];
+        $result = $proc->setPlaceholders($properties)['html'];
+        $this->assertStringContainsString('{$item1.img[0].src}', $result);
+        $this->assertStringContainsString('{$item1.img[0].alt}', $result);
+        $this->assertStringContainsString('{$item1.title}', $result);
+    }
+
+    public function testSetPlaceholdersTwoLevelList(): void
+    {
+        // Двухуровневый список: вложенные foreach с $item1/$item2.
+        $proc = $this->makeProcessor();
+        $html = '<section data-mpc-section="test">'
+            . '<div data-mpc-field="blocks"><div data-mpc-item>'
+            . '<h3 data-mpc-field-1="title">Блок</h3>'
+            . '<ul data-mpc-field-1="items"><li data-mpc-item-1>'
+            . '<span data-mpc-field-2="label">Пункт</span>'
+            . '</li></ul>'
+            . '</div></div></section>';
+        $properties = [
+            'html'          => $html,
+            'element'       => (new Document($html))->find('[data-mpc-section]')[0],
+            'fieldAttrName' => 'data-mpc-field',
+            'itemAttrName'  => 'data-mpc-item',
+            'level'         => 0,
+            'isStatic'      => false,
+        ];
+        $result = $proc->setPlaceholders($properties)['html'];
+        $this->assertStringContainsString('{foreach $blocks as $item1', $result);
+        $this->assertStringContainsString('{$item1.title}', $result);
+        $this->assertStringContainsString('{foreach $item1.items as $item2', $result);
+        $this->assertStringContainsString('{$item2.label}', $result);
+    }
+
     public function testSetPlaceholdersTopLevelListImages(): void
     {
         // Регресс: top-level медиа-список → индексированный $list_images[k],
