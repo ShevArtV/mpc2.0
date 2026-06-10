@@ -64,7 +64,7 @@ class Mpc
             'pdotoolsElementsPath' => $this->modx->getOption('pdotools_elements_path', null, '{core_path}elements/'),
             'pathToDist' => $this->modx->getOption('mpc_path_to_dist', null, 'parsed/'),
             'extension' => $this->modx->getOption('mpc_tpl_file_extension', null, '.tpl'),
-            'pathToSrc' => $this->modx->getOption('mpc_path_to_src', null, 'elements/templates/'),
+            'pathToSrc' => $this->modx->getOption('mpc_path_to_src', null, 'templates/'),
             'lazyloadAttr' => $this->modx->getOption('mpc_lazyload_attr', null, ''),
             'expandAttr' => $this->modx->getOption('mpc_expand_attr', null, ''),
             'devMode' => $this->modx->getOption('mpc_dev_mode', null, false),
