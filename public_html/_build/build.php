@@ -712,11 +712,59 @@ class modExtraPackage
         /** @var modTransportVehicle $vehicle */
         $vehicle = $this->builder->createVehicle($this->category, $this->category_attributes);
 
-        // Files resolvers
-        $vehicle->resolve('file', [
-            'source' => $this->config['core'],
-            'target' => "return MODX_CORE_PATH . 'components/';",
-        ]);
+        // Files resolvers.
+        // Папку компонента пакуем НЕ целиком, а поэлементно, чтобы исключить из
+        // services/ сборочный мусор (composer.phar ~2.6 МБ, tests/, logs/,
+        // .phpunit.result.cache) и dev-зависимости vendor (PHPUnit и его пакеты).
+        // В рантайме из vendor нужны только didom + openspout + автозагрузчик
+        // (см. require в services/composer.json) — иначе transport-пакет раздувается
+        // до мегабайт. Аналогично исключению assets/media ниже.
+        $name        = $this->config['name_lower'];
+        $coreDir     = rtrim($this->config['core'], '/\\');
+        $coreTarget  = "return MODX_CORE_PATH . 'components/" . $name . "/';";
+        // Что не должно попадать в пакет из services/
+        $servicesSkip = ['composer.phar', '.phpunit.result.cache', 'phpunit.xml',
+            'phpunit.xml.dist', 'tests', 'logs'];
+        // vendor: оставляем только рантайм-зависимости, остальное (dev) выкидываем
+        $vendorKeep = ['composer', 'autoload.php', 'imangazaliev', 'openspout'];
+
+        foreach (scandir($coreDir) as $item) {
+            if (in_array($item, ['.', '..'], true)) {
+                continue;
+            }
+            $path = $coreDir . '/' . $item;
+            if ($item === 'services' && is_dir($path)) {
+                $servicesTarget = "return MODX_CORE_PATH . 'components/" . $name . "/services/';";
+                foreach (scandir($path) as $sItem) {
+                    if (in_array($sItem, ['.', '..'], true) || in_array($sItem, $servicesSkip, true)) {
+                        continue;
+                    }
+                    $sPath = $path . '/' . $sItem;
+                    if ($sItem === 'vendor' && is_dir($sPath)) {
+                        $vendorTarget = "return MODX_CORE_PATH . 'components/" . $name . "/services/vendor/';";
+                        foreach (scandir($sPath) as $vItem) {
+                            if (!in_array($vItem, $vendorKeep, true)) {
+                                continue;
+                            }
+                            $vehicle->resolve('file', [
+                                'source' => $sPath . '/' . $vItem,
+                                'target' => $vendorTarget,
+                            ]);
+                        }
+                        continue;
+                    }
+                    $vehicle->resolve('file', [
+                        'source' => $sPath,
+                        'target' => $servicesTarget,
+                    ]);
+                }
+                continue;
+            }
+            $vehicle->resolve('file', [
+                'source' => $path,
+                'target' => $coreTarget,
+            ]);
+        }
         // Ассеты пакуем поэлементно, ИСКЛЮЧАЯ runtime-папку media/: туда
         // MediaDownloader скачивает медиа-контент сайта (rfield/tv + поля),
         // в транспорт-пакет он не нужен и раздувает его.
