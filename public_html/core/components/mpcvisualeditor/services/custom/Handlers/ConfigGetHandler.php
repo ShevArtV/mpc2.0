@@ -32,13 +32,19 @@ class ConfigGetHandler extends BaseHandler
 
         $resource = $this->mpcve->readConfig('resource', $resourceId);
         $global   = $this->mpcve->readConfig('global', $resourceId);
+        // type — секции ресурса-ТИПА (сайдбар покажет наследуемые секции под замком).
+        // На самой странице-типе родительского типа нет → type пустой, isType=true.
+        $isType   = $this->mpcve->isTypeResource($resourceId);
+        $type     = $isType ? ['data' => ['config' => []]] : $this->mpcve->readConfig('type', $resourceId);
 
         return [
             'success' => true,
             'message' => '',
             'data'    => [
                 'resourceId' => $resourceId,
+                'isType'     => $isType,
                 'resource'   => $resource['data']['config'] ?? [],
+                'type'       => $type['data']['config'] ?? [],
                 'global'     => $global['data']['config'] ?? [],
                 // Карты лексикона по уровням — панель показывает значения, не ключи.
                 'lexicons'   => [

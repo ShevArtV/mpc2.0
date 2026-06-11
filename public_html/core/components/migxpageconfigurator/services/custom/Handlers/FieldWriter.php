@@ -140,6 +140,12 @@ class FieldWriter
         return $this->lexSyncInstance;
     }
 
+    /** Культура языка по умолчанию (источник оригиналов для лексиконов). */
+    private function defaultLanguage(): string
+    {
+        return (string)$this->modx->getOption('mpc_default_language', null, 'ru');
+    }
+
     /**
      * Каноничное решение «лексиконизировать ли поле» — ТО ЖЕ, что нарезка
      * (`LexiconManager::shouldLexiconize`): content-type ∈ mpc_translated_content
@@ -258,8 +264,17 @@ class FieldWriter
             $writer = $this->lexiconWriter();
             $ident  = $writer->identifier($rid);
             $key    = 'mpc_resource_' . $field;
+            $oldOriginal = (string)$resource->get($field); // значение колонки ДО перезаписи ключом
             if (!$writer->set($ident, $key, is_scalar($value) ? (string)$value : '')) {
                 return $this->result(false, 'failed to write lexicon entry');
+            }
+            // ПЕРВАЯ лексиконизация в НЕ дефолтном языке: старый литерал колонки —
+            // это оригинал дефолтного языка. Сохраняем его в словарь дефолтного
+            // языка, иначе он потеряется (колонка перезапишется ключом, а syncKey
+            // зальёт дефолт плейсхолдером текущего языка).
+            if ($oldOriginal !== '' && $oldOriginal !== $key
+                && $this->lexProps['culture'] !== $this->defaultLanguage()) {
+                $this->lexiconSync()->seedDefaultOriginal((string)$ident, $key, $oldOriginal);
             }
             $resource->set($field, $key); // в колонку — ключ словаря
             if (!$resource->save()) {
@@ -318,8 +333,15 @@ class FieldWriter
             $writer = $this->lexiconWriter();
             $ident  = $writer->identifier($rid);
             $key    = 'mpc_resource_tv_' . $tv;
+            $oldOriginal = (string)$resource->getTVValue($tv); // значение TV ДО перезаписи ключом
             if (!$writer->set($ident, $key, is_scalar($value) ? (string)$value : '')) {
                 return $this->result(false, 'failed to write lexicon entry');
+            }
+            // ПЕРВАЯ лексиконизация в НЕ дефолтном языке: старый литерал TV — оригинал
+            // дефолтного языка, сохраняем его в словарь дефолтного языка (см. rfield).
+            if ($oldOriginal !== '' && $oldOriginal !== $key
+                && $this->lexProps['culture'] !== $this->defaultLanguage()) {
+                $this->lexiconSync()->seedDefaultOriginal((string)$ident, $key, $oldOriginal);
             }
             $resource->setTVValue($tv, $key); // в значение TV — ключ словаря
             $this->lexiconSync()->syncKey((string)$ident, $key, is_scalar($value) ? (string)$value : '', $this->lexProps['culture']);
@@ -630,6 +652,19 @@ class FieldWriter
         }
 
         return $this->result(true, 'seeded', ['json' => $newJson]);
+    }
+
+    /**
+     * Публичная обёртка: скопировать ОДНУ секцию из типа в ресурс (кнопка-замок в
+     * сайдбаре редактора — выборочное копирование наследуемой секции по имени).
+     */
+    public function copyTypeSectionToResource(int $rid, string $section): array
+    {
+        $resource = $this->resolveLevelResource('resource', $rid);
+        if (!$resource) {
+            return $this->result(false, 'resource not found: ' . $rid);
+        }
+        return $this->seedSectionIntoResource($resource, $rid, $section);
     }
 
     /**

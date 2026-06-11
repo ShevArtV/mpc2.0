@@ -65,9 +65,11 @@ class InformationUpdater
                     $data['value'] = $item->getAttribute('src');
                     break;
                 default:
-                    // разбиваем Fenom `{` и MODX-теги `[[`, чтобы значение из
-                    // контента не исполнялось при рендере настройки.
-                    $data['value'] = str_replace(['{', '[['], ['{ ', '[ ['], $item->nodeValue);
+                    // DiDom: содержимое элемента — через text(); nodeValue у element-
+                    // ноды по DOM-спеке = null (всегда пустой) → значение настройки
+                    // не сохранялось (писалась пустая строка). Разбиваем Fenom `{` и
+                    // MODX-теги `[[`, чтобы значение не исполнялось при рендере настройки.
+                    $data['value'] = str_replace(['{', '[['], ['{ ', '[ ['], $item->text());
                     break;
             }
 

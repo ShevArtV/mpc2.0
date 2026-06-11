@@ -118,16 +118,17 @@ class LexiconSync
     public function syncKey(string $identifier, string $key, string $value, string $currentLang): void
     {
         // Перевод (не дефолтный язык) — значение уже записано в файл этого языка
-        // вызывающим кодом; здесь снимаем ключ с pending (переведено).
+        // вызывающим кодом; снимаем ключ с pending (переведено).
         if ($currentLang !== $this->defaultLang) {
             $this->pending->remove($currentLang, $identifier, $key);
-            return;
         }
 
-        // Оригинал на дефолтном языке: новый ключ распространяем по остальным
-        // языкам плейсхолдером (= значение дефолта) и помечаем непереведённым.
-        // Существующий ключ не трогаем — чужие переводы сохраняются.
-        foreach ($this->otherLanguages() as $lang) {
+        // Ключ должен существовать во ВСЕХ остальных языках (включая дефолтный),
+        // иначе язык без ключа рендерит сырой `mpc_resource_*`. Дыры заполняем
+        // плейсхолдером (= значение текущего языка) + pending; существующий перевод
+        // не трогаем. Раньше правка НЕ дефолтного языка делала ранний return, и
+        // дефолтный оставался без ключа → ломался рендер дефолтного языка.
+        foreach (array_values(array_diff($this->languages, [$currentLang, ''])) as $lang) {
             $existing = $this->readLexicon($lang, $identifier);
             if (array_key_exists($key, $existing)) {
                 continue;
@@ -139,5 +140,24 @@ class LexiconSync
             $keys[] = $key;
             $this->pending->save($lang, $identifier, $keys);
         }
+    }
+
+    /**
+     * Сохранить «оригинал» (старое значение колонки/TV) в словарь ДЕФОЛТНОГО языка,
+     * если ключа там ещё нет. Нужно при ПЕРВОЙ лексиконизации поля, когда правят НЕ
+     * дефолтный язык: иначе прежний текст дефолтного языка (лежал в колонке/TV)
+     * затрётся ключом и потеряется. Дефолтный язык — оригинал, в pending не кладём.
+     */
+    public function seedDefaultOriginal(string $identifier, string $key, string $original): void
+    {
+        if ($original === '') {
+            return;
+        }
+        $existing = $this->readLexicon($this->defaultLang, $identifier);
+        if (array_key_exists($key, $existing)) {
+            return;
+        }
+        $existing[$key] = $original;
+        $this->writeLexicon($this->defaultLang, $identifier, $existing);
     }
 }

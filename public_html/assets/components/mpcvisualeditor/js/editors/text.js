@@ -21,7 +21,12 @@ export function saveField(el, old) {
     // чтобы не срезать её на innerText; чистый текст — innerText (без экранирования &/<).
     var keepHtml = el.getAttribute('data-mpcve-type') === 'richtext'
         || (el.querySelector && el.querySelector('*'));
-    var value = keepHtml ? el.innerHTML : el.innerText;
+    // keepHtml-значение чистим через sanitizeHtml: останутся только разрешённые
+    // теги (mpc_allowed_tags) и атрибуты (mpcve_allowed_attrs), style/on*/js-URL
+    // срежутся. Иначе вставка из IDE утащила бы инлайн-стили на сервер.
+    var value = keepHtml
+        ? sanitizeHtml(el.innerHTML, (S.cfg.allowedTags && S.cfg.allowedTags.length) ? S.cfg.allowedTags : undefined)
+        : el.innerText;
     api.post('field/save', { address: addr, value: value, old: old == null ? '' : old }).then(function (res) {
         if (res && res.success) {
             toast('Сохранено');
@@ -69,6 +74,28 @@ export function openTextEditor(el) {
         el.classList.remove('mpcve-editing');
         el.removeEventListener('keydown', onKey);
         el.removeEventListener('blur', onBlur);
+        el.removeEventListener('paste', onPaste);
+    }
+    // Вставка — ТОЛЬКО плоский текст: из IDE/браузера копируется rich-HTML с чужими
+    // тегами и инлайн-style, которые иначе попадают в поле (и в лексикон). Вставляем
+    // text/plain, чтобы значение было видно целиком и без постороннего оформления.
+    function onPaste(e) {
+        e.preventDefault();
+        var cd = e.clipboardData || window.clipboardData;
+        var text = cd ? cd.getData('text/plain') : '';
+        if (document.queryCommandSupported && document.queryCommandSupported('insertText')) {
+            document.execCommand('insertText', false, text);
+            return;
+        }
+        var s = window.getSelection();
+        if (s && s.rangeCount) {
+            s.deleteFromDocument();
+            var r = s.getRangeAt(0);
+            r.insertNode(document.createTextNode(text));
+            r.collapse(false);
+            s.removeAllRanges();
+            s.addRange(r);
+        }
     }
     function onKey(e) {
         if (e.key === 'Enter' && !e.shiftKey) {
@@ -97,4 +124,5 @@ export function openTextEditor(el) {
     }
     el.addEventListener('keydown', onKey);
     el.addEventListener('blur', onBlur);
+    el.addEventListener('paste', onPaste);
 }

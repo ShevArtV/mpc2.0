@@ -210,6 +210,14 @@ class LexiconManager
             return '';
         }
 
+        // Инлайн-style, обработчики событий (on*) и js/vbscript-URL в значении не
+        // нужны и небезопасны: strip_tags оставляет ВСЕ атрибуты на разрешённых
+        // тегах, поэтому чистим их явно (иначе вставка из IDE/браузера тащит style
+        // в лексикон, хотя он не разрешён). Разметка в лексиконе — только теги
+        // форматирования из mpc_allowed_tags, без инлайн-оформления.
+        $value = preg_replace('/\s+(style|on\w+)\s*=\s*("[^"]*"|\'[^\']*\'|[^\s>]+)/i', '', (string)$value);
+        $value = preg_replace('/\s+(href|src|xlink:href)\s*=\s*("\s*(?:javascript|vbscript):[^"]*"|\'\s*(?:javascript|vbscript):[^\']*\')/i', '', $value);
+
         $value = str_replace("'", '&apos;', $value);
         $value = strip_tags($value, $this->properties['allowedTags']);
         $value = trim($value);

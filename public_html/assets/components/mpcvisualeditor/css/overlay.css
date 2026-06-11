@@ -1050,6 +1050,34 @@ input.mpcve-ta__area {
     opacity: 1;
 }
 
+/* --- секции из ТИПА (наследуемые, под замком) + массовые операции ---- */
+.mpcve-sidebar__fromtype {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 8px 12px;
+    border-bottom: 1px solid rgba(0, 0, 0, .08);
+}
+.mpcve-btn--sm {
+    padding: 4px 8px;
+    font-size: 12px;
+    line-height: 1.2;
+}
+.mpcve-sec--locked {
+    cursor: pointer;
+    opacity: .72;
+}
+.mpcve-sec--locked:hover {
+    opacity: 1;
+    background: rgba(37, 99, 235, .07);
+}
+.mpcve-sec__grip--lock {
+    cursor: pointer;
+}
+.mpcve-sec__name--inherit {
+    font-style: italic;
+}
+
 /* --- баннер блокировки ресурса (занято другим) ---------------------- */
 .mpcve-lockbanner {
     position: fixed;

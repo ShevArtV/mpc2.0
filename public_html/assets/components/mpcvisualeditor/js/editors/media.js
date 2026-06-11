@@ -31,6 +31,8 @@ export function openMediaEditor(el, override) {
 
     var isVideo = override ? !!override.isVideo : (el.tagName.toLowerCase() === 'video');
     var rec = fieldConfigRecord(addr) || {};
+    // Прежнее значение поля (как лежит в конфиге) — для диффа/отката в истории.
+    var oldValue = JSON.stringify([rec]);
     var domSources = el ? Array.prototype.slice.call(el.querySelectorAll('source')) : [];
 
     // основной файл: ключ из конфига + превью-путь из DOM
@@ -202,7 +204,7 @@ export function openMediaEditor(el, override) {
             out.sources = sources.filter(function (s) { return s.src; }).map(function (s, k) {
                 return { MIGX_id: k + 1, type: s.type, media: s.media, src: s.src };
             });
-            return api.post('field/save', { address: addr, value: JSON.stringify([out]) });
+            return api.post('field/save', { address: addr, value: JSON.stringify([out]), old: oldValue });
         }).then(function (r) {
             if (r && r.success) { toast('Сохранено, обновляю…'); window.location.reload(); }
             else { toast((r && r.message) || 'Ошибка сохранения', true); saveBtn.disabled = false; saveBtn.textContent = 'Сохранить'; }

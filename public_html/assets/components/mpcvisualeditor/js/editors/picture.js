@@ -40,6 +40,16 @@ export function openPictureEditor(el, override) {
         };
     });
 
+    // Снимок исходной записи (до правок) — для диффа/отката в истории. Та же форма,
+    // что собирает save: src/srcset остаются КЛЮЧАМИ конфига (бэк их не трогает).
+    var oldValue = JSON.stringify([{
+        MIGX_id: 1, preview: main.preview,
+        img: JSON.stringify([{ MIGX_id: 1, src: main.src, alt: main.alt, title: main.title, width: main.width, height: main.height }]),
+        sources: sources.filter(function (s) { return s.srcset; }).map(function (s, k) {
+            return { MIGX_id: k + 1, type: s.type, media: s.media, srcset: s.srcset, sizes: s.sizes, width: s.width, height: s.height };
+        })
+    }]);
+
     var overlay = document.createElement('div');
     overlay.className = 'mpcve-modal';
     overlay.innerHTML =
@@ -158,7 +168,7 @@ export function openPictureEditor(el, override) {
                     return { MIGX_id: k + 1, type: s.type, media: s.media, srcset: s.srcset, sizes: s.sizes, width: s.width, height: s.height };
                 })
             }];
-            return api.post('field/save', { address: addr, value: JSON.stringify(recOut) });
+            return api.post('field/save', { address: addr, value: JSON.stringify(recOut), old: oldValue });
         }).then(function (r) {
             if (r && r.success) { toast('Сохранено, обновляю…'); window.location.reload(); }
             else { toast((r && r.message) || 'Ошибка сохранения', true); saveBtn.disabled = false; saveBtn.textContent = 'Сохранить'; }

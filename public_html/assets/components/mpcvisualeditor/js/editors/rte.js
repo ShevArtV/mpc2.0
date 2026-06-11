@@ -100,6 +100,25 @@ function create(container, opts) {
     var area = container.querySelector('.mpcve-rte__area');
     area.innerHTML = opts.value || '';
 
+    // Вставка в RTE — санитайз: из буфера берём text/html и чистим через
+    // sanitizeHtml (разрешённые теги/атрибуты остаются, style/on*/чужие теги
+    // срезаются), вставляем результат. Нет html → text/plain. Иначе из IDE/браузера
+    // в поле (и в лексикон) тащатся инлайн-стили и мусорная разметка.
+    area.addEventListener('paste', function (e) {
+        e.preventDefault();
+        var cd = e.clipboardData || window.clipboardData;
+        if (!cd) { return; }
+        var html = cd.getData('text/html');
+        if (html && document.queryCommandSupported && document.queryCommandSupported('insertHTML')) {
+            document.execCommand('insertHTML', false, sanitizeHtml(html, opts.allowedTags));
+            return;
+        }
+        var text = cd.getData('text/plain') || '';
+        if (document.queryCommandSupported && document.queryCommandSupported('insertText')) {
+            document.execCommand('insertText', false, text);
+        }
+    });
+
     var toolbar = container.querySelector('.mpcve-rte__toolbar');
     if (toolbar) {
         // mousedown гасим — клик по кнопке не снимает выделение в области.

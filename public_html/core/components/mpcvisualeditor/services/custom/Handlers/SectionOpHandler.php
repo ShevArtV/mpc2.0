@@ -53,6 +53,27 @@ class SectionOpHandler extends BaseHandler
             case 'static':
                 $res = $this->setStatic($config, $resourceId, $request);
                 break;
+            case 'copy_one':
+                // Выборочное копирование одной наследуемой секции (клик по замку).
+                $section = (string)($request['section'] ?? '');
+                $res = $section === ''
+                    ? $this->err('section required')
+                    : $this->mpcve->copySectionFromType($resourceId, $section);
+                break;
+            case 'from_type':
+                // Массово: mode=merge (дополнить) | overwrite (заменить).
+                $res = $this->mpcve->copySectionsFromType(
+                    $resourceId,
+                    ((string)($request['mode'] ?? 'merge')) === 'overwrite' ? 'overwrite' : 'merge'
+                );
+                break;
+            case 'clear':
+                // Очистить секции ресурса (рендер вернётся к наследованию из типа).
+                $r = $this->mpcve->saveConfig('resource', $resourceId, []);
+                $res = empty($r['success'])
+                    ? $this->err($r['message'] ?? 'clear failed')
+                    : ['success' => true, 'message' => 'ok', 'data' => []];
+                break;
             default:
                 return $this->err('unknown section op: ' . $op);
         }

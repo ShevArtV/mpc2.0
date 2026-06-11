@@ -150,6 +150,46 @@ class Mpcve
     }
 
     /**
+     * Скопировать ОДНУ секцию из типа в ресурс (выборочно, кнопка-замок сайдбара).
+     */
+    public function copySectionFromType(int $resourceId, string $section): array
+    {
+        $w = $this->getWriter();
+        return $w ? $w->copyTypeSectionToResource($resourceId, $section)
+            : ['success' => false, 'message' => self::MPC_REQUIRED];
+    }
+
+    /**
+     * Массовое копирование секций из типа: mode=merge (дополнить) | overwrite (заменить).
+     */
+    public function copySectionsFromType(int $resourceId, string $mode): array
+    {
+        $w = $this->getWriter();
+        if (!$w) {
+            return ['success' => false, 'message' => self::MPC_REQUIRED];
+        }
+        $resource = $this->modx->getObject('modResource', $resourceId);
+        if (!$resource) {
+            return ['success' => false, 'message' => 'resource not found: ' . $resourceId];
+        }
+        return $w->copySectionsFromType($resource, $mode === 'overwrite' ? 'overwrite' : 'merge');
+    }
+
+    /**
+     * Ресурс является ТИПОМ страницы (родитель = mpc_static_block_page_id)?
+     * У типа нет родительского типа → в сайдборе не показываем «из типа».
+     */
+    public function isTypeResource(int $resourceId): bool
+    {
+        $r = $this->modx->getObject('modResource', $resourceId);
+        if (!$r) {
+            return false;
+        }
+        $pid = (int)$this->modx->getOption('mpc_static_block_page_id', null, 0);
+        return $pid > 0 && (int)$r->get('parent') === $pid;
+    }
+
+    /**
      * Карта лексикона уровня {key:value} — чтобы панель скрытых полей показывала
      * ЗНАЧЕНИЯ, а не ключи. Пусто, если лексиконы выключены.
      */

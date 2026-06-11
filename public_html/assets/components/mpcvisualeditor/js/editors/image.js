@@ -174,7 +174,7 @@ export function openImageEditor(el, forcedAddr) {
     // Записываем поле: для записи — полная migx-запись (src+атрибуты),
     // иначе — путь-строка. ConfigFieldWriter хранит value как есть.
     function persist(src, addr) {
-        var value;
+        var value, old;
         if (asRecord) {
             value = JSON.stringify([{
                 MIGX_id: 1,
@@ -184,10 +184,15 @@ export function openImageEditor(el, forcedAddr) {
                 width: ((chosen || picked) && newW) ? newW : curW,
                 height: ((chosen || picked) && newH) ? newH : curH
             }]);
+            // old в той же форме (значения, захваченные при открытии) — для диффа/отката.
+            old = JSON.stringify([{
+                MIGX_id: 1, src: cur, alt: curAlt, title: curTitle, width: curW, height: curH
+            }]);
         } else {
             value = src;
+            old = cur;
         }
-        api.post('field/save', { address: addr, value: value }).then(function (r2) {
+        api.post('field/save', { address: addr, value: value, old: old }).then(function (r2) {
             if (r2 && r2.success) {
                 setImageSrc(el, src);
                 if (asRecord) {
