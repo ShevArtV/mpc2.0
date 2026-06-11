@@ -1,3 +1,9 @@
+2.5.33-rc
+==============
+Пер-полевая запись контакта по HTML-фрагменту (для редактора).
+
+- Grabber::handleContactsHtml(html) + Mpc::saveContact(html) — прогон ОДНОГО контакт-фрагмента (data-mpc-contact + data-mpc-cfield) через ContactUpdater. Переиспользуется фронт-редактором mpcVisualEditor (contact/save) для правки контакта со страницы: вся логика identity (по data-mpc-key)/лексиконов/мёрж в TV «Контакты» — та же, что при нарезке. + сброс кэша.
+
 2.5.32-rc
 ==============
 Публичный write-API служебных настроек (для редактора).

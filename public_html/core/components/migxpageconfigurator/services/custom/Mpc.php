@@ -116,6 +116,18 @@ class Mpc
     }
 
     /**
+     * Сохранить ОДИН контакт по HTML-фрагменту (data-mpc-contact + data-mpc-cfield)
+     * — пер-полевая правка контакта из визуального редактора. Переиспользует
+     * грабер-логику (ContactUpdater) + сбрасывает кэш, чтобы перевод подхватился.
+     */
+    public function saveContact(string $html): void
+    {
+        $this->grabber->updContent = true;
+        $this->grabber->handleContactsHtml($html);
+        $this->refreshSiteCache();
+    }
+
+    /**
      * Инвалидация кэша после нарезки. Грабер уже сбрасывает lexicon_topics
      * (LexiconManager::createLexicons), но НЕ resource-кэш: закэшированные
      * страницы держат СТАРЫЕ значения лексикона (рендер резолвит `{key|lexicon}`

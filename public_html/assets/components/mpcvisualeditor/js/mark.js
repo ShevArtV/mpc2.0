@@ -46,3 +46,21 @@ export function markInfo(el) {
     el.setAttribute('data-mpcve-type', 'info');
     el.setAttribute('title', 'Настройка сайта — клик (меняется на всех страницах)');
 }
+
+// Пометить поля контактов (data-mpc-cfield) редактируемыми. Контакты ГЛОБАЛЬНЫЕ;
+// правка требует data-mpc-key на контейнере (иначе identity нестабилен) — без
+// ключа поле не помечаем, только подсказка.
+export function markContacts() {
+    document.querySelectorAll('[data-mpc-cfield]').forEach(function (el) {
+        if (el.classList.contains('mpcve-editable')) { return; }
+        var box = el.closest('[data-mpc-contact]');
+        if (!box) { return; }
+        if (!box.getAttribute('data-mpc-key')) {
+            el.setAttribute('title', 'Контакт без data-mpc-key — добавьте ключ, чтобы править');
+            return;
+        }
+        el.classList.add('mpcve-editable', 'mpcve-editable--info');
+        el.setAttribute('data-mpcve-type', 'contact');
+        el.setAttribute('title', 'Контакт — клик (меняется на всех страницах)');
+    });
+}

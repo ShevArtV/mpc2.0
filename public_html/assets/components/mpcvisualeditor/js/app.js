@@ -8,7 +8,7 @@ import { S, setCookie } from './state.js';
 import { SELECTOR, INFO_SELECTOR } from './constants.js';
 import { api, loadConfig } from './api.js';
 import { toast } from './dom.js';
-import { markEl, markInfo } from './mark.js';
+import { markEl, markInfo, markContacts } from './mark.js';
 import { editors } from './editors/index.js';
 import { buildHiddenTriggers, removeHiddenTriggers } from './panels.js';
 import { toggleSidebar } from './sidebar.js';
@@ -19,9 +19,11 @@ import { acquireLock, startLockLifecycle, showLockBanner, releaseOnExit, markAct
 // --- разметка / снятие разметки полей ----------------------------------
 function markEditable() {
     document.querySelectorAll(SELECTOR).forEach(markEl);
-    // Служебная информация (настройки) — только при праве на глобальную правку.
+    // Служебная информация (настройки) и контакты — только при праве на
+    // глобальную правку (mpcve_edit_global).
     if (S.cfg && S.cfg.editGlobal) {
         document.querySelectorAll(INFO_SELECTOR).forEach(markInfo);
+        markContacts();
     }
 }
 

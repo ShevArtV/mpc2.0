@@ -15,9 +15,11 @@ import { openScalarEditor } from './scalar.js';
 import { openTagsEditor } from './tags.js';
 import { openFileEditor } from './file.js';
 import { openInfoEditor } from './info.js';
+import { openContactEditor } from './contact.js';
 
 export var editors = {
     info: { open: openInfoEditor },           // служебная инфа (data-mpc-info) — глобальные настройки
+    contact: { open: openContactEditor },     // контакт (data-mpc-cfield) — ресурс «Контакты»
     text: { open: openTextEditor },           // инлайн (простой текст)
     textarea: { open: openTextareaEditor },   // модалка <textarea>
     richtext: { open: openRichtextEditor },   // модалка RTE

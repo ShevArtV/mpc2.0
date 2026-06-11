@@ -182,6 +182,17 @@ class Grabber extends Base
     }
 
     /**
+     * Прогнать ОДИН контакт-фрагмент (data-mpc-contact + data-mpc-cfield) через
+     * ContactUpdater — для пер-полевой правки контакта из визуального редактора
+     * (mpcVisualEditor → contact/save). Переиспользует всю логику грабера:
+     * identity по data-mpc-key, лексиконы, мёрж в TV «Контакты».
+     */
+    public function handleContactsHtml(string $html): void
+    {
+        $this->contactUpdater->handleContacts($html, true);
+    }
+
+    /**
      * Явно нацелить грабер на ресурс — носитель mpc_config (текущая страница).
      * Нужно для grab-from-HTML (визуальный редактор): edit-mode HTML не несёт
      * authoring-маркер `<!--##…##-->`, поэтому handleTemplate не переключит

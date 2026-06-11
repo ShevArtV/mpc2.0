@@ -24,6 +24,7 @@ class Connector
         'config/get'     => [Handlers\ConfigGetHandler::class,    'handle'],
         'field/save'     => [Handlers\FieldSaveHandler::class,    'handle'],
         'info/save'      => [Handlers\InfoSaveHandler::class,     'handle'],
+        'contact/save'   => [Handlers\ContactSaveHandler::class,  'handle'],
         'row/op'         => [Handlers\RowOpHandler::class,        'handle'],
         'section/op'     => [Handlers\SectionOpHandler::class,    'handle'],
         'cache/clear'    => [Handlers\CacheClearHandler::class,   'handle'],

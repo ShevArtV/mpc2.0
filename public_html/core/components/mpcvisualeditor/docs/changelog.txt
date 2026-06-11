@@ -1,3 +1,11 @@
+1.0.6-rc
+==============
+Редактирование контактов (data-mpc-cfield) из редактора.
+
+- Правка полей контакта со страницы: value / caption / attributes. Клик по data-mpc-cfield → модалка-textarea с предупреждением «меняется на всех страницах». Запись через ContactSaveHandler (contact/save) → mpc Mpc::saveContact (грабер-логика: identity/лексиконы/мёрж в TV «Контакты»).
+- ТРЕБУЕТСЯ data-mpc-key: контакты без ключа не помечаются редактируемыми (identity по md5(value) нестабилен) — подсказка «добавьте ключ». Под правом mpcve_edit_global (как настройки).
+- Аудит в истории (action=contact, revertable=0). Файлы: ContactSaveHandler.php, Connector.php, editors/contact.js, mark.js, app.js, editors/index.js.
+
 1.0.5-rc
 ==============
 Редактирование служебных настроек (data-mpc-info) из редактора.
