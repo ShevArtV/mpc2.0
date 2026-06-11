@@ -37,11 +37,17 @@ function setImageSrc(el, url) {
     }
 }
 
-// Картинка-ЗАПИСЬ (migx-поле img) vs простой путь (фон/bg_img). У записи
+// Картинка-ЗАПИСЬ (migx-поле img) vs простой путь (фон/bg_img/image-TV). У записи
 // значение в конфиге — [{MIGX_id,src,alt,title,width,height}], у пути — строка.
+// Простой image-TV (data-mpc-tv) хранит ПУТЬ-строку: каттер выводит его как
+// src="{$resource.tvs.<name>}", и migx-запись (JSON) сломала бы Fenom при запекании
+// parsed/. migx-TV в редакторе пока не поддержаны (M29), так что любой
+// data-mpc-tv <img> — это путь. Запись — только для config-полей (data-mpc-field).
 function isRecordImage(el) {
+    if (el.tagName.toLowerCase() !== 'img' || hasBg(el)) { return false; }
+    if (el.hasAttribute('data-mpc-tv')) { return false; }
     var ftype = el.getAttribute('data-mpc-ftype') || '';
-    return el.tagName.toLowerCase() === 'img' && ftype !== 'bg_img' && !hasBg(el);
+    return ftype !== 'bg_img';
 }
 
 export function openImageEditor(el, forcedAddr) {

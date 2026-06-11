@@ -294,6 +294,21 @@ class FieldWriter
             return $this->result(false, 'setTVValue unavailable on resource');
         }
 
+        // Простой image-TV (modTemplateVar.type === 'image') хранит ПУТЬ-строку, а
+        // редактор картинки присылает migx-запись (массив src/alt/title/width/height).
+        // Если записать запись как есть, каттер выведет её JSON сырьём в
+        // src="{$resource.tvs.<name>}", а фигурная скобка свалит Fenom при запекании
+        // parsed/ ("Unexpected token ':' near '{\"MIGX_id\":'"). Сводим к URL.
+        // migximage/image+ (хранят JSON по дизайну) сюда не попадают — только точный 'image'.
+        if (RecordUtil::isRecordValue($value)) {
+            $tvObj = $this->modx->getObject('modTemplateVar', ['name' => $tv]);
+            if ($tvObj && (string)$tvObj->get('type') === 'image') {
+                $rec   = RecordUtil::decodeRecord($value);
+                $first = reset($rec);
+                $value = is_array($first) ? (string)($first['src'] ?? $first['url'] ?? '') : (string)$first;
+            }
+        }
+
         // Лексиконный режим (зеркало writeResourceField): значение TV уезжает в
         // словарь под ключом mpc_resource_tv_<name>, а в значение TV пишется сам
         // этот ключ. Рендер резолвит его через `| lexicon`. Решение «лексиконизи-

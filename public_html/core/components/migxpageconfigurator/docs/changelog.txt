@@ -1,3 +1,11 @@
+2.5.30-rc
+==============
+Фикс: смена картинки в простом image-TV из редактора ломала шаблон (Fenom).
+
+- FieldWriter::writeTv: для простого image-TV (modTemplateVar.type === 'image') запись-значение migx ([{MIGX_id,src,alt,title,width,height}]) сводится к URL (.src) перед записью. Раньше JSON-массив писался в TV как есть, каттер выводил его сырьём в src="{$resource.tvs.<name>}", и фигурная скобка валила Fenom при запекании parsed/ («Unexpected token ':' near '{"MIGX_id":'»). migximage/image+ (хранят JSON по дизайну) не затронуты — только точный тип 'image'. Серверный барьер в пару к фронт-фиксу editors/image.js (mpcVisualEditor 1.0.3). Файлы: services/custom/Handlers/FieldWriter.php.
+- build.php: services/ пакуется поэлементно — из transport-пакета исключены composer.phar (~2.6 МБ), tests/, logs/, .phpunit.result.cache и dev-зависимости vendor (PHPUnit и транзитивные); vendor сводится к рантайму (didom + openspout + автозагрузчик). Пакет 1.7 МБ → ~930 КБ.
+- docs/readme.txt переписан на разрешённый набор HTML-тегов и актуализирован под код 2.5.x.
+
 2.5.29-rc
 ==============
 Переключение языка, лексиконизация полей ресурса/TV из редактора, защита pagetitle.

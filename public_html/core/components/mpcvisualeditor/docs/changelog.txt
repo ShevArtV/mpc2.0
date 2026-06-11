@@ -1,3 +1,10 @@
+1.0.3-rc
+==============
+Фикс: смена картинки в простом image-TV ломала шаблон.
+
+- editors/image.js (isRecordImage): data-mpc-tv <img> трактуется как путь-строка, а не migx-запись. Раньше редактор слал в простой image-TV массив [{MIGX_id,src,alt,title,width,height}], тот попадал в src="{$resource.tvs.<name>}" и валил Fenom при запекании parsed/ («Unexpected token ':' near '{"MIGX_id":'»). migx-TV в редакторе пока не поддержаны (M29), так что любой data-mpc-tv <img> — путь; запись-массив остаётся только для config-полей (data-mpc-field). В пару к серверному барьеру FieldWriter::writeTv (mpc 2.5.30).
+- docs/readme.txt переоформлен в едином стиле с mpc (allowed-tags разметка).
+
 1.0.2-rc
 ==============
 Документация и порядок в системных настройках.
