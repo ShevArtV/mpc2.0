@@ -14,8 +14,10 @@ import { openListboxEditor } from './listbox.js';
 import { openScalarEditor } from './scalar.js';
 import { openTagsEditor } from './tags.js';
 import { openFileEditor } from './file.js';
+import { openInfoEditor } from './info.js';
 
 export var editors = {
+    info: { open: openInfoEditor },           // служебная инфа (data-mpc-info) — глобальные настройки
     text: { open: openTextEditor },           // инлайн (простой текст)
     textarea: { open: openTextareaEditor },   // модалка <textarea>
     richtext: { open: openRichtextEditor },   // модалка RTE

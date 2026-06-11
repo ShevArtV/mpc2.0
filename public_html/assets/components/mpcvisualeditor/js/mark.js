@@ -37,3 +37,12 @@ export function markFieldsWithin(root) {
         root.querySelectorAll(SELECTOR).forEach(markEl);
     }
 }
+
+// Пометить служебную информацию (data-mpc-info) редактируемой. Это ГЛОБАЛЬНАЯ
+// настройка сайта, а не поле ресурса → свой тип 'info', без resolveAddress.
+export function markInfo(el) {
+    if (el.classList.contains('mpcve-editable')) { return; }
+    el.classList.add('mpcve-editable', 'mpcve-editable--info');
+    el.setAttribute('data-mpcve-type', 'info');
+    el.setAttribute('title', 'Настройка сайта — клик (меняется на всех страницах)');
+}

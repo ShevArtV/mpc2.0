@@ -5,19 +5,24 @@
  * пер-полевое (field/save), без ре-граба DOM.
  */
 import { S, setCookie } from './state.js';
-import { SELECTOR } from './constants.js';
+import { SELECTOR, INFO_SELECTOR } from './constants.js';
 import { api, loadConfig } from './api.js';
 import { toast } from './dom.js';
-import { markEl } from './mark.js';
+import { markEl, markInfo } from './mark.js';
 import { editors } from './editors/index.js';
 import { buildHiddenTriggers, removeHiddenTriggers } from './panels.js';
 import { toggleSidebar } from './sidebar.js';
 import { toggleChangelog } from './changelog.js';
+import { toggleSettings } from './settings.js';
 import { acquireLock, startLockLifecycle, showLockBanner, releaseOnExit, markActivity } from './lock.js';
 
 // --- разметка / снятие разметки полей ----------------------------------
 function markEditable() {
     document.querySelectorAll(SELECTOR).forEach(markEl);
+    // Служебная информация (настройки) — только при праве на глобальную правку.
+    if (S.cfg && S.cfg.editGlobal) {
+        document.querySelectorAll(INFO_SELECTOR).forEach(markInfo);
+    }
 }
 
 function unmarkEditable() {
@@ -100,6 +105,7 @@ function buildToolbar() {
         '<span class="mpcve-toolbar__title">mpcVisualEditor</span>' +
         '<span class="mpcve-toolbar__hint">клик по полю — править; Enter или уход — сохранить</span>' +
         (S.editing ? '<button type="button" data-mpcve="sections">☰ Секции</button>' : '') +
+        (S.editing && S.cfg && S.cfg.editGlobal ? '<button type="button" data-mpcve="settings" title="Служебные настройки сайта (data-mpc-info)">⚙ Настройки</button>' : '') +
         (S.editing ? '<button type="button" data-mpcve="history" title="История изменений ресурса">🕓 История</button>' : '') +
         '<button type="button" data-mpcve="cache" title="Очистить кэш сайта">🧹 Кэш</button>' +
         '<button type="button" data-mpcve="admin" title="Открыть текущий ресурс в админке">⚙ Админка</button>' +
@@ -112,6 +118,9 @@ function buildToolbar() {
 
     var histBtn = bar.querySelector('[data-mpcve="history"]');
     if (histBtn) { histBtn.addEventListener('click', toggleChangelog); }
+
+    var setBtn = bar.querySelector('[data-mpcve="settings"]');
+    if (setBtn) { setBtn.addEventListener('click', toggleSettings); }
 
     // Очистка кэша сайта (полный refresh MODX).
     var cacheBtn = bar.querySelector('[data-mpcve="cache"]');

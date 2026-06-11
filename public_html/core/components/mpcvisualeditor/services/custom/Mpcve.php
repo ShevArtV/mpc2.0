@@ -69,6 +69,9 @@ class Mpcve
             'resourceId'   => $resource ? (int)$resource->get('id') : 0,
             'allowedTags'  => $allowedTags,
             'allowedAttrs' => $allowedAttrs,
+            // Право на правку ГЛОБАЛЬНЫХ данных (настройки data-mpc-info, контакты):
+            // фронт помечает их редактируемыми только при наличии mpcve_edit_global.
+            'editGlobal'   => (new Handlers\PermissionChecker($this->modx))->canEditGlobal(),
             // CSRF-nonce: коннектор сверяет его с сессией на каждом write-действии.
             'nonce'        => $this->nonce(),
             // Для кнопки «Открыть в админке» (тулбар).

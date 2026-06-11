@@ -7,6 +7,11 @@ export var FIELD_ATTRS = ['data-mpc-field', 'data-mpc-rfield', 'data-mpc-tv',
     'data-mpc-field-1', 'data-mpc-field-2', 'data-mpc-field-3'];
 export var SELECTOR = FIELD_ATTRS.map(function (a) { return '[' + a + ']'; }).join(',');
 
+// Служебная информация (data-mpc-info) — ГЛОБАЛЬНЫЕ настройки (системные/
+// контекстные/ClientConfig). Помечается редактируемой отдельно и только при
+// праве mpcve_edit_global (S.cfg.editGlobal).
+export var INFO_SELECTOR = '[data-mpc-info]';
+
 // Подсказки (title) по типу редактора.
 export var TYPE_HINT = {
     text: 'Текст — клик, чтобы редактировать',

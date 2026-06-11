@@ -32,50 +32,67 @@ class InformationUpdater
         }
 
         foreach ($items as $item) {
-            $infoKey = $item->getAttribute('data-mpc-info');
-            if ($this->isProtectedSetting((string)$infoKey)) {
-                $this->modx->log(\modX::LOG_LEVEL_WARN, '[MPC info] попытка записи защищённой настройки через data-mpc-info: ' . $infoKey);
-                continue;
-            }
-            $ctx     = $item->getAttribute('data-mpc-ctx') ?: $this->modx->context->get('key') ?: 'web';
+            $infoKey = (string)$item->getAttribute('data-mpc-info');
+            // data-mpc-ctx нет → системная/ClientConfig; есть → контекстная (пустое
+            // значение атрибута = текущий контекст).
+            $ctx = $item->hasAttribute('data-mpc-ctx')
+                ? ($item->getAttribute('data-mpc-ctx') ?: ($this->modx->context->get('key') ?: 'web'))
+                : null;
 
-            if (!$item->hasAttribute('data-mpc-ctx')) {
-                if (!$setting = $this->modx->getObject('modSystemSetting', ['key' => $infoKey])) {
-                    if (!$setting = $this->getClientConfigSetting($infoKey)) {
-                        continue;
-                    }
-                }
-            } else {
-                if (!$setting = $this->modx->getObject('modContextSetting', ['key' => $infoKey, 'context_key' => $ctx])) {
-                    if (!$setting = $this->modx->getObject('modSystemSetting', ['key' => $infoKey])) {
-                        if (!$setting = $this->getClientConfigSetting($infoKey, $ctx)) {
-                            continue;
-                        }
-                    }
-                }
-            }
-
-            $data = ['context' => $ctx, 'context_key' => $ctx, 'key' => $infoKey, 'value' => ''];
-
+            // Значение по виду элемента: link → href, img → src, иначе содержимое
+            // (DiDom: text(); nodeValue у element-ноды по DOM-спеке всегда null).
             switch ($item->tagName()) {
-                case 'link':
-                    $data['value'] = $item->getAttribute('href');
-                    break;
-                case 'img':
-                    $data['value'] = $item->getAttribute('src');
-                    break;
-                default:
-                    // DiDom: содержимое элемента — через text(); nodeValue у element-
-                    // ноды по DOM-спеке = null (всегда пустой) → значение настройки
-                    // не сохранялось (писалась пустая строка). Разбиваем Fenom `{` и
-                    // MODX-теги `[[`, чтобы значение не исполнялось при рендере настройки.
-                    $data['value'] = str_replace(['{', '[['], ['{ ', '[ ['], $item->text());
-                    break;
+                case 'link': $value = (string)$item->getAttribute('href'); break;
+                case 'img':  $value = (string)$item->getAttribute('src'); break;
+                default:     $value = (string)$item->text(); break;
             }
 
-            $setting->fromArray($data, '', true);
-            $setting->save();
+            $res = $this->saveSetting($infoKey, $value, $ctx);
+            if (empty($res['success'])) {
+                $this->modx->log(\modX::LOG_LEVEL_WARN, '[MPC info] ' . ($res['message'] ?? 'не сохранено') . ': ' . $infoKey);
+            }
         }
+    }
+
+    /**
+     * Записать значение служебной настройки по ключу (data-mpc-info) в системную /
+     * контекстную / ClientConfig-настройку. Пишет только в СУЩЕСТВУЮЩИЕ настройки
+     * (как и грабер). Защищённые (isProtectedSetting) — отказ. Переиспользуется
+     * грабером и фронт-редактором (mpcVisualEditor → info/save).
+     *
+     * @param string|null $ctx null/'' → системная (или ClientConfig); иначе контекстная.
+     * @return array ['success'=>bool, 'message'=>string]
+     */
+    public function saveSetting(string $key, string $value, ?string $ctx = null): array
+    {
+        if ($key === '' || $this->isProtectedSetting($key)) {
+            return ['success' => false, 'message' => 'защищённая или пустая настройка'];
+        }
+        // Ломаем Fenom `{` и MODX-теги `[[`, чтобы значение не исполнялось при рендере.
+        $value  = str_replace(['{', '[['], ['{ ', '[ ['], $value);
+        $ctxKey = ($ctx === null || $ctx === '') ? '' : $ctx;
+
+        if ($ctxKey === '') {
+            $setting = $this->modx->getObject('modSystemSetting', ['key' => $key])
+                ?: $this->getClientConfigSetting($key);
+        } else {
+            $setting = $this->modx->getObject('modContextSetting', ['key' => $key, 'context_key' => $ctxKey])
+                ?: $this->modx->getObject('modSystemSetting', ['key' => $key])
+                ?: $this->getClientConfigSetting($key, $ctxKey);
+        }
+        if (!$setting) {
+            return ['success' => false, 'message' => 'настройка не найдена'];
+        }
+
+        $setting->fromArray(['context' => $ctxKey, 'context_key' => $ctxKey, 'key' => $key, 'value' => $value], '', true);
+        if (!$setting->save()) {
+            return ['success' => false, 'message' => 'не удалось сохранить настройку'];
+        }
+        // Сброс системного кэша — чтобы $_modx->config подхватил новое значение.
+        if (method_exists($this->modx, 'getCacheManager') && ($cm = $this->modx->getCacheManager())) {
+            $cm->refresh(['system_settings' => []]);
+        }
+        return ['success' => true, 'message' => 'ok'];
     }
 
     /**

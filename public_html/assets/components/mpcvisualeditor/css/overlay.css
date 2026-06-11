@@ -1078,6 +1078,49 @@ input.mpcve-ta__area {
     font-style: italic;
 }
 
+/* --- служебная информация (data-mpc-info) — глобальные настройки ------ */
+.mpcve-editable--info {
+    outline: 1px dashed rgba(180, 83, 9, .6);
+    outline-offset: 2px;
+}
+.mpcve-modal__note {
+    margin: 0 0 8px;
+    padding: 7px 10px;
+    border-radius: 6px;
+    background: rgba(180, 83, 9, .12);
+    color: #92400e;
+    font-size: 12px;
+    line-height: 1.35;
+}
+
+/* --- панель «Настройки» (список data-mpc-info) ----------------------- */
+.mpcve-set {
+    padding: 8px 12px;
+    border-bottom: 1px solid rgba(0, 0, 0, .06);
+    cursor: pointer;
+}
+.mpcve-set:hover {
+    background: rgba(37, 99, 235, .07);
+}
+.mpcve-set__key {
+    font-weight: 600;
+    font-size: 13px;
+    color: #1f2937;
+}
+.mpcve-set__ctx {
+    font-weight: 400;
+    color: #b45309;
+    font-size: 11px;
+}
+.mpcve-set__val {
+    margin-top: 2px;
+    font-size: 12px;
+    color: #6b7280;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
 /* --- баннер блокировки ресурса (занято другим) ---------------------- */
 .mpcve-lockbanner {
     position: fixed;

@@ -41,6 +41,23 @@ class PermissionChecker
     }
 
     /**
+     * Право на правку ГЛОБАЛЬНЫХ данных из редактора: системные/контекстные/
+     * ClientConfig-настройки (data-mpc-info) и контакты — они меняются на всём
+     * сайте, поэтому отдельное право `mpcve_edit_global` (sudo — bypass).
+     */
+    public function canEditGlobal(): bool
+    {
+        $user = $this->modx->user;
+        if (!$user || !$user->isAuthenticated('mgr')) {
+            return false;
+        }
+        if ($user->get('sudo')) {
+            return true;
+        }
+        return (bool)$this->modx->hasPermission('mpcve_edit_global');
+    }
+
+    /**
      * Право на запись КОНКРЕТНОГО ресурса (anti-IDOR): глобального mpcve_edit
      * мало — проверяем resource-level политику save. sudo — bypass.
      */

@@ -1,3 +1,11 @@
+1.0.5-rc
+==============
+Редактирование служебных настроек (data-mpc-info) из редактора.
+
+- Правка глобальных настроек сайта (системные/контекстные/ClientConfig) прямо со страницы: инлайн по видимому data-mpc-info + панель «⚙ Настройки» в тулбаре со списком ВСЕХ data-mpc-info страницы (включая <head> — favicon/метрики, по которым нельзя кликнуть). Редактор — модалка-textarea с предупреждением «меняется на всех страницах».
+- Новое право `mpcve_edit_global` (PermissionChecker::canEditGlobal, прокинуто во фронт как editGlobal): без него настройки не помечаются редактируемыми и кнопка/панель скрыты. Регистрируется резолвером в политике Administrator.
+- Запись через InfoSaveHandler (action info/save) → mpc InformationUpdater::saveSetting (blacklist защищённых). Аудит в истории (revertable=0). Файлы: InfoSaveHandler.php, PermissionChecker.php, Mpcve.php, Connector.php, editors/info.js, settings.js, mark.js, app.js, constants.js, overlay.css, resolvers/1permissions.php.
+
 1.0.4-rc
 ==============
 Санитайз вставки, откат медиа-правок, работа с секциями типа в сайдбаре.
