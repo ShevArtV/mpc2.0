@@ -14,6 +14,7 @@ import { openListboxEditor } from './listbox.js';
 import { openScalarEditor } from './scalar.js';
 import { openTagsEditor } from './tags.js';
 import { openFileEditor } from './file.js';
+import { openColorEditor } from './color.js';
 import { openInfoEditor } from './info.js';
 import { openContactEditor } from './contact.js';
 
@@ -35,5 +36,6 @@ export var editors = {
     number: { open: openScalarEditor },                // TV number — модалка input[number]
     date: { open: openScalarEditor },                  // TV date — модалка datetime-local
     tags: { open: openTagsEditor },                    // TV tag/autotag — чипсы
-    file: { open: openFileEditor }                     // TV file — файловый менеджер
+    file: { open: openFileEditor },                    // TV file — файловый менеджер
+    color: { open: openColorEditor }                   // color/colorpicker — пикер цвета + hex
 };

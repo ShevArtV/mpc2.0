@@ -42,10 +42,10 @@ function render(items) {
     box.innerHTML = items.map(function (s, i) {
         var lock = s.protected ? ' 🔒' : '';
         var val = (s.value != null && s.value !== '') ? esc(String(s.value).replace(/\s+/g, ' ').slice(0, 90)) : '<i>пусто</i>';
-        return '<div class="mpcve-set" data-i="' + i + '" title="Клик — редактировать (тип: ' + esc(s.xtype) + ')">' +
+        return '<div class="mpcve-set" data-i="' + i + '" title="Клик — редактировать">' +
             '<div class="mpcve-set__key">' + esc(s.key) + lock +
                 (s.ctx != null ? ' <span class="mpcve-set__ctx">@' + esc(s.ctx || 'web') + '</span>' : '') +
-                ' <span class="mpcve-set__ctx">' + esc(s.xtype) + '</span></div>' +
+            '</div>' +
             '<div class="mpcve-set__val">' + val + '</div>' +
         '</div>';
     }).join('');

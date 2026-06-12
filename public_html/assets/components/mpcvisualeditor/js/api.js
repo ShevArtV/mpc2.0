@@ -31,8 +31,10 @@ function rawPost(action, payload) {
 //   • «Открыть страницу-источник» — редирект на ресурс-тип (data.typeUrl), где
 //     секция реально лежит, и правка идёт там обычным resource-путём.
 // Для статичной секции (level=global) диалога нет — предупреждаем, что глобально.
-// Централизовано здесь, чтобы все редакторы работали единообразно.
-function handleFieldSave(payload, res) {
+// Централизовано здесь, чтобы все редакторы работали единообразно. Применяется и
+// к field/save (правка поля), и к row/op (добавление/удаление строки списка) —
+// повтор идёт через ТОТ ЖЕ action.
+function handleInheritChoice(action, payload, res) {
     var addr = (payload && payload.address) || {};
     if (res && res.data && res.data.code === 'inherit_choice' && !addr.inherit) {
         var name = (res.data.section || addr.section || '');
@@ -57,7 +59,7 @@ function handleFieldSave(payload, res) {
             p2.address = {};
             Object.keys(addr).forEach(function (k) { p2.address[k] = addr[k]; });
             p2.address.inherit = 'copy';
-            return rawPost('field/save', p2).then(function (r2) {
+            return rawPost(action, p2).then(function (r2) {
                 if (r2 && r2.success) { toast('Скопировано в эту страницу'); }
                 return r2;
             });
@@ -72,7 +74,8 @@ function handleFieldSave(payload, res) {
 export var api = {
     post: function (action, payload) {
         return rawPost(action, payload).then(function (res) {
-            return action === 'field/save' ? handleFieldSave(payload, res) : res;
+            return (action === 'field/save' || action === 'row/op')
+                ? handleInheritChoice(action, payload, res) : res;
         });
     },
     // Загрузка файла (multipart): file под ключом 'file' + доп. поля.
@@ -173,10 +176,10 @@ export function loadSettingsList(force) {
         return _settingsList;
     }).catch(function () { _settingsList = []; return _settingsList; });
 }
-export function findSetting(key, hasCtx) {
+// settings/list схлопывает sys+ctx одного ключа в одну эффективную запись, так что
+// ищем просто по key (hasCtx больше не различает строки — таргет несёт сама запись).
+export function findSetting(key) {
     if (!_settingsList) { return null; }
     var byKey = _settingsList.filter(function (s) { return s.key === key; });
-    if (!byKey.length) { return null; }
-    var m = byKey.filter(function (s) { return hasCtx ? (s.ctx != null) : (s.ctx == null); });
-    return (m[0] || byKey[0]);
+    return byKey.length ? byKey[0] : null;
 }

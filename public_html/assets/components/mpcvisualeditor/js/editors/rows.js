@@ -183,7 +183,19 @@ export function openRowsEditor(listEl) {
                         }).then(function (yes) {
                             if (!yes) { return; }
                             serverOp({ op: 'delete', idx: idx }, btn).then(function (ok) {
-                                if (ok) { items[idx].remove(); renderRows(); }
+                                if (!ok) { return; }
+                                if (items.length === 1) {
+                                    // Бэк оставляет последнюю строку пустым шаблоном
+                                    // (структура под-полей — образец для add). Зеркалим
+                                    // в DOM: очищаем строку, а не удаляем, иначе образец
+                                    // пропадёт и список нельзя будет наполнить снова.
+                                    var blank = cloneBlankRow(items[0]);
+                                    items[0].parentNode.replaceChild(blank, items[0]);
+                                    markFieldsWithin(blank);
+                                } else {
+                                    items[idx].remove();
+                                }
+                                renderRows();
                             });
                         });
                     }

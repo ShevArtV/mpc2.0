@@ -136,6 +136,11 @@ class FieldTypesHandler extends BaseHandler
                 return 'number';
             case 'date':
                 return 'date';
+            // colorpicker — кастомный тип TV (аддон ColorPicker) / inputTVtype
+            // config-поля mpc_base. Пикер цвета + hex-инпут (editors/color.js).
+            case 'color':
+            case 'colorpicker':
+                return 'color';
             case 'tag':
             case 'tags':
             case 'autotag':

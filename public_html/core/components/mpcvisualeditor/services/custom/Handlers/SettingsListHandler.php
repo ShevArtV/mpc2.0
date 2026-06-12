@@ -41,14 +41,18 @@ class SettingsListHandler extends BaseHandler
                 if ($key === '') {
                     continue;
                 }
-                $hasCtx = $el->hasAttribute('data-mpc-ctx');
-                $ctxAttr = $hasCtx ? (string)$el->getAttribute('data-mpc-ctx') : null;
-                $dedup = $key . '|' . ($hasCtx ? ($ctxAttr ?? '') : '#sys');
-                if (isset($seen[$dedup])) {
+                // Схлопываем sys+ctx одного ключа в ОДНУ эффективную строку (дедуп
+                // по key, без разделения по контексту). Эффективный таргет (есть ли
+                // контекстная запись) определяет settingMeta по факту в БД.
+                if (isset($seen[$key])) {
                     continue;
                 }
-                $seen[$dedup] = true;
+                $seen[$key] = true;
 
+                // data-mpc-ctx остаётся хинтом контекста для проверки (если не web);
+                // без маркера settingMeta берёт контекст коннектора.
+                $hasCtx = $el->hasAttribute('data-mpc-ctx');
+                $ctxAttr = $hasCtx ? (string)$el->getAttribute('data-mpc-ctx') : null;
                 $ctx = $hasCtx
                     ? ($ctxAttr === '' ? (string)($this->modx->context ? $this->modx->context->get('key') : 'web') : $ctxAttr)
                     : null;
@@ -58,7 +62,8 @@ class SettingsListHandler extends BaseHandler
                 }
                 $list[] = [
                     'key'       => $key,
-                    'ctx'       => $hasCtx ? ($ctxAttr ?? '') : null,
+                    'ctx'       => $meta['ctx'],        // эффективный контекст (по факту), либо null
+                    'target'    => $meta['target'],     // 'context' | 'system' — куда писать
                     'value'     => $meta['value'],
                     'xtype'     => $meta['xtype'],
                     'protected' => $meta['protected'],

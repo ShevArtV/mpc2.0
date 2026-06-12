@@ -64,8 +64,8 @@ class LogHandler extends BaseHandler
         if ((int)$entry['revertable'] !== 1 || (int)$entry['reverted'] === 1) {
             return $this->err('эта запись не откатывается');
         }
-        if ($entry['action'] !== 'field') {
-            return $this->err('откат поддержан только для полей');
+        if (!in_array($entry['action'], ['field', 'row'], true)) {
+            return $this->err('откат поддержан только для полей и строк');
         }
         $address = json_decode((string)$entry['address'], true);
         if (!is_array($address)) {
@@ -75,6 +75,31 @@ class LogHandler extends BaseHandler
         if (!(new PermissionChecker($this->modx))->canEditResource((int)($address['resourceId'] ?? 0))) {
             return $this->err($this->modx->lexicon('mpcve_err_permission'));
         }
+
+        // Откат строки списка: восстанавливаем ВСЁ поле к снимку ДО операции
+        // (add/delete/move). Запись-отката revertable=0 — повторно править можно
+        // обычными row-операциями.
+        if ($entry['action'] === 'row') {
+            $rowsValue = json_decode((string)$entry['old_value'], true);
+            $res = $this->mpcve->restoreRows($address, $rowsValue);
+            if (empty($res['success'])) {
+                return $res;
+            }
+            $log->markReverted($id);
+            $log->add([
+                'resource_id' => (int)($address['resourceId'] ?? 0),
+                'user_id'     => (int)($this->modx->user ? $this->modx->user->get('id') : 0),
+                'username'    => (string)($this->modx->user ? $this->modx->user->get('username') : ''),
+                'action'      => 'row',
+                'section'     => (string)($address['section'] ?? ''),
+                'field'       => (string)($address['parentField'] ?? ''),
+                'address'     => (string)$entry['address'],
+                'new_value'   => 'откат: поле восстановлено',
+                'revertable'  => 0,
+            ]);
+            return ['success' => true, 'message' => 'Откат выполнен', 'data' => []];
+        }
+
         $old = $entry['old_value'];
         $res = $this->mpcve->writeField($address, $old);
         if (empty($res['success'])) {

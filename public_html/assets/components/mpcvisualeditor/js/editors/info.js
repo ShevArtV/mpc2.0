@@ -9,6 +9,7 @@
  */
 import { api, loadSettingsList, findSetting } from '../api.js';
 import { toast, esc } from '../dom.js';
+import { openFileManager } from '../filemanager.js';
 
 function tag(el) { return el && el.tagName ? el.tagName.toLowerCase() : ''; }
 function domValue(el) {
@@ -26,8 +27,13 @@ function applyDom(el, v) {
 }
 
 function isBool(x) { return /boolean/i.test(x || ''); }
+function isImage(x) { return /image/i.test(x || ''); }
 function isMultiline(x, v) {
     return x === 'textarea' || x === 'code' || /textarea/i.test(x || '') || (v && v.indexOf('\n') !== -1);
+}
+
+function previewHtml(url) {
+    return url ? '<img src="' + esc(url) + '" alt="" style="max-width:100%;max-height:120px;margin-top:8px;border-radius:6px">' : '';
 }
 
 function widgetHtml(xtype, value) {
@@ -42,6 +48,13 @@ function widgetHtml(xtype, value) {
         return '<input type="color" class="mpcve-set__color" value="' + esc(c) + '">' +
                '<input type="text" class="mpcve-set__input" value="' + esc(value) + '">';
     }
+    // image-настройка (modx-panel-tv-image / image-xtype): путь + выбор через
+    // file manager + превью. Значение читается из текст-инпута, как у прочих.
+    if (isImage(xtype)) {
+        return '<input type="text" class="mpcve-set__input" value="' + esc(value) + '">' +
+               '<button type="button" class="mpcve-btn mpcve-set__browse">Выбрать изображение</button>' +
+               '<div class="mpcve-set__preview">' + previewHtml(value) + '</div>';
+    }
     if (isMultiline(xtype, value)) {
         return '<textarea class="mpcve-set__input mpcve-ta__area" spellcheck="false"></textarea>';
     }
@@ -51,24 +64,29 @@ function widgetHtml(xtype, value) {
 export function openInfoEditor(el, meta) {
     if (document.querySelector('.mpcve-modal')) { return; }
     if (meta) { open(el, meta); return; }
-    // Инлайн: тип/значение тянем из БД (settings/list).
+    // Инлайн: тип/значение/таргет тянем из БД (settings/list, эффективная строка).
     var key = el.getAttribute('data-mpc-info') || '';
-    var hasCtx = el.hasAttribute('data-mpc-ctx');
     loadSettingsList().then(function () {
-        var m = findSetting(key, hasCtx);
-        open(el, m || { key: key, ctx: hasCtx ? '' : null, value: domValue(el), xtype: 'textfield', protected: false });
+        var m = findSetting(key);
+        open(el, m || { key: key, ctx: null, target: 'system', value: domValue(el), xtype: 'textfield', protected: false });
     });
 }
 
 function open(el, meta) {
     if (document.querySelector('.mpcve-modal')) { return; }
+    // Таргет: 'context' (есть контекстная запись — правим её, без глобального
+    // предупреждения) vs 'system' (только глобальная — предупреждаем).
+    var isCtx = meta.target === 'context';
+    var note = isCtx
+        ? ('Контекстная настройка' + (meta.ctx ? ' (' + esc(meta.ctx) + ')' : '') + ' — меняется в этом контексте.')
+        : '⚠ ГЛОБАЛЬНАЯ настройка — меняется на ВСЕХ контекстах и страницах сайта.';
     var overlay = document.createElement('div');
     overlay.className = 'mpcve-modal';
     overlay.innerHTML =
         '<div class="mpcve-modal__card mpcve-modal__card--text">' +
             '<div class="mpcve-modal__head">Настройка: ' + esc(meta.key) +
-                (meta.ctx != null ? ' @' + esc(meta.ctx || 'web') : '') + '</div>' +
-            '<div class="mpcve-modal__note">⚠ Меняется на ВСЕХ страницах сайта. Тип: ' + esc(meta.xtype) + '.</div>' +
+                (isCtx && meta.ctx ? ' @' + esc(meta.ctx) : '') + '</div>' +
+            '<div class="mpcve-modal__note">' + note + '</div>' +
             (meta.protected ? '<div class="mpcve-modal__note">🔒 Защищённая настройка — править нельзя.</div>' : '') +
             '<div class="mpcve-set__widget">' + widgetHtml(meta.xtype, meta.value) + '</div>' +
             '<div class="mpcve-modal__actions">' +
@@ -86,6 +104,19 @@ function open(el, meta) {
         var txt = card.querySelector('input.mpcve-set__input');
         color.addEventListener('input', function () { txt.value = color.value; });
     }
+    // image-настройка: выбор файла через file manager → путь в инпут + превью.
+    var browse = card.querySelector('.mpcve-set__browse');
+    if (browse) {
+        var imgInput = card.querySelector('.mpcve-set__input');
+        var preview = card.querySelector('.mpcve-set__preview');
+        browse.addEventListener('click', function () {
+            openFileManager({ accept: 'image', title: 'Настройка: изображение' }).then(function (file) {
+                if (!file) { return; }
+                imgInput.value = file.url;
+                if (preview) { preview.innerHTML = previewHtml(file.url); }
+            });
+        });
+    }
     var firstInput = card.querySelector('.mpcve-set__input');
     if (firstInput) { firstInput.focus(); }
 
@@ -100,8 +131,12 @@ function open(el, meta) {
     saveBtn.addEventListener('click', function () {
         var input = card.querySelector('.mpcve-set__input');
         var value = input ? input.value : '';
+        // colorpicker MODX хранит hex БЕЗ ведущего # — срезаем перед сохранением.
+        if (meta.xtype === 'colorpickerfield') { value = value.replace(/^#/, ''); }
+        // Пишем в эффективный таргет: контекстная запись существует → в неё
+        // (payload.ctx); иначе глобальная (без ctx — saveSetting в modSystemSetting).
         var payload = { key: meta.key, value: value };
-        if (meta.ctx != null) { payload.ctx = meta.ctx; }
+        if (meta.target === 'context' && meta.ctx) { payload.ctx = meta.ctx; }
         api.post('info/save', payload).then(function (r) {
             if (r && r.success) {
                 applyDom(el, value);

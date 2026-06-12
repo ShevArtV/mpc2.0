@@ -214,4 +214,15 @@ class Mpcve
         return $w ? $w->writeRowOp($address)
             : ['success' => false, 'message' => self::MPC_REQUIRED, 'data' => []];
     }
+
+    /**
+     * Откат row-операции: восстановить поле-список к снимку ДО (значение из
+     * истории). Делегирует FieldWriter::restoreRows.
+     */
+    public function restoreRows(array $address, $rowsValue): array
+    {
+        $w = $this->getWriter();
+        return $w ? $w->restoreRows($address, $rowsValue)
+            : ['success' => false, 'message' => self::MPC_REQUIRED, 'data' => []];
+    }
 }

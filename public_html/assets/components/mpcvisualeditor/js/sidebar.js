@@ -15,6 +15,64 @@ import { esc, toast, confirmDialog } from './dom.js';
 function boolOf(v) { return v === true || v === 1 || v === '1' || v === 'true'; }
 function byPos(a, b) { return (parseInt(a.position, 10) || 0) - (parseInt(b.position, 10) || 0); }
 
+// Ключ секции в DOM (атрибут data-mpc-section). На странице это MIGX_formname
+// (машинное имя из data-mpc-section вёрстки), а НЕ section_name (человекочитаемое
+// data-mpc-name, которое показываем в панели).
+function domKeyOf(s) {
+    return String(s.MIGX_formname || s.section_name || '');
+}
+// DOM-элемент секции (на странице). null — секции нет в DOM (скрытая/вырезанная).
+function findSectionEl(s) {
+    var key = domKeyOf(s);
+    var els = document.querySelectorAll('[data-mpc-section]');
+    for (var i = 0; i < els.length; i++) {
+        if (els[i].getAttribute('data-mpc-section') === key) { return els[i]; }
+    }
+    return null;
+}
+// Индекс секции в порядке DOM (как на странице); -1 если нет в DOM.
+function domIndex(s) {
+    var key = domKeyOf(s);
+    var els = Array.prototype.slice.call(document.querySelectorAll('[data-mpc-section]'));
+    for (var i = 0; i < els.length; i++) {
+        if (els[i].getAttribute('data-mpc-section') === key) { return i; }
+    }
+    return -1;
+}
+// Сортировка как на СТРАНИЦЕ: по позиции в DOM; секции без DOM (наследуемые/
+// скрытые) — в конец, между собой по position.
+function byDom(a, b) {
+    var ia = domIndex(a), ib = domIndex(b);
+    if (ia === -1 && ib === -1) { return byPos(a, b); }
+    if (ia === -1) { return 1; }
+    if (ib === -1) { return -1; }
+    return ia - ib;
+}
+
+// Эффективная позиция секции: для своей — position из РЕСУРСА, для наследуемой —
+// из ТИПА (own/inherited — разные записи, у каждой свой position → каскад «тип
+// задаёт набор, ресурс переопределяет порядок»). Пустой position → в конец.
+function effPos(s) {
+    var p = parseInt(s.position, 10);
+    return isNaN(p) ? 1e9 : p;
+}
+// Порядок как РЕНДЕР: по position (-1 и отрицательные — вверху, меньше
+// положительных). Равные позиции — стабильно по DOM (порядок на странице).
+function byPosition(a, b) {
+    var d = effPos(a) - effPos(b);
+    return d !== 0 ? d : byDom(a, b);
+}
+
+// Прокрутить страницу к секции + подсветить. Работает и для своих, и для
+// наследуемых из типа (наследуемые тоже рендерятся на странице).
+function scrollToSection(s) {
+    var el = findSectionEl(s);
+    if (!el) { toast('Секция не видна на странице (скрыта)', true); return; }
+    el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    el.classList.add('mpcve-sec-flash');
+    setTimeout(function () { el.classList.remove('mpcve-sec-flash'); }, 1200);
+}
+
 // Ключ секции — как на бэке (MIGX_formname + lexicon_prefix|section_name).
 function keyOf(s) {
     return String(s.MIGX_formname || '') + '|' + String(s.lexicon_prefix || s.section_name || '');
@@ -29,13 +87,14 @@ function asArray(src) {
 function sectionList() {
     var d = S.configData || {};
     var own = asArray(d.resource).map(function (s) { s._origin = 'resource'; return s; });
-    if (d.isType) { return own.sort(byPos); }
+    if (d.isType) { return own.sort(byPosition); }
     var ownKeys = {};
     own.forEach(function (s) { ownKeys[keyOf(s)] = true; });
     var inherited = asArray(d.type)
         .filter(function (s) { return !ownKeys[keyOf(s)]; })
         .map(function (s) { s._origin = 'type'; return s; });
-    return own.concat(inherited).sort(byPos);
+    // Порядок как на странице (DOM); наследуемые/скрытые — в конец.
+    return own.concat(inherited).sort(byPosition);
 }
 
 function sectionOp(payload) {
@@ -44,16 +103,20 @@ function sectionOp(payload) {
 }
 function netErr() { toast('Сетевая ошибка', true); }
 // Рефреш конфига с сервера + перерисовка (после операций, меняющих НАБОР секций).
-function refresh() { return loadConfig().then(function () { if (panel) { render(); } }); }
+function refresh() { return loadConfig().then(function () { currentItems = null; if (panel) { render(); } }); }
 
 var panel = null;
 var dragFrom = null;
+// Текущий порядок строк панели (фиксируем, чтобы drag-перестановка/правки не
+// откатывались ре-сортировкой по DOM при каждом render). Сбрасывается на refresh.
+var currentItems = null;
 
 export function toggleSidebar() {
     if (panel) { closeSidebar(); } else { openSidebar(); }
 }
 function closeSidebar() {
     if (panel) { panel.remove(); panel = null; }
+    currentItems = null;
 }
 
 function openSidebar() {
@@ -110,7 +173,8 @@ function afterBulk(r) {
 
 function render() {
     var box = panel.querySelector('.mpcve-sidebar__list');
-    var items = sectionList();
+    if (!currentItems) { currentItems = sectionList(); }
+    var items = currentItems;
     box.innerHTML = items.length ? items.map(function (s, i) {
         return s._origin === 'type' ? lockedRow(s, i) : ownRow(s, i);
     }).join('') : '<div class="mpcve-hpanel__empty">Секции не найдены.</div>';
@@ -147,8 +211,21 @@ function wire(items) {
     panel.querySelectorAll('.mpcve-sec').forEach(function (row) {
         var i = parseInt(row.getAttribute('data-i'), 10);
         var s = items[i];
+        // Клик по имени секции → скролл к ней на странице (для ВСЕХ — свои и из
+        // типа: наследуемые тоже видны на странице).
+        var nameEl = row.querySelector('.mpcve-sec__name');
+        if (nameEl) {
+            nameEl.style.cursor = 'pointer';
+            nameEl.title = 'Клик — прокрутить к секции';
+            nameEl.addEventListener('click', function () { scrollToSection(s); });
+        }
         if (s._origin === 'type') {
-            row.addEventListener('click', function () { copyFromType(s); });
+            // Копирование в страницу — ТОЛЬКО по кнопке ⬇, не по всему ряду
+            // (иначе клик-скролл по имени случайно копировал секцию).
+            var copyBtn = row.querySelector('[data-op=copy]');
+            if (copyBtn) {
+                copyBtn.addEventListener('click', function (e) { e.stopPropagation(); copyFromType(s); });
+            }
             return;
         }
         wireDrag(row, i, items);

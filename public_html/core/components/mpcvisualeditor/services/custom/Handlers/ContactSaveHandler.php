@@ -16,7 +16,7 @@ namespace MpcVEServices\Handlers;
  */
 class ContactSaveHandler extends BaseHandler
 {
-    private const FIELDS = ['value', 'caption', 'attributes'];
+    private const FIELDS = ['value', 'caption', 'attributes', 'icon'];
 
     public function handle(array $request): array
     {

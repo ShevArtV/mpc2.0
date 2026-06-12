@@ -91,7 +91,6 @@ body.mpcve-active {
    размер и подсказку-плейсхолдер, чтобы поле можно было заполнить. */
 body.mpcve-on .mpcve-editable:empty {
     display: block;
-    min-width: 90px;
     min-height: 1.3em;
 }
 
@@ -1483,3 +1482,12 @@ input.mpcve-ta__area {
     padding: 2px 0;
 }
 .mpcve-pick-existing:hover { text-decoration: underline; }
+
+/* Подсветка секции при клике по ней в панели «Секции» (скролл-к-секции). */
+.mpcve-sec-flash {
+    animation: mpcve-sec-flash 1.2s ease-out;
+}
+@keyframes mpcve-sec-flash {
+    0%   { box-shadow: 0 0 0 3px rgba(59, 130, 246, .7), 0 0 0 9999px rgba(59, 130, 246, .06); }
+    100% { box-shadow: 0 0 0 3px rgba(59, 130, 246, 0), 0 0 0 9999px rgba(59, 130, 246, 0); }
+}

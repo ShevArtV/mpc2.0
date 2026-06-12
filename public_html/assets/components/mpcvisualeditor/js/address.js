@@ -122,6 +122,7 @@ export function ftypeToEditor(ftype) {
     if (ftype === 'checkbox') { return 'checkbox'; }   // чекбоксы (множественный)
     if (ftype === 'number') { return 'number'; }
     if (ftype === 'date') { return 'date'; }
+    if (ftype === 'color' || ftype === 'colorpicker') { return 'color'; }
     if (ftype === 'tag' || ftype === 'tags' || ftype === 'autotag') { return 'tags'; }
     if (ftype === 'file') { return 'file'; }
     if (ftype.indexOf('list') === 0) { return 'rows'; }
