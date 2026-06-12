@@ -96,6 +96,36 @@ class InformationUpdater
     }
 
     /**
+     * Мета настройки для редактора: эффективное значение + xtype (тип виджета) ИЗ
+     * БД (modSystemSetting / ClientConfig cgSetting). Единый источник типа — не
+     * вёрстка, поэтому работает и для настроек, удалённых из страницы
+     * (data-mpc-remove). null — настройки нет (нельзя править из редактора).
+     *
+     * @return array|null ['value'=>string, 'xtype'=>string, 'source'=>'system'|'clientconfig', 'protected'=>bool]
+     */
+    public function settingMeta(string $key, ?string $ctx = null): ?array
+    {
+        if ($key === '') {
+            return null;
+        }
+        $sys = $this->modx->getObject('modSystemSetting', ['key' => $key]);
+        $cg  = $sys ? null : $this->getClientConfigSetting($key);
+        if (!$sys && !$cg) {
+            return null;
+        }
+        $xtype = (string)($sys ? $sys->get('xtype') : $cg->get('xtype'));
+        // Эффективное значение (контекст коннектора учитывается getOption).
+        $fallback = $sys ? $sys->get('value') : $cg->get('value');
+        $value = $this->modx->getOption($key, null, $fallback);
+        return [
+            'value'     => (string)($value ?? ''),
+            'xtype'     => $xtype !== '' ? $xtype : 'textfield',
+            'source'    => $sys ? 'system' : 'clientconfig',
+            'protected' => $this->isProtectedSetting($key),
+        ];
+    }
+
+    /**
      * Защита: настройки безопасности нельзя перезаписывать через контент
      * (data-mpc-info). Blacklist префиксов/подстрок security-критичных ключей.
      * Для более строгой модели — whitelist через системную настройку.

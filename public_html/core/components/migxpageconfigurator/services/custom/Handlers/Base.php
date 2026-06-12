@@ -150,6 +150,17 @@ class Base
     public function getFileContent(string $fileName): string
     {
         $filePath = $this->properties['pdotoolsElementsPath'] . $this->properties['pathToSrc'] . $fileName;
+        // Автодобавление расширения: `cut wrapper` (без .tpl) не находил файл и
+        // молча давал пустоту (а CLI рапортовал успех). Если как есть не найден —
+        // пробуем с расширением шаблонов. Берём из properties (грабер), иначе из
+        // системной настройки mpc_tpl_file_extension напрямую (каттер не кладёт
+        // 'extension' в свои properties) — НЕ хардкод '.tpl'.
+        $ext = (string)($this->properties['extension']
+            ?? $this->modx->getOption('mpc_tpl_file_extension', null, '.tpl'));
+        if (!file_exists($filePath) && $ext !== '' && substr($fileName, -strlen($ext)) !== $ext
+            && file_exists($filePath . $ext)) {
+            $filePath .= $ext;
+        }
         if ($this->debug) {
             $this->logging->write(__METHOD__, "Path to file is $filePath");
         }

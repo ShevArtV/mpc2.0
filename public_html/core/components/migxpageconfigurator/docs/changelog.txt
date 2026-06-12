@@ -1,3 +1,12 @@
+2.5.34-rc
+==============
+Контакты: ckey-identity, обёртка caption/attributes + unwrap; settingMeta; авторасширение cut.
+
+- ContactUpdater: при мёрже identity контакта = ckey (а не value). Смена значения keyed-контакта обновляет запись, а не плодит ДУБЛЬ с тем же ключом (был баг и в нарезке, и в правке из редактора).
+- Cutter::handleContacts: caption/attributes/value по умолчанию ОБОРАЧИВАЮТ плейсхолдер в свой элемент (раньше текстовый caption/attributes заменялся голым плейсхолдером → терялась обёртка <span class> и маркер data-mpc-cfield не доживал до edit-mode). data-mpc-unwrap на cfield → голый плейсхолдер (опт-ин, для value — только без href).
+- InformationUpdater::settingMeta(key, ctx) — значение + xtype настройки ИЗ БД (для типизированного редактора настроек mpcVisualEditor).
+- Base::getFileContent — авто-добавление расширения (`cut wrapper` находит wrapper.tpl), берётся из mpc_tpl_file_extension. CLI больше не «успех» при отсутствии файла без расширения.
+
 2.5.33-rc
 ==============
 Пер-полевая запись контакта по HTML-фрагменту (для редактора).

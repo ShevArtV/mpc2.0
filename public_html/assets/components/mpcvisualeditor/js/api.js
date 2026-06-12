@@ -161,3 +161,22 @@ export function loadConfig() {
         console.warn('[mpcVE] config/get ошибка запроса:', e);
     });
 }
+
+// Список служебных настроек (settings/list) — единый источник для панели и
+// редактора info: ключи из исходных шаблонов (вкл. data-mpc-remove) + тип/значение
+// из БД. Кэшируется в рамках сессии режима правки.
+var _settingsList = null;
+export function loadSettingsList(force) {
+    if (_settingsList && !force) { return Promise.resolve(_settingsList); }
+    return api.post('settings/list', {}).then(function (r) {
+        _settingsList = (r && r.success && r.data && r.data.settings) ? r.data.settings : [];
+        return _settingsList;
+    }).catch(function () { _settingsList = []; return _settingsList; });
+}
+export function findSetting(key, hasCtx) {
+    if (!_settingsList) { return null; }
+    var byKey = _settingsList.filter(function (s) { return s.key === key; });
+    if (!byKey.length) { return null; }
+    var m = byKey.filter(function (s) { return hasCtx ? (s.ctx != null) : (s.ctx == null); });
+    return (m[0] || byKey[0]);
+}

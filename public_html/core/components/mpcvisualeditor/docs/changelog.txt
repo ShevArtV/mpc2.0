@@ -1,3 +1,11 @@
+1.0.7-rc
+==============
+Настройки: список из исходных шаблонов + тип виджета из БД; фикс дубля контакта.
+
+- Панель «Настройки» теперь из settings/list: сервер сканирует ИСХОДНЫЕ шаблоны (mpc_path_to_src) на data-mpc-info → видны ВСЕ настройки, включая удалённые из вёрстки (data-mpc-remove). Тип/значение — из БД (settingMeta).
+- Редактор настройки подбирает виджет по xtype из БД: combo-boolean → Да/Нет, colorpickerfield → color, code/textarea → textarea, иначе текст. Защищённые — с 🔒 без сохранения. И панель, и инлайн-клик берут тип из settings/list (кэш api.loadSettingsList/findSetting).
+- Фикс дубля контакта при смене значения (см. mpc 2.5.34 — ckey identity). Файлы: SettingsListHandler.php (new), Connector.php, editors/info.js (rewrite), settings.js (rewrite), api.js, overlay.css.
+
 1.0.6-rc
 ==============
 Редактирование контактов (data-mpc-cfield) из редактора.

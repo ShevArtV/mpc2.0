@@ -293,8 +293,14 @@ class Cutter extends Base
                         }
                         $field->setAttribute('href', $complexName);
                     }
-                    $field->setInnerHtml($this->contactFieldExpr($placement, $key, 'fvalue'));
-                    $replacement[] = $this->parser->getHTMLString($field);
+                    $fvalueExpr = $this->contactFieldExpr($placement, $key, 'fvalue');
+                    // data-mpc-unwrap (без href) → голый плейсхолдер, иначе обёртка.
+                    if ($field->hasAttribute('data-mpc-unwrap') && !$field->hasAttribute('href')) {
+                        $replacement[] = $fvalueExpr;
+                    } else {
+                        $field->setInnerHtml($fvalueExpr);
+                        $replacement[] = $this->parser->getHTMLString($field);
+                    }
                 } else {
                     if ($field->hasAttribute('src')) {
                         if ($field->tagName() === 'img') {
@@ -320,8 +326,17 @@ class Cutter extends Base
                         }
 
                         $replacement[] = $this->parser->getHTMLString($field);
-                    } else {
+                    } elseif ($field->hasAttribute('data-mpc-unwrap')) {
+                        // Опт-ин (как у обычных полей): отбросить обёртку, оставить
+                        // только плейсхолдер.
                         $replacement[] = $complexName;
+                    } else {
+                        // По умолчанию оборачиваем плейсхолдер обратно в элемент
+                        // (симметрично value/img). Иначе терялась обёртка
+                        // (<span class="…">) и маркер data-mpc-cfield не доживал до
+                        // edit-mode → caption/attributes нельзя было кликнуть в редакторе.
+                        $field->setInnerHtml($complexName);
+                        $replacement[] = $this->parser->getHTMLString($field);
                     }
                 }
             }

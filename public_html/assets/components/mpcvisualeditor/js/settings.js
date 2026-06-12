@@ -1,35 +1,14 @@
 /**
- * mpcVisualEditor — панель «Настройки»: список ВСЕХ data-mpc-info на странице,
- * включая <head> (favicon/метрики), по которым нельзя кликнуть инлайн. Клик по
- * записи открывает редактор настройки (editors/info.js → info/save). Кнопка в
- * тулбаре и сама панель доступны только при праве mpcve_edit_global.
+ * mpcVisualEditor — панель «Настройки»: список служебных настроек (data-mpc-info)
+ * из settings/list. Источник — ИСХОДНЫЕ шаблоны (вкл. data-mpc-remove, которых нет
+ * в DOM) + тип/значение из БД. Клик по записи открывает редактор настройки с её
+ * типом (editors/info.js → info/save). Доступно при праве mpcve_edit_global.
  *
  * Переиспользует разметку .mpcve-sidebar (как журнал изменений).
  */
-import { esc } from './dom.js';
+import { esc, toast } from './dom.js';
+import { loadSettingsList } from './api.js';
 import { openInfoEditor } from './editors/info.js';
-
-function tag(el) { return el.tagName ? el.tagName.toLowerCase() : ''; }
-function valueOf(el) {
-    var t = tag(el);
-    if (t === 'link') { return el.getAttribute('href') || ''; }
-    if (t === 'img') { return el.getAttribute('src') || ''; }
-    return (el.textContent || '').replace(/\s+/g, ' ').trim();
-}
-
-// Уникальные настройки страницы по ключу+контексту (один data-mpc-info может
-// встречаться несколько раз — например в шапке и подвале; это одна настройка).
-function uniqueItems() {
-    var seen = {};
-    return Array.prototype.slice.call(document.querySelectorAll('[data-mpc-info]'))
-        .filter(function (el) {
-            var k = (el.getAttribute('data-mpc-info') || '') + '|'
-                + (el.hasAttribute('data-mpc-ctx') ? (el.getAttribute('data-mpc-ctx') || '') : '');
-            if (seen[k]) { return false; }
-            seen[k] = 1;
-            return true;
-        });
-}
 
 var panel = null;
 
@@ -45,32 +24,38 @@ function open() {
         '<div class="mpcve-sidebar__head">Настройки сайта' +
             '<button type="button" class="mpcve-sidebar__x" data-act="close" title="Закрыть">✕</button>' +
         '</div>' +
-        '<div class="mpcve-sidebar__hint">⚠ Меняются на ВСЕХ страницах. Список data-mpc-info этой страницы.</div>' +
-        '<div class="mpcve-sidebar__list"></div>';
+        '<div class="mpcve-sidebar__hint">⚠ Меняются на ВСЕХ страницах. Тип берётся из БД.</div>' +
+        '<div class="mpcve-sidebar__list"><div class="mpcve-hpanel__empty">Загрузка…</div></div>';
     document.body.appendChild(panel);
     panel.querySelector('[data-act=close]').addEventListener('click', close);
-    render();
+    loadSettingsList(true).then(function (items) {
+        if (panel) { render(items || []); }
+    }).catch(function () { toast('Не удалось загрузить настройки', true); });
 }
 
-function render() {
+function render(items) {
     var box = panel.querySelector('.mpcve-sidebar__list');
-    var items = uniqueItems();
     if (!items.length) {
-        box.innerHTML = '<div class="mpcve-hpanel__empty">На странице нет data-mpc-info.</div>';
+        box.innerHTML = '<div class="mpcve-hpanel__empty">Настройки (data-mpc-info) не найдены.</div>';
         return;
     }
-    box.innerHTML = items.map(function (el, i) {
-        var key = el.getAttribute('data-mpc-info') || '';
-        var ctx = el.hasAttribute('data-mpc-ctx') ? (el.getAttribute('data-mpc-ctx') || 'тек.') : '';
-        var val = valueOf(el);
-        return '<div class="mpcve-set" data-i="' + i + '" title="Клик — редактировать">' +
-            '<div class="mpcve-set__key">' + esc(key) +
-                (ctx ? ' <span class="mpcve-set__ctx">@' + esc(ctx) + '</span>' : '') + '</div>' +
-            '<div class="mpcve-set__val">' + (val ? esc(val.slice(0, 90)) : '<i>пусто</i>') + '</div>' +
+    box.innerHTML = items.map(function (s, i) {
+        var lock = s.protected ? ' 🔒' : '';
+        var val = (s.value != null && s.value !== '') ? esc(String(s.value).replace(/\s+/g, ' ').slice(0, 90)) : '<i>пусто</i>';
+        return '<div class="mpcve-set" data-i="' + i + '" title="Клик — редактировать (тип: ' + esc(s.xtype) + ')">' +
+            '<div class="mpcve-set__key">' + esc(s.key) + lock +
+                (s.ctx != null ? ' <span class="mpcve-set__ctx">@' + esc(s.ctx || 'web') + '</span>' : '') +
+                ' <span class="mpcve-set__ctx">' + esc(s.xtype) + '</span></div>' +
+            '<div class="mpcve-set__val">' + val + '</div>' +
         '</div>';
     }).join('');
     box.querySelectorAll('.mpcve-set').forEach(function (row) {
-        var el = items[parseInt(row.getAttribute('data-i'), 10)];
-        row.addEventListener('click', function () { close(); openInfoEditor(el); });
+        var s = items[parseInt(row.getAttribute('data-i'), 10)];
+        row.addEventListener('click', function () {
+            // элемент на странице (если есть) — для живого апдейта DOM; иначе null.
+            var dom = document.querySelector('[data-mpc-info="' + (window.CSS && CSS.escape ? CSS.escape(s.key) : s.key) + '"]');
+            close();
+            openInfoEditor(dom || null, s);
+        });
     });
 }

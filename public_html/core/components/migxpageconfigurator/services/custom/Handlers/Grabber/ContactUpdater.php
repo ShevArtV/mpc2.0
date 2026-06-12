@@ -161,7 +161,22 @@ class ContactUpdater
         $oldContacts = $tvValue ? $this->reformatMigx($tvValue, 'value') : [];
 
         foreach ($contacts as $value => $item) {
-            if ($oldContacts[$value]) {
+            $ckey = (string)($item['ckey'] ?? '');
+            // СМЕНА значения keyed-контакта: новое значение не совпадёт с ключом
+            // $oldContacts (он по value) → без этого появится ДУБЛЬ с тем же ckey.
+            // ckey — истинный identity: находим старую запись по ckey (под другим
+            // значением), переносим её contact_info (прочие плейсменты) и удаляем.
+            if ($ckey !== '' && !isset($oldContacts[$value])) {
+                foreach ($oldContacts as $oldVal => $old) {
+                    if ((string)($old['ckey'] ?? '') === $ckey) {
+                        $oldInfo = $this->reformatMigx(json_decode((string)$old['contact_info'], true) ?: [], 'placement');
+                        $item['contact_info'] = array_merge($oldInfo, $item['contact_info']);
+                        unset($oldContacts[$oldVal]);
+                        break;
+                    }
+                }
+            }
+            if (isset($oldContacts[$value])) {
                 $contactInfo                     = json_decode($oldContacts[$value]['contact_info'], true) ?: [];
                 $contactInfo                     = $this->reformatMigx($contactInfo, 'placement');
                 $contactInfo                     = array_merge($contactInfo, $item['contact_info']);
