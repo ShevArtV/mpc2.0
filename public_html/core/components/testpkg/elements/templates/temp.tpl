@@ -7,13 +7,18 @@
      ещё и полный тест пайплайна (нарезка → конфиг/чанки/TV/лексиконы → рендер →
      фронт-редактор). Сложные кейсы — на отдельной странице.
 
-     Нарезать (на сервере): ./console/mpc cut test --upd
+     Нарезать (на сервере):
+     ./console/mpc cut temp --upd
+       /usr/local/php/php-7.4/bin/php ~/art-sites.ru/htdocs/mpc-app/core/components/migxpageconfigurator/console/mgr_tpl.php web temp.tpl 1
      ============================================================================ -->
 
 
 <!-- HERO — поля ресурса (rfield) + Template Variables (tv, авто-создаются из шаблона).
      rfield пишет в нативные поля ресурса (pagetitle/longtitle/content), tv — в TV. -->
 <section id="{$id}" data-mpc-section="resource" data-mpc-name="Hero">
+    <style>
+      #{$id} { {$inline_styles} }
+      </style>
     <div class="container">
         <h6 data-mpc-tv="subtitle" data-mpc-ftype="text">MODX · редактирование прямо на странице</h6>
         <h1 data-mpc-rfield="longtitle">Статичная вёрстка превращается в редактируемый сайт</h1>
@@ -36,17 +41,17 @@
         --mpc-text-color: #fff;
     </span>
     <style>
-      #{$id} { {$inline_styles} }
-      #{$id} > .container { position: relative; z-index: 1;}
-      .overlay{
-        position: absolute;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background-color: rgba(90, 90, 90, 0.4);
-        z-index: 0;
-      }
+        #{$id} { {$inline_styles} }
+        #{$id} > .container { position: relative; z-index: 1;}
+        .overlay{
+          position: absolute;
+          top: 0;
+          left: 0;
+          width: 100%;
+          height: 100%;
+          background-color: rgba(90, 90, 90, 0.4);
+          z-index: 0;
+        }
     </style>
     <div class="overlay"></div>
     <div class="container" >
@@ -76,6 +81,9 @@
      (data-mpc-max), limit/offset (data-mpc-lim/-off), поля-списки значений
      (listbox/checkbox) с опциями из data-mpc-values. -->
 <section id="{$id}" data-mpc-section="features" data-mpc-lexicon="features" data-mpc-name="Возможности">
+    <style>
+      #{$id} { {$inline_styles} }
+    </style>
     <div class="container">
         <h6 data-mpc-field="kicker">Что умеют пакеты</h6>
         <h1 data-mpc-field="title">Возможности из коробки</h1>
@@ -158,6 +166,9 @@
 <!-- СЕКЦИЯ-КОПИЯ — data-mpc-copy: наследует структуру одноимённой секции-ориджина
      ("features" = «Возможности» выше) и не плодит свой конфиг; лексикон — собственный. -->
 <section id="{$id}" data-mpc-section="features" data-mpc-lexicon="features_demo" data-mpc-copy="templates/temp.tpl" data-mpc-name="Демо-копия секции «Возможности»">
+    <style>
+      #{$id} { {$inline_styles} }
+    </style>
     <div class="container">
         <h1 data-mpc-field="title">Та же секция, другой контент</h1>
     </div>
@@ -168,27 +179,30 @@
      из шаблона (тип из data-mpc-ftype, опции из data-mpc-values) в категории пакета;
      значения заграбливаются нарезкой. Опции listbox/option/checkbox — из elements TV. -->
 <section id="{$id}" data-mpc-section="fieldtypes" data-mpc-name="Поля любого типа">
+    <style>
+      #{$id} { {$inline_styles} }
+    </style>
     <div class="container">
         <h6 data-mpc-field="kicker">Любой тип — редактируется на месте</h6>
         <h1 data-mpc-field="title">Поля любого типа</h1>
 
         <ul>
-            <li><h6>Текст</h6><p data-mpc-tv="ft_text" data-mpc-ftype="text">Простой текст</p></li>
-            <li><h6>Многострочный</h6><p data-mpc-tv="ft_textarea" data-mpc-ftype="textarea">Несколько строк описания продукта</p></li>
-            <li><h6>Форматированный</h6><div data-mpc-tv="ft_richtext" data-mpc-ftype="richtext"><p>Текст с <b>жирным</b> и <i>курсивом</i></p></div></li>
-            <li><h6>Число</h6><p data-mpc-tv="ft_number" data-mpc-ftype="number">42</p></li>
-            <li><h6>Дата</h6><p data-mpc-tv="ft_date" data-mpc-ftype="date">2026-06-05 12:30:00</p></li>
-            <li><h6>E-mail</h6><p data-mpc-tv="ft_email" data-mpc-ftype="email">hello@example.ru</p></li>
-            <li><h6>Ссылка</h6><p data-mpc-tv="ft_url" data-mpc-ftype="url">https://example.ru</p></li>
-            <li><h6>Теги</h6><p data-mpc-tv="ft_tag" data-mpc-ftype="tag">modx,cms,верстка</p></li>
-            <li><h6>Файл</h6><p data-mpc-tv="ft_file" data-mpc-ftype="file">/assets/files/guide.pdf</p></li>
-            <li><h6>Выпадайка (Caption==value)</h6><p data-mpc-tv="ft_listbox" data-mpc-ftype="listbox" data-mpc-values="Малый==s||Средний==m||Большой==l">m</p></li>
-            <li><h6>Выпадайка (список, кириллица)</h6><p data-mpc-tv="ft_listbox2" data-mpc-ftype="listbox" data-mpc-values="Большой||Средний||Маленький">Маленький</p></li>
-            <li><h6>Мультивыбор</h6><p data-mpc-tv="ft_multi" data-mpc-ftype="listbox-multiple" data-mpc-values="Хлопок==cotton||Бамбук==bamboo||Лён==linen">cotton||linen</p></li>
-            <li><h6>Радио (option)</h6><p data-mpc-tv="ft_option" data-mpc-ftype="option" data-mpc-values="Малый==s||Средний==m||Большой==l">s</p></li>
-            <li><h6>Чекбоксы</h6><p data-mpc-tv="ft_checkbox" data-mpc-ftype="checkbox" data-mpc-values="Хлопок==cotton||Бамбук==bamboo||Лён==linen">cotton||linen</p></li>
-            <li><h6>Список из БД (@SELECT)</h6><p data-mpc-tv="ft_select" data-mpc-ftype="listbox" data-mpc-values="@SELECT pagetitle,id FROM [[+PREFIX]]site_content WHERE published=1 LIMIT 10">43</p></li>
-            <li><h6>Изображение</h6><img data-mpc-tv="ft_image" src="https://loremflickr.com/320/200/pillow" width="320" height="200" alt="Картинка"></li>
+            <li><h6>##'temp_fieldtypes_text' | lexicon}</h6><p data-mpc-tv="ft_text" data-mpc-ftype="text">Простой текст</p></li>
+            <li><h6>##'temp_fieldtypes_textarea' | lexicon}</h6><p data-mpc-tv="ft_textarea" data-mpc-ftype="textarea">Несколько строк описания продукта</p></li>
+            <li><h6>##'temp_fieldtypes_richtext' | lexicon}</h6><div data-mpc-tv="ft_richtext" data-mpc-ftype="richtext"><p>Текст с <b>жирным</b> и <i>курсивом</i></p></div></li>
+            <li><h6>##'temp_fieldtypes_number' | lexicon}</h6><p data-mpc-tv="ft_number" data-mpc-ftype="number">42</p></li>
+            <li><h6>##'temp_fieldtypes_date' | lexicon}</h6><p data-mpc-tv="ft_date" data-mpc-ftype="date">2026-06-05 12:30:00</p></li>
+            <li><h6>##'temp_fieldtypes_email' | lexicon}</h6><p data-mpc-tv="ft_email" data-mpc-ftype="email">hello@example.ru</p></li>
+            <li><h6>##'temp_fieldtypes_url' | lexicon}</h6><p data-mpc-tv="ft_url" data-mpc-ftype="url">https://example.ru</p></li>
+            <li><h6>##'temp_fieldtypes_tags' | lexicon}</h6><p data-mpc-tv="ft_tag" data-mpc-ftype="tag">modx,cms,верстка</p></li>
+            <li><h6>##'temp_fieldtypes_file' | lexicon}</h6><p data-mpc-tv="ft_file" data-mpc-ftype="file">/assets/files/guide.pdf</p></li>
+            <li><h6>##'temp_fieldtypes_listbox' | lexicon}</h6><p data-mpc-tv="ft_listbox" data-mpc-ftype="listbox" data-mpc-values="Малый==s||Средний==m||Большой==l">m</p></li>
+            <li><h6>##'temp_fieldtypes_listbox2' | lexicon}</h6><p data-mpc-tv="ft_listbox2" data-mpc-ftype="listbox" data-mpc-values="Большой||Средний||Маленький">Маленький</p></li>
+            <li><h6>##'temp_fieldtypes_multi' | lexicon}</h6><p data-mpc-tv="ft_multi" data-mpc-ftype="listbox-multiple" data-mpc-values="Хлопок==cotton||Бамбук==bamboo||Лён==linen">cotton||linen</p></li>
+            <li><h6>##'temp_fieldtypes_radio' | lexicon}</h6><p data-mpc-tv="ft_option" data-mpc-ftype="option" data-mpc-values="Малый==s||Средний==m||Большой==l">s</p></li>
+            <li><h6>##'temp_fieldtypes_checkboxes' | lexicon}</h6><p data-mpc-tv="ft_checkbox" data-mpc-ftype="checkbox" data-mpc-values="Хлопок==cotton||Бамбук==bamboo||Лён==linen">cotton||linen</p></li>
+            <li><h6>##'temp_fieldtypes_dbselect' | lexicon}</h6><p data-mpc-tv="ft_select" data-mpc-ftype="listbox" data-mpc-values="@SELECT pagetitle,id FROM [[+PREFIX]]site_content WHERE parent=1 LIMIT 10">43</p></li>
+            <li><h6>##'temp_fieldtypes_image' | lexicon}</h6><img data-mpc-tv="ft_image" src="https://loremflickr.com/320/200/pillow" width="320" height="200" alt="Картинка"></li>
         </ul>
     </div>
 </section>
@@ -197,6 +211,9 @@
 <!-- МЕДИА — img/picture/video/audio (data-mpc-field). Медиа скачивается на сервер и
      оптимизируется (превью); data-mpc-nothumb/-nolazy управляют этим. -->
 <section id="{$id}" data-mpc-section="media" data-mpc-lexicon="media" data-mpc-name="Медиа">
+    <style>
+      #{$id} { {$inline_styles} }
+    </style>
     <div class="container">
         <h6 data-mpc-field="kicker">Скачивает и оптимизирует</h6>
         <h1 data-mpc-field="title">Медиа из коробки</h1>
@@ -227,6 +244,9 @@
 <!-- ДИНАМИКА И I18N — сниппеты (data-mpc-snippet), подключение/парсинг чанков
      (data-mpc-chunk + data-mpc-include/-parse), вспомогательные поля (data-mpc-remove). -->
 <section id="{$id}" data-mpc-section="dynamic" data-mpc-name="Динамика и мультиязычность">
+    <style>
+      #{$id} { {$inline_styles} }
+    </style>
     <div class="container">
         <h6 data-mpc-field="kicker">Сниппеты · чанки · лексиконы</h6>
         <h1 data-mpc-field="title">Динамические блоки</h1>
@@ -250,7 +270,10 @@
 
 <!-- ОБЩИЕ БЛОКИ + CTA — статичная секция (data-mpc-static): значения общие для всех
      страниц сайта (хранятся на странице статичных блоков), без пер-ресурсного foreach. -->
-<section id="cta" data-mpc-section="footer_cta" data-mpc-lexicon="footer_cta" data-mpc-static data-mpc-name="CTA (статичная секция)">
+<section id="{$id}" data-mpc-section="footer_cta" data-mpc-lexicon="footer_cta" data-mpc-static data-mpc-name="CTA (статичная секция)">
+    <style>
+      #{$id} { {$inline_styles} }
+    </style>
     <div class="container">
         <h6 data-mpc-field="kicker">Один блок — на всех страницах</h6>
         <h1 data-mpc-field="title">Попробуйте редактор</h1>
