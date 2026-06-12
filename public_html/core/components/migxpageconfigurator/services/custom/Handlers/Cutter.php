@@ -326,6 +326,14 @@ class Cutter extends Base
                         }
 
                         $replacement[] = $this->parser->getHTMLString($field);
+                    } elseif (trim($field->innerHtml()) === '' && $field->hasAttribute('class')) {
+                        // Иконка-классом: пустой элемент без src и без текста/HTML, но
+                        // с class (<i data-mpc-cfield="attributes" class="…">) → плейс-
+                        // холдер в атрибут class (значение поля = class-строка,
+                        // симметрично грабежу ContactUpdater). Без этого обёртка
+                        // innerHtml положила бы плейсхолдер внутрь, а не в class.
+                        $field->setAttribute('class', $complexName);
+                        $replacement[] = $this->parser->getHTMLString($field);
                     } elseif ($field->hasAttribute('data-mpc-unwrap')) {
                         // Опт-ин (как у обычных полей): отбросить обёртку, оставить
                         // только плейсхолдер.

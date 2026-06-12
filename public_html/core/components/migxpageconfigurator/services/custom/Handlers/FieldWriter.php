@@ -778,19 +778,39 @@ class FieldWriter
      */
     public function writeRowOp(array $address): array
     {
-        $op       = (string)($address['op'] ?? '');
-        $level    = (string)($address['level'] ?? 'resource');
-        $resource = $this->resolveLevelResource($level, (int)($address['resourceId'] ?? 0));
-        if (!$resource) {
-            return $this->result(false, 'target resource for level "' . $level . '" not found');
+        $op = (string)($address['op'] ?? '');
+        // inherit-aware резолв (как writeConfigField): если секция наследуется от
+        // типа (в ресурсе её нет — конфиг пуст), вернёт code=inherit_choice. Фронт
+        // покажет понятный диалог «скопировать секцию сюда» вместо «section not
+        // found». inherit='copy' сидирует секцию в ресурс → дальше add/delete/move
+        // идут обычным resource-путём.
+        $target = $this->resolveConfigWriteTarget($address);
+        if (isset($target['error'])) {
+            return $target['error'];
         }
-
-        $configJson = (string)$resource->getTVValue($this->configTvName);
+        $resource   = $target['resource'];
+        $level      = $target['level'];
+        $configJson = $target['configJson'];
         if ($configJson === '') {
             return $this->result(false, 'empty mpc_config for level "' . $level . '"');
         }
 
         $cfw = new ConfigFieldWriter();
+
+        // Снимок поля-списка ДО операции — для отката из истории (revert
+        // восстанавливает всё поле целиком, единообразно для add/delete/move).
+        // Только top-level список (без path): вложенные не откатываем (revertable=0).
+        $oldRows = null;
+        if (empty($address['path'])) {
+            $got = $cfw->getValue($configJson, [
+                'section'   => (string)($address['section'] ?? ''),
+                'fieldName' => (string)($address['parentField'] ?? ''),
+            ]);
+            if (!empty($got['success'])) {
+                $oldRows = $got['data']['value'] ?? null;
+            }
+        }
+
         switch ($op) {
             case 'add':    $res = $cfw->addRow($configJson, $address); break;
             case 'delete': $res = $cfw->deleteRow($configJson, $address); break;
@@ -813,7 +833,61 @@ class FieldWriter
             'fieldName'   => (string)($address['parentField'] ?? ''),
         ]);
 
-        return $this->result(true, 'saved', ['type' => 'row', 'op' => $op, 'level' => $level]);
+        return $this->result(true, 'saved', [
+            'type'    => 'row',
+            'op'      => $op,
+            'level'   => $level,
+            // снимок поля ДО (null для вложенных списков → откат недоступен).
+            'oldRows' => $oldRows,
+        ]);
+    }
+
+    /**
+     * Откат row-операции: восстановить ВСЁ поле-список к снимку ДО операции
+     * (значение из истории). Прямая замена значения поля в секции — без
+     * лексиконизации/перекодирования (снимок пишется тем же форматом, что был).
+     * Только top-level список (address без path).
+     */
+    public function restoreRows(array $address, $rowsValue): array
+    {
+        $level    = (string)($address['level'] ?? 'resource');
+        $resource = $this->resolveLevelResource($level, (int)($address['resourceId'] ?? 0));
+        if (!$resource) {
+            return $this->result(false, 'target resource for level "' . $level . '" not found');
+        }
+        $config = json_decode((string)$resource->getTVValue($this->configTvName), true);
+        if (!is_array($config)) {
+            return $this->result(false, 'invalid mpc_config for level "' . $level . '"');
+        }
+        $section     = (string)($address['section'] ?? '');
+        $parentField = (string)($address['parentField'] ?? '');
+        if ($parentField === '') {
+            return $this->result(false, 'parentField required for row restore');
+        }
+        $found = false;
+        foreach ($config as &$s) {
+            if (is_array($s) && (($s['section_name'] ?? null) === $section || ($s['MIGX_formname'] ?? null) === $section)) {
+                $s[$parentField] = $rowsValue; // точный снимок поля ДО операции
+                $found = true;
+                break;
+            }
+        }
+        unset($s);
+        if (!$found) {
+            return $this->result(false, 'section "' . $section . '" not found');
+        }
+        if (!method_exists($resource, 'setTVValue')) {
+            return $this->result(false, 'setTVValue unavailable on resource');
+        }
+        $resource->setTVValue($this->configTvName, json_encode($config, JSON_UNESCAPED_UNICODE));
+        $this->afterSave($resource, [
+            'type'      => 'row',
+            'op'        => 'restore',
+            'level'     => $level,
+            'section'   => $section,
+            'fieldName' => $parentField,
+        ]);
+        return $this->result(true, 'restored', ['type' => 'row', 'level' => $level]);
     }
 
     /** @var LevelResolver|null */

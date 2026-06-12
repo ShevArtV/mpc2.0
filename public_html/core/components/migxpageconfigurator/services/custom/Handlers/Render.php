@@ -139,9 +139,10 @@ class Render extends Base
                     foreach ($contactInfo as $v) {
                         $placement = $v['placement'];
                         $output[$placement][$item['ckey']] = [
-                            'caption' => $v['caption'],
+                            'caption' => $v['caption'] ?? '',
                             'fvalue' => $item['fvalue'],
-                            'attributes' => $v['attributes'],
+                            'attributes' => $v['attributes'] ?? '',
+                            'icon' => $v['icon'] ?? '',
                             'placement' => $v['placement'],
                             'value' => $item['value'],
                             'type' => $item['type'],

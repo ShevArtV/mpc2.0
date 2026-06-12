@@ -229,10 +229,18 @@ class ConfigFieldWriter
     /** Удалить строку по idx. Значения остальных строк (вкл. лексикон-ключи) едут с ними. */
     public function deleteRow(string $configJson, array $address): array
     {
-        $idx = (int)($address['idx'] ?? -1);
-        return $this->mutateRows($configJson, $address, static function (array $rows) use ($idx) {
+        $idx  = (int)($address['idx'] ?? -1);
+        $self = $this;
+        return $this->mutateRows($configJson, $address, static function (array $rows) use ($idx, $self) {
             if ($idx < 0 || $idx >= count($rows)) {
                 return null;
+            }
+            // Последнюю строку НЕ удаляем в ноль: иначе теряется структура под-полей
+            // (единственный образец для addRow — список нельзя было бы снова
+            // наполнить через редактор). Вместо удаления очищаем её значения,
+            // оставляя одну пустую строку-шаблон. Список не «пропадает» из конфига.
+            if (count($rows) === 1) {
+                return [$self->blankRow(is_array($rows[0]) ? $rows[0] : [], 1)];
             }
             array_splice($rows, $idx, 1);
             return $rows;

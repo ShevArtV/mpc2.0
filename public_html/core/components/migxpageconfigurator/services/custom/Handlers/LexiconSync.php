@@ -123,22 +123,36 @@ class LexiconSync
             $this->pending->remove($currentLang, $identifier, $key);
         }
 
+        // Плейсхолдер для дыр в остальных языках = значение ДЕФОЛТНОГО языка
+        // (оригинал), а НЕ текущего: при правке ПЕРЕВОДА (currentLang != default)
+        // ни дефолтный, ни прочие языки не должны получить этот перевод как своё
+        // значение (был баг: добавил longtitle только в en → в ru попадал en).
+        // Правят сам дефолтный → плейсхолдер = записанный оригинал. Если оригинала
+        // в дефолте ещё нет (новое поле, seedDefaultOriginal пропустил пустой) —
+        // плейсхолдер пустой (рендер покажет пусто, а не сырой ключ и не чужой язык).
+        $placeholder = $value;
+        if ($currentLang !== $this->defaultLang) {
+            $defaultLex  = $this->readLexicon($this->defaultLang, $identifier);
+            $placeholder = array_key_exists($key, $defaultLex) ? (string)$defaultLex[$key] : '';
+        }
+
         // Ключ должен существовать во ВСЕХ остальных языках (включая дефолтный),
         // иначе язык без ключа рендерит сырой `mpc_resource_*`. Дыры заполняем
-        // плейсхолдером (= значение текущего языка) + pending; существующий перевод
-        // не трогаем. Раньше правка НЕ дефолтного языка делала ранний return, и
-        // дефолтный оставался без ключа → ломался рендер дефолтного языка.
+        // плейсхолдером; существующий перевод не трогаем. В pending кладём только
+        // НЕ дефолтные языки (дефолт — оригинал, его не переводят).
         foreach (array_values(array_diff($this->languages, [$currentLang, ''])) as $lang) {
             $existing = $this->readLexicon($lang, $identifier);
             if (array_key_exists($key, $existing)) {
                 continue;
             }
-            $existing[$key] = $value;
+            $existing[$key] = $placeholder;
             $this->writeLexicon($lang, $identifier, $existing);
 
-            $keys   = $this->pending->load($lang, $identifier);
-            $keys[] = $key;
-            $this->pending->save($lang, $identifier, $keys);
+            if ($lang !== $this->defaultLang) {
+                $keys   = $this->pending->load($lang, $identifier);
+                $keys[] = $key;
+                $this->pending->save($lang, $identifier, $keys);
+            }
         }
     }
 

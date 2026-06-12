@@ -161,9 +161,17 @@ class SectionProcessor
 
             $values = $this->grabSection($section, $properties, $i);
             $existing = $existingResourceSections[$this->sectionMergeKey($values)] ?? [];
-            $sectionValues[$i] = $this->mergeSectionFields(
+            $merged = $this->mergeSectionFields(
                 $values, $existing, $this->reservedFieldNames, !empty($this->properties['updContent'])
             );
+            // Порядок секции (position): existing (drag/ручной, в т.ч. -1 «вверху»)
+            // приоритетнее — переживает перенарезку; НОВАЯ секция получает дефолт по
+            // порядку вёрстки ($i). grabbed его не несёт (position нет в шаблоне →
+            // при мёрже терялся), поэтому проставляем здесь явно. Рендер сортирует
+            // секции по position (Render::parseConfig, -1 < положительных = вверху).
+            $ep = $existing['position'] ?? '';
+            $merged['position'] = ($ep !== '' && $ep !== null) ? (int)$ep : $i;
+            $sectionValues[$i] = $merged;
         }
 
         return $sectionValues;

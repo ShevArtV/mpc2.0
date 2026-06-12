@@ -405,8 +405,13 @@ class LexiconManager
         // Синк остальных языков (mpc_available_languages): набор ключей приводится
         // к дефолтному, существующие переводы сохраняются, НОВЫЕ ключи получают
         // значение дефолтного языка как плейсхолдер (страница не ломается до
-        // перевода), orphan-ключи (удалённые поля) выкидываются.
-        $this->syncOtherLanguages($allLexicons);
+        // перевода), orphan-ключи (удалённые поля) выкидываются. Пропускается при
+        // пер-полевой правке в НЕ дефолтный язык (skipLexiconSync): тогда basePath
+        // указывает на файл текущего языка, и распространять правку по другим
+        // языкам нельзя (перевод утёк бы в дефолт/прочие). См. Grabber::handleContactsHtml.
+        if (empty($this->properties['skipLexiconSync'])) {
+            $this->syncOtherLanguages($allLexicons);
+        }
 
         // getCacheManager() гарантирует инстанс (cacheManager мог быть не загружен).
         $this->modx->getCacheManager()->refresh(['lexicon_topics' => []]);

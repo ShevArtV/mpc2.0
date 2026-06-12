@@ -189,6 +189,29 @@ class Grabber extends Base
      */
     public function handleContactsHtml(string $html): void
     {
+        // Пер-полевая правка контакта пишет перевод в ТЕКУЩИЙ язык (cookie
+        // mpc_lang), а НЕ в дефолтный, как полная нарезка. Без этого правка на en
+        // уходила в ru-файл, а syncOtherLanguages раскидывала её по всем языкам
+        // («меняю en — меняется ru; меняю ru — оба»). Эталон выбора culture —
+        // FieldWriter (rfield/tv). Для не-дефолтного языка: пишем в его lexicon-файл
+        // и НЕ синкаем (skipLexiconSync) — перевод не должен течь в другие языки.
+        if (!empty($this->properties['useLexicons'])) {
+            $culture = basename((string)($_COOKIE['mpc_lang'] ?? ''));
+            $default = (string)$this->properties['defaultLanguageKey'];
+            if ($culture !== '' && $culture !== '.' && $culture !== '..' && $culture !== $default) {
+                $culturePath = $this->properties['corePath'] . $this->properties['lexiconPath'] . $culture . '/';
+                if (!is_dir($culturePath)) {
+                    mkdir($culturePath, 0755, true);
+                }
+                $this->properties['basePathToLexiconFile'] = $culturePath;
+                $this->properties['skipLexiconSync'] = true;
+                $this->lexiconManager->updateProperties($this->properties);
+                // Перечитываем существующие переводы текущего языка (контакты), чтобы
+                // overwrite-запись не потеряла чужие ключи этого же файла.
+                $contactsId = (string)$this->properties['contactsPageLexiconFilename'];
+                $this->lexiconManager->lexicons[$contactsId] = $this->lexiconManager->getLexicons($contactsId, $culturePath);
+            }
+        }
         $this->contactUpdater->handleContacts($html, true);
     }
 

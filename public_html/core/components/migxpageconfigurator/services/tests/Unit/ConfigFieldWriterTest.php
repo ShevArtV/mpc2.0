@@ -147,6 +147,30 @@ class ConfigFieldWriterTest extends TestCase
         $this->assertFalse($res['success']);
     }
 
+    /**
+     * Удаление ПОСЛЕДНЕЙ строки не обнуляет список — оставляет 1 пустой шаблон
+     * (структура под-полей = образец для addRow). Иначе пустой список нельзя было
+     * бы снова наполнить через редактор.
+     */
+    public function testDeleteLastRowKeepsEmptyTemplate(): void
+    {
+        $w = new ConfigFieldWriter();
+        // удаляем первую → остаётся 1 строка
+        $cfg = $w->deleteRow($this->sampleConfig(), ['section' => 'hero', 'parentField' => 'cards', 'idx' => 0])['data']['json'];
+        // удаляем последнюю → НЕ ноль, а 1 пустой шаблон
+        $res = $w->deleteRow($cfg, ['section' => 'hero', 'parentField' => 'cards', 'idx' => 0]);
+        $this->assertTrue($res['success'], $res['message']);
+        $rows = $this->cardsOf($res);
+        $this->assertCount(1, $rows);                 // список НЕ пуст — образец сохранён
+        $this->assertArrayHasKey('title', $rows[0]);  // структура под-полей цела
+        $this->assertSame('', $rows[0]['title']);     // значения очищены
+        // addRow снова работает: берёт образец из пустой строки → новая со структурой
+        $add  = $w->addRow($res['data']['json'], ['section' => 'hero', 'parentField' => 'cards']);
+        $cards = $this->cardsOf($add);
+        $this->assertCount(2, $cards);
+        $this->assertArrayHasKey('title', $cards[1]);
+    }
+
     public function testMoveRowReordersAndValuesTravel(): void
     {
         $w = new ConfigFieldWriter();

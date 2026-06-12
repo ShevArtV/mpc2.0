@@ -102,4 +102,42 @@ class LexiconSyncTest extends TestCase
         $this->assertNotContains('howto_title', $left); // переведён — снят
         $this->assertContains('howto_text', $left);     // остальные остаются
     }
+
+    /**
+     * syncKey перевода НОВОГО поля (без оригинала в дефолте): значение НЕ утекает
+     * в дефолтный язык. Регрессия: добавил mpc_resource_longtitle только в en —
+     * в ru попадал английский вариант (плейсхолдер брался = значение текущего языка).
+     */
+    public function testSyncKeyTranslationDoesNotLeakToDefaultLanguage(): void
+    {
+        // ключа нет нигде; правим только en (новое поле, без ru-оригинала)
+        $this->sync()->syncKey('5', 'mpc_resource_longtitle', 'English title', 'en');
+
+        $ru = $this->readLex('ru', '5');
+        // дефолт получает пустой плейсхолдер (рендер покажет пусто, не чужой язык
+        // и не сырой ключ), но НЕ английское значение
+        $this->assertSame('', $ru['mpc_resource_longtitle'] ?? null);
+        // дефолтный язык не попадает в pending (оригинал не переводят)
+        $this->assertNotContains(
+            'mpc_resource_longtitle',
+            (new PendingTranslations($this->base))->load('ru', '5')
+        );
+    }
+
+    /**
+     * syncKey перевода при ИМЕЮЩЕМСЯ оригинале в дефолте: прочие языки (дыры)
+     * берут дефолтный оригинал как плейсхолдер, а НЕ только что введённый перевод.
+     */
+    public function testSyncKeyTranslationUsesDefaultOriginalAsPlaceholder(): void
+    {
+        // оригинал в дефолте (как после seedDefaultOriginal)
+        file_put_contents($this->base . 'ru/5.inc.php', "<?php\n\$_lang['k'] = 'Оригинал';\n");
+        $sync = new LexiconSync($this->base, 'ru', ['ru', 'en', 'de']);
+        $sync->syncKey('5', 'k', 'English', 'en');
+
+        // de (дыра) получает ДЕФОЛТНЫЙ оригинал, не английский перевод
+        $this->assertSame('Оригинал', $this->readLex('de', '5')['k']);
+        // ru не тронут (оригинал на месте)
+        $this->assertSame('Оригинал', $this->readLex('ru', '5')['k']);
+    }
 }

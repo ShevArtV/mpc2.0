@@ -72,12 +72,12 @@ class InformationUpdater
         $value  = str_replace(['{', '[['], ['{ ', '[ ['], $value);
         $ctxKey = ($ctx === null || $ctx === '') ? '' : $ctx;
 
+        $sys = $this->modx->getObject('modSystemSetting', ['key' => $key]);
         if ($ctxKey === '') {
-            $setting = $this->modx->getObject('modSystemSetting', ['key' => $key])
-                ?: $this->getClientConfigSetting($key);
+            $setting = $sys ?: $this->getClientConfigSetting($key);
         } else {
             $setting = $this->modx->getObject('modContextSetting', ['key' => $key, 'context_key' => $ctxKey])
-                ?: $this->modx->getObject('modSystemSetting', ['key' => $key])
+                ?: $sys
                 ?: $this->getClientConfigSetting($key, $ctxKey);
         }
         if (!$setting) {
@@ -88,6 +88,17 @@ class InformationUpdater
         if (!$setting->save()) {
             return ['success' => false, 'message' => 'не удалось сохранить настройку'];
         }
+
+        // ClientConfig: значение на рендере резолвится из cgContextValue[контекст],
+        // а ПУСТОЕ контекстное значение перекрывает дефолт (cgSetting) пустотой →
+        // настройка «пропадает» на фронте (fallback), хотя глобальное задано. При
+        // записи в ГЛОБАЛЬНУЮ область (ctx='') чистим пустые контекстные оверрайды,
+        // чтобы дефолт действовал. (modSystemSetting этим не страдает — у него
+        // getOption честно падает на дефолт.)
+        if ($ctxKey === '' && !$sys && ($cg = $this->getClientConfigSetting($key))) {
+            $this->modx->removeCollection('cgContextValue', ['setting' => (int)$cg->get('id'), 'value' => '']);
+        }
+
         // Сброс системного кэша — чтобы $_modx->config подхватил новое значение.
         if (method_exists($this->modx, 'getCacheManager') && ($cm = $this->modx->getCacheManager())) {
             $cm->refresh(['system_settings' => []]);
@@ -114,13 +125,38 @@ class InformationUpdater
             return null;
         }
         $xtype = (string)($sys ? $sys->get('xtype') : $cg->get('xtype'));
-        // Эффективное значение (контекст коннектора учитывается getOption).
-        $fallback = $sys ? $sys->get('value') : $cg->get('value');
-        $value = $this->modx->getOption($key, null, $fallback);
+
+        // Эффективный ТАРГЕТ записи: есть НЕПУСТАЯ контекстная запись → она перекрывает
+        // глобальную, правка идёт В НЕЁ. Иначе настройка только глобальная → правка
+        // глобальная (фронт предупредит). Контекст: явный $ctx (data-mpc-ctx), иначе
+        // контекст коннектора (обычно web — страница, которую редактируем).
+        $ctxKey = ($ctx === null || $ctx === '')
+            ? (string)($this->modx->context ? $this->modx->context->get('key') : '')
+            : $ctx;
+
+        if ($sys) {
+            // Системная настройка: контекст в modContextSetting (core), дефолт в sys.
+            $ctxSetting = $ctxKey !== ''
+                ? $this->modx->getObject('modContextSetting', ['key' => $key, 'context_key' => $ctxKey])
+                : null;
+            $hasCtx = (bool)$ctxSetting;
+            $value = $hasCtx ? $ctxSetting->get('value') : $this->modx->getOption($key, null, $sys->get('value'));
+        } else {
+            // ClientConfig: getOption в API-режиме НЕ резолвит — читаем напрямую.
+            // Контекст в cgContextValue (перекрывает только НЕПУСТЫМ значением),
+            // дефолт в cgSetting. Пустое контекстное = «не переопределено» → дефолт.
+            $ctxVal   = $ctxKey !== '' ? $this->getClientConfigSetting($key, $ctxKey) : null;
+            $ctxValue = $ctxVal ? (string)$ctxVal->get('value') : '';
+            $hasCtx   = $ctxValue !== '';
+            $value    = $hasCtx ? $ctxValue : (string)$cg->get('value');
+        }
+
         return [
             'value'     => (string)($value ?? ''),
             'xtype'     => $xtype !== '' ? $xtype : 'textfield',
             'source'    => $sys ? 'system' : 'clientconfig',
+            'target'    => $hasCtx ? 'context' : 'system',
+            'ctx'       => $hasCtx ? $ctxKey : null,
             'protected' => $this->isProtectedSetting($key),
         ];
     }

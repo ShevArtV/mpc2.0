@@ -60,6 +60,11 @@ class ContactUpdater
                 'attributes' => '',
             ];
 
+            // Какие contact_info-поля (caption/attributes) реально пришли во
+            // фрагменте. Пер-полевая правка из редактора (data-mpc-cfield="value")
+            // НЕ присылает caption/attributes — их нельзя затирать пустыми на
+            // мёрже/лексиконизации (иначе теряется подпись/иконка плейсмента).
+            $presentInfo = [];
             foreach ($fields as $field) {
                 $key = $field->getAttribute('data-mpc-cfield');
                 if ($key === 'fvalue') {
@@ -72,7 +77,16 @@ class ContactUpdater
                         $tmp[$key] = trim($this->fieldValueExtractor->getValue($field));
                     }
                 } else {
-                    $tmp[$key] = $field->getAttribute('src') ?: $this->fieldValueExtractor->getValue($field);
+                    $val = $field->getAttribute('src') ?: $this->fieldValueExtractor->getValue($field);
+                    // Иконка-классом: пустой элемент без src и без текста/внутреннего
+                    // HTML (<i data-mpc-cfield="attributes" class="icon-phone">) →
+                    // значение берём из class. Каттер симметрично ставит плейсхолдер
+                    // в атрибут class (см. Cutter::handleContacts).
+                    if ($val === '' && ($cls = trim((string)$field->getAttribute('class'))) !== '') {
+                        $val = $cls;
+                    }
+                    $tmp[$key] = $val;
+                    $presentInfo[$key] = true;
                 }
             }
 
@@ -123,6 +137,12 @@ class ContactUpdater
                 if (!in_array($k, $translatable, true)) {
                     continue;
                 }
+                // caption/attributes лексиконим только если поле реально пришло во
+                // фрагменте — иначе пер-полевая правка value затрёт перевод подписи
+                // пустым значением (value/fvalue присутствуют всегда).
+                if (in_array($k, ['caption', 'attributes'], true) && !isset($presentInfo[$k])) {
+                    continue;
+                }
                 $parent = in_array($k, ['value', 'fvalue'], true)
                     ? "{$tmp['key']}_{$tmp['type']}"
                     : "{$tmp['key']}_{$tmp['type']}_{$tmp['placement']}";
@@ -138,11 +158,17 @@ class ContactUpdater
             $contacts[$tmp['value']]['ckey']   = $tmp['key'];
             $contacts[$tmp['value']]['value']  = $tmp['value'];
             $contacts[$tmp['value']]['fvalue'] = $tmp['fvalue'];
-            $contacts[$tmp['value']]['contact_info'][$tmp['placement']] = [
-                'caption'    => $tmp['caption'],
-                'attributes' => $tmp['attributes'],
-                'placement'  => $tmp['placement'],
-            ];
+            // Кладём только присутствующие поля — отсутствующие на мёрже подтянутся
+            // из старой записи (см. mergeContactInfo). Дефолты caption/attributes для
+            // нового контакта добиваются в финальном цикле (чтобы Render не словил
+            // undefined). placement нужен всегда — ключ записи в гриде MIGX. Набор
+            // полей открытый (caption/attributes/icon/…): любой не-value cfield едет
+            // в contact_info под своим именем — без хардкода имён здесь.
+            $info = ['placement' => $tmp['placement']];
+            foreach ($presentInfo as $k => $_) {
+                $info[$k] = $tmp[$k];
+            }
+            $contacts[$tmp['value']]['contact_info'][$tmp['placement']] = $info;
         }
 
         if (empty($contacts)) {
@@ -170,7 +196,7 @@ class ContactUpdater
                 foreach ($oldContacts as $oldVal => $old) {
                     if ((string)($old['ckey'] ?? '') === $ckey) {
                         $oldInfo = $this->reformatMigx(json_decode((string)$old['contact_info'], true) ?: [], 'placement');
-                        $item['contact_info'] = array_merge($oldInfo, $item['contact_info']);
+                        $item['contact_info'] = $this->mergeContactInfo($oldInfo, $item['contact_info']);
                         unset($oldContacts[$oldVal]);
                         break;
                     }
@@ -179,8 +205,13 @@ class ContactUpdater
             if (isset($oldContacts[$value])) {
                 $contactInfo                     = json_decode($oldContacts[$value]['contact_info'], true) ?: [];
                 $contactInfo                     = $this->reformatMigx($contactInfo, 'placement');
-                $contactInfo                     = array_merge($contactInfo, $item['contact_info']);
-                $oldContacts[$value]['contact_info'] = $contactInfo;
+                $oldContacts[$value]['contact_info'] = $this->mergeContactInfo($contactInfo, $item['contact_info']);
+                // Контакт мог быть нарезан БЕЗ data-mpc-key (ckey=md5(value)), а теперь
+                // получил явный ключ. value не менялось → попали сюда; нужно обновить
+                // ckey, иначе перенарезанный чанк с новым ключом не найдёт запись.
+                if ($ckey !== '') {
+                    $oldContacts[$value]['ckey'] = $ckey;
+                }
             } else {
                 $oldContacts[$value] = $item;
             }
@@ -198,6 +229,10 @@ class ContactUpdater
                 $contactInfo = [];
                 foreach ($item['contact_info'] as $info) {
                     $info['MIGX_id'] = ++$j;
+                    // Дефолты для полей, которых не было ни в правке, ни в старой
+                    // записи (новый контакт без подписи/иконки) — Render читает
+                    // caption/attributes напрямую.
+                    $info += ['caption' => '', 'attributes' => ''];
                     $contactInfo[]   = $info;
                 }
                 $item['contact_info'] = json_encode($contactInfo, JSON_UNESCAPED_UNICODE);
@@ -215,5 +250,23 @@ class ContactUpdater
             $result[$item[$key]] = $item;
         }
         return $result;
+    }
+
+    /**
+     * Пополевой мёрж contact_info по плейсментам. Оба аргумента — карты
+     * [placement => поля]. Для совпадающего плейсмента новые поля накладываются
+     * поверх старых (array_merge на уровне полей), а НЕ заменяют объект целиком:
+     * пер-полевая правка value присылает плейсмент без caption/attributes, и они
+     * должны сохраниться из старой записи. Плейсменты, которых нет в старой
+     * записи, добавляются как есть.
+     */
+    private function mergeContactInfo(array $old, array $new): array
+    {
+        foreach ($new as $placement => $info) {
+            $old[$placement] = (isset($old[$placement]) && is_array($old[$placement]))
+                ? array_merge($old[$placement], $info)
+                : $info;
+        }
+        return $old;
     }
 }
