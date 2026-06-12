@@ -1,3 +1,17 @@
+2.5.35-rc
+==============
+Контакты (язык/мёрж/иконки), лексиконы, настройки ClientConfig, секции, списки.
+
+- ContactUpdater: пер-полевая правка value больше не затирает caption/attributes (пополевой мёрж плейсмента); безключевой контакт получает ckey после присвоения data-mpc-key; image-поле icon (отдельная иконка) + class-fallback для attributes (иконка-классом: пустой элемент с class).
+- Язык контактов: правка из редактора пишет перевод в ТЕКУЩИЙ язык (cookie mpc_lang), а не в дефолтный (Grabber::handleContactsHtml + LexiconManager skipLexiconSync) — раньше правка en меняла ru и раскидывалась по всем языкам.
+- Cutter::handleContacts: пустой не-value cfield с class → плейсхолдер в атрибут class.
+- LexiconSync::syncKey: перевод нового поля (rfield/tv) не утекает в дефолтный язык — плейсхолдер берётся из дефолта, не из текущего; дефолт не попадает в pending.
+- InformationUpdater: эффективное значение + target (context/system) по факту контекстной записи; ClientConfig читается напрямую (cgSetting/cgContextValue — getOption в API не резолвит); запись в глобальную ClientConfig чистит ПУСТЫЕ cgContextValue (перекрывали дефолт пустотой → fallback на странице).
+- SectionProcessor: position секции заполняется при нарезке (порядок вёрстки), existing/drag/-1 в приоритете (рендер сортирует секции по position, -1 вверху).
+- ConfigFieldWriter: список не пустеет до 0 — последняя строка очищается как образец (иначе пустой список нельзя наполнить заново из редактора).
+- FieldWriter: writeRowOp inherit-aware (наследуемая секция → диалог копирования вместо «section not found»); снимок поля-списка для отката row-операций из истории (restoreRows); color/colorpicker content-type; icon в выводе контактов (Render).
+- Тесты: 438 зелёных (+ deleteLastRow, syncKey-leak, snapshot class-fallback).
+
 2.5.34-rc
 ==============
 Контакты: ckey-identity, обёртка caption/attributes + unwrap; settingMeta; авторасширение cut.
