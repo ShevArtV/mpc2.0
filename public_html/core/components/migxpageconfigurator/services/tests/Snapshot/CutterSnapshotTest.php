@@ -251,6 +251,41 @@ class CutterSnapshotTest extends TestCase
         $this->assertStringNotContainsString('$resource.tvs.', $tpl);
     }
 
+    /**
+     * Image-конвейер для TV-img: при заданном thumbSnippet картинка ресурса
+     * (data-mpc-tv на <img>) проходит обрезку/реформат и lazy-загрузку
+     * симметрично секциям и контактам — раньше шла сырым src мимо конвейера.
+     *
+     * Размеры не извлекаются (TV — путь-строка) → ветка «реформат без кропа»:
+     * только commonThumbParams, без &w=/&h=.
+     */
+    public function testCutterRunsTvImageThroughThumbPipeline(): void
+    {
+        $modx = new ModxStub($this->fixturesDir, [
+            'mpc_thumb_snippet'       => 'mpcThumb',
+            'mpc_common_thumb_params' => '&fm=webp&q=90',
+        ]);
+
+        $props = $this->makeBaseProperties();
+        $props['lazyloadAttr'] = 'data-src';
+
+        $cutter = new Cutter($modx, $props);
+        $cutter->handle('rfields.html');
+        $tpl = file_get_contents($this->outputDir . '/sections/rftest.tpl');
+
+        // TV-img прогнан через thumb-сниппет с путём из tvs.cover на входе
+        $this->assertStringContainsString("'mpcThumb' | snippet", $tpl);
+        $this->assertStringContainsString("'input' => \$resource.tvs.cover", $tpl);
+        // реформат без кропа: параметры есть, &w=/&h= нет
+        $this->assertStringContainsString('&fm=webp&q=90', $tpl);
+        $this->assertStringNotContainsString('&w=', $tpl);
+        // lazy-загрузка: URL в data-src, src = заглушка
+        $this->assertStringContainsString('data-src="{', $tpl);
+        $this->assertStringContainsString('fake-img.png', $tpl);
+        // сырого необработанного src быть не должно
+        $this->assertStringNotContainsString('src="{$resource.tvs.cover}"', $tpl);
+    }
+
     // ---------------------------------------------------------------
 
     private function clearDir(string $dir): void

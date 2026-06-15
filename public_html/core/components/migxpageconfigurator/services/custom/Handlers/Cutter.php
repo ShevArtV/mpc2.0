@@ -437,6 +437,7 @@ class Cutter extends Base
             // (img→image и т.д.), prefix пуст (rfield/TV вне секции). Так image-TV
             // не получает `| lexicon`, если image не в mpc_translated_content.
             $this->lexiconManager->setContext('', false);
+            $useLexicon = false;
             $tvObj  = ($attr === 'data-mpc-tv') ? $this->modx->getObject('modTemplateVar', ['name' => $name]) : null;
             $tvType = $tvObj ? (string)$tvObj->get('type') : '';
             // Опционная TV (есть парсящиеся опции) — ЕДИНЫЙ с секциями плейсхолдер
@@ -458,9 +459,9 @@ class Cutter extends Base
                 $contentType = ($attr === 'data-mpc-tv' && $tvType !== '')
                     ? ContentTypeHelper::contentTypeForTvType($tvType)
                     : ContentTypeHelper::contentTypeForTag($item->tagName());
-                $useLexicon = $lexiconize
+                $useLexicon = (bool)($lexiconize
                     && !empty($this->properties['useLexicons'])
-                    && $this->lexiconManager->shouldLexiconize($contentType, $name);
+                    && $this->lexiconManager->shouldLexiconize($contentType, $name));
                 // ОТЛОЖЕННАЯ форма `##…}`: на запекании НЕ резолвится Fenom'ом,
                 // convertStaticHashToBrace конвертит `##`→`{` → в parsed/ доезжает
                 // живой {'key' | lexicon}, который резолвится на КАЖДЫЙ запрос в
@@ -479,6 +480,41 @@ class Cutter extends Base
                     $item->setAttribute('href', $pls);
                     break;
                 case 'img':
+                    // Image-конвейер для img-картинок ресурса (TV/rfield): thumb +
+                    // lazy, симметрично секциям (setImgPlaceholder) и контактам
+                    // (handleContacts). Раньше TV-img шёл сырым src мимо обрезки —
+                    // единственное image-поле вне конвейера (баг-by-design: причина
+                    // была в РОУТИНГЕ, не в «нет размеров»).
+                    //
+                    // Размеры (w/h) НЕ извлекаем: значение TV — путь-строка, а не
+                    // migx-структура с .width/.height, поэтому идём по ветке
+                    // «реформат без кропа» (commonThumbParams, напр. fm=webp&q=90).
+                    //
+                    // Лексикон-форму (##'key'|lexicon}) в thumb НЕ оборачиваем:
+                    // getThumb лексиконит ЗНАЧЕНИЕ выражения, а TV переводится по
+                    // КЛЮЧУ — семантика разная. При useLexicon оставляем отложенную
+                    // форму без thumb (image по умолчанию не лексиконизируется).
+                    if (!$useLexicon
+                        && !$item->hasAttribute('data-mpc-nothumb')
+                        && !empty($this->properties['thumbSnippet'])) {
+                        $thumb = $this->placeholderProcessor->getThumb([
+                            'width'       => false,
+                            'height'      => false,
+                            'thumbParams' => $item->getAttribute('data-mpc-thumb'),
+                            'firstSymbol' => '{',
+                            'complexName' => $expr,
+                            'srcAttr'     => '',
+                        ]);
+                        if ($this->properties['lazyloadAttr'] && !$item->hasAttribute('data-mpc-nolazy')) {
+                            $item->setAttribute($this->properties['lazyloadAttr'], $thumb);
+                            $item->setAttribute('src', $this->properties['fakeImgPath']);
+                        } else {
+                            $item->setAttribute('src', $thumb);
+                        }
+                    } else {
+                        $item->setAttribute('src', $pls);
+                    }
+                    break;
                 case 'source':
                     $item->setAttribute('src', $pls);
                     break;
