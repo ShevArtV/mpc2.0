@@ -8,6 +8,9 @@
   Теперь _build/build.php перед упаковкой приводит services/vendor к боевому виду
   (composer dump-autoload --no-dev, с детерминированным fallback-вычищением
   files-autoload, если composer на сборочном хосте недоступен).
+- ИСПРАВЛЕНО: после установки/обновления `./console/mpc` падал с "Permission denied"
+  (MODX transport не сохраняет executable-бит, файл ставится как 0644). Добавлен
+  resolver, восстанавливающий 0755 на console/mpc при install/upgrade.
 
 2.5.37-rc
 ==============
