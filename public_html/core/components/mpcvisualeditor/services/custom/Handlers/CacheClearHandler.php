@@ -47,7 +47,7 @@ class CacheClearHandler extends BaseHandler
                 $f->isDir() ? @rmdir($f->getPathname()) : @unlink($f->getPathname());
             }
         } catch (\Throwable $e) {
-            $this->modx->log(\modX::LOG_LEVEL_WARN, '[mpcVE cache] purgeDir: ' . $e->getMessage());
+            $this->mpcve->logger->warning('cache purgeDir: ' . $e->getMessage(), [], 'cache');
         }
     }
 }

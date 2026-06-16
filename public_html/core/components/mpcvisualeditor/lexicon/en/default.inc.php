@@ -4,6 +4,10 @@
  * @subpackage lexicon
  */
 $_lang['mpcvisualeditor'] = 'mpcVisualEditor';
+$_lang['setting_mpcve_debug'] = 'Enable logging (mxLogger)?';
+$_lang['setting_mpcve_debug_desc'] = 'Logs are written to mxLogger (the only sink). Enabled out of the box. Default: Yes.';
+$_lang['setting_mpcve_log_level'] = 'Minimum log level';
+$_lang['setting_mpcve_log_level_desc'] = 'Records below this level are not written to mxLogger: debug, info, warning, error. Default: debug. Requires mxLogger.';
 $_lang['mpcve_edit'] = 'Edit content from frontend (mpcVisualEditor)';
 
 $_lang['mpcve_edit_mode_on'] = 'Edit mode';

@@ -12,11 +12,14 @@ namespace MpcVEServices;
 class Mpcve
 {
     public \modX $modx;
+    /** @var Logger Операционное/debug-логирование через mxLogger (+ durable журнал MODX). */
+    public Logger $logger;
     protected array $config;
 
     public function __construct(\modX $modx, array $config = [])
     {
         $this->modx = $modx;
+        $this->logger = new Logger($modx);
 
         $assetsUrl = $modx->getOption('assets_url', null, MODX_ASSETS_URL) . 'components/mpcvisualeditor/';
         $corePath  = $modx->getOption('core_path', null, MODX_CORE_PATH) . 'components/mpcvisualeditor/';

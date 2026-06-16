@@ -2,6 +2,11 @@
 ==============
 Color-picker, контакты (иконки/класс), настройки, порядок секций, откат строк.
 
+- Логирование через mxLogger: новый класс MpcVEServices\Logger (на сервисе Mpcve). Прямые
+  $this->modx->log(ERROR/WARN, ...) в хендлерах/коннекторе/плагине заменены на logger. mxLogger —
+  единственный приёмник (стандартный журнал MODX не дублируется; лишь разовое «установите mxLogger»,
+  если он не установлен). Логирование включено из коробки: mpcve_debug=Да, mpcve_log_level=error.
+  Тэги mpcvisualeditor + mpc + этап (page/contact/cache/changelog/connector/prerender).
 - Новый редактор color.js: пикер цвета + hex для полей config/TV (тип color/colorpicker). Значение хранится БЕЗ # (как админка MODX). FieldTypesHandler: color/colorpicker → редактор color.
 - Контакты (contact.js/ContactSaveHandler): image-иконка через file manager (поле icon); правка class-режим (иконка-классом) с фильтром служебных классов mpcve-*.
 - Настройки (info.js/SettingsListHandler): схлоп системной+контекстной записи в одну эффективную строку (target определяет, куда писать); виджет для image-xtype (file manager + превью); colorpicker без #; убран показ типа поля в модалке и панели.

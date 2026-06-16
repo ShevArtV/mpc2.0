@@ -79,7 +79,7 @@ class Connector
         if ($route === null) {
             // S10: не отражаем ввод (action) в ответе — фронт мог бы вставить его в
             // innerHTML. Конкретный action логируем, пользователю — общее.
-            $this->modx->log(\modX::LOG_LEVEL_WARN, '[mpcVE] unknown action: ' . $action);
+            $this->mpcve->logger->warning('unknown action: ' . $action, ['action' => $action], 'connector');
             return $this->error('Unknown or not-yet-implemented action');
         }
         [$class, $method] = $route;

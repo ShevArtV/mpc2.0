@@ -44,7 +44,7 @@ class ChangeLog
             ]);
         } catch (\Throwable $ex) {
             // лог не должен ломать запись — глотаем (таблицы может не быть до миграции).
-            $this->modx->log(\modX::LOG_LEVEL_WARN, '[mpcVE changelog] ' . $ex->getMessage());
+            (new \MpcVEServices\Logger($this->modx))->warning('changelog: ' . $ex->getMessage(), [], 'changelog');
         }
     }
 

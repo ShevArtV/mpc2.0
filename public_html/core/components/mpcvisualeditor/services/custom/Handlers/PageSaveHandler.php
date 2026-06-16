@@ -62,7 +62,7 @@ class PageSaveHandler extends BaseHandler
             $Mpc->render->handle($resource->toArray());
         } catch (\Throwable $e) {
             @unlink($tmpPath);
-            $this->modx->log(\modX::LOG_LEVEL_ERROR, '[mpcVE] page/save grab failed: ' . $e->getMessage());
+            $this->mpcve->logger->error('page/save grab failed: ' . $e->getMessage(), [], 'page');
             return $this->err('ошибка обработки: ' . $e->getMessage());
         }
         @unlink($tmpPath);

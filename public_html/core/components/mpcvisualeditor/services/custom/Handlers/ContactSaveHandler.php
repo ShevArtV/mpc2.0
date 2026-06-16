@@ -59,7 +59,7 @@ class ContactSaveHandler extends BaseHandler
         try {
             (new \MpcServices\Mpc($this->modx))->saveContact($frag);
         } catch (\Throwable $e) {
-            $this->modx->log(\modX::LOG_LEVEL_ERROR, '[mpcVE contact/save] ' . $e->getMessage());
+            $this->mpcve->logger->error('contact/save: ' . $e->getMessage(), [], 'contact');
             return $this->err('ошибка сохранения контакта');
         }
 

@@ -1,6 +1,19 @@
 <?php
 
 return [
+    // Логирование через mxLogger (вкл/выкл). Включено из коробки. mxLogger — единственный
+    // приёмник; стандартный журнал MODX не используется (кроме разового «установите mxLogger»).
+    'mpcve_debug' => [
+        'xtype' => 'combo-boolean',
+        'value' => true,
+        'area'  => 'mpcve_general',
+    ],
+    // Минимальный уровень логирования mxLogger: debug|info|warning|error. По умолчанию error.
+    'mpcve_log_level' => [
+        'xtype' => 'textfield',
+        'value' => 'error',
+        'area'  => 'mpcve_general',
+    ],
     // Мастер-выключатель пакета
     'mpcve_active' => [
         'xtype' => 'combo-boolean',

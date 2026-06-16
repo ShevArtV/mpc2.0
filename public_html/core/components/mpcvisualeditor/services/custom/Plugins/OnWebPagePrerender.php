@@ -35,11 +35,12 @@ class OnWebPagePrerender extends PluginHandler
         // вырезает data-mpc-* маркеры из чанков и редактору нечего цеплять.
         // Не подключаем бесполезный overlay, но явно сообщаем редактору почему.
         if (!(bool)$this->modx->getOption('mpc_edit_mode', null, false)) {
-            $this->modx->log(
-                \modX::LOG_LEVEL_WARN,
-                '[mpcVisualEditor] Редактор включён (mpcve_active=1), но mpc_edit_mode=0 — '
-                . 'в чанках нет data-mpc-* маркеров. Включите системную настройку mpc_edit_mode '
-                . 'и перенарежьте страницы, иначе режим редактирования работать не будет.'
+            $mpcve->logger->warning(
+                'Редактор включён (mpcve_active=1), но mpc_edit_mode=0 — в чанках нет '
+                . 'data-mpc-* маркеров. Включите системную настройку mpc_edit_mode и перенарежьте '
+                . 'страницы, иначе режим редактирования работать не будет.',
+                [],
+                'prerender'
             );
             return;
         }

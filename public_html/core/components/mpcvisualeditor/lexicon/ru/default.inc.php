@@ -4,6 +4,10 @@
  * @subpackage lexicon
  */
 $_lang['mpcvisualeditor'] = 'mpcVisualEditor';
+$_lang['setting_mpcve_debug'] = 'Включить логирование (mxLogger)?';
+$_lang['setting_mpcve_debug_desc'] = 'Логи пишутся в mxLogger (единственный приёмник). Включено из коробки. По умолчанию: Да.';
+$_lang['setting_mpcve_log_level'] = 'Минимальный уровень логирования';
+$_lang['setting_mpcve_log_level_desc'] = 'Записи ниже уровня не пишутся в mxLogger: debug, info, warning, error. По умолчанию: debug. Требует mxLogger.';
 $_lang['mpcve_edit'] = 'Редактирование контента с фронта (mpcVisualEditor)';
 
 $_lang['mpcve_edit_mode_on'] = 'Режим редактирования';
