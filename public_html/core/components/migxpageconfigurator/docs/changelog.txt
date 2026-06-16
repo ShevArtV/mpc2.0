@@ -11,6 +11,11 @@
 - ИСПРАВЛЕНО: после установки/обновления `./console/mpc` падал с "Permission denied"
   (MODX transport не сохраняет executable-бит, файл ставится как 0644). Добавлен
   resolver, восстанавливающий 0755 на console/mpc при install/upgrade.
+- ИСПРАВЛЕНО: data-mpc-unwrap не снимал обёртку чанка, если внутри был data-mpc-attr
+  (особенно заметно при mpc_edit_mode — блок-обёртка целиком оставалась в файле чанка).
+  Причина: замена data-mpc-attr оставляла голый {$attr} в позиции HTML-атрибута, на
+  котором DiDom-ре-сериализация в unwrapBlock спотыкалась и str_replace промахивался.
+  Порядок в SectionFileWriter::putToFile изменён: unwrapBlock → потом data-mpc-attr.
 
 2.5.37-rc
 ==============

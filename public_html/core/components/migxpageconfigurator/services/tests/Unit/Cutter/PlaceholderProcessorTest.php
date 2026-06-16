@@ -1159,4 +1159,45 @@ class PlaceholderProcessorTest extends TestCase
             "Литерал-строка вместо Fenom-выражения — mpcThumb получит '\$source.srcset', а не путь");
         $this->assertStringContainsString("'input' => \$source.srcset", $result['html']);
     }
+
+    // ---------------------------------------------------------------
+    // unwrapBlock
+    // ---------------------------------------------------------------
+
+    /** Базовый unwrap: обёртка [data-mpc-unwrap] снимается, содержимое остаётся. */
+    public function testUnwrapBlockRemovesWrapper(): void
+    {
+        $proc = $this->makeProcessor();
+        $html = '<div data-mpc-unwrap="1"><li class="x">{$title | lexicon}</li></div>';
+
+        $out = $proc->unwrapBlock($html);
+
+        $this->assertStringNotContainsString('data-mpc-unwrap', $out);
+        $this->assertSame('<li class="x">{$title | lexicon}</li>', $out);
+    }
+
+    /**
+     * Регрессия: unwrap чанка с data-mpc-attr на внутреннем элементе.
+     *
+     * unwrapBlock ДОЛЖЕН вызываться, пока data-mpc-attr ещё ВАЛИДНЫЙ атрибут
+     * (data-mpc-attr="{$attr}"). Если сначала развернуть data-mpc-attr в голый
+     * {$attr} (позиция HTML-атрибута), DiDom-ре-сериализация внутри unwrapBlock
+     * выбросит невалидный {$attr} → str_replace промахнётся и обёртка не снимется
+     * (особенно заметно при mpc_edit_mode, где strip атрибутов пропущен). Порядок
+     * в SectionFileWriter::putToFile: unwrapBlock → потом data-mpc-attr.
+     */
+    public function testUnwrapBlockRemovesWrapperWithDataMpcAttrIntact(): void
+    {
+        $proc = $this->makeProcessor();
+        $html = '<div data-mpc-unwrap="1" data-mpc-chunk="hdr/row.tpl">'
+              . '<li class="item {$classnames}" data-mpc-attr="{$attr}">{$menutitle | lexicon}</li>'
+              . '</div>';
+
+        $out = $proc->unwrapBlock($html);
+
+        $this->assertStringNotContainsString('data-mpc-unwrap', $out, 'обёртка должна сняться');
+        $this->assertStringNotContainsString('data-mpc-chunk', $out, 'обёртка должна сняться');
+        $this->assertStringStartsWith('<li', $out);
+        $this->assertStringContainsString('data-mpc-attr="{$attr}"', $out, 'data-mpc-attr внутри сохранён для последующей замены');
+    }
 }

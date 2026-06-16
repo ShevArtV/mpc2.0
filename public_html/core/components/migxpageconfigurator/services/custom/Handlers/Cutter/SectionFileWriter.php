@@ -225,6 +225,16 @@ class SectionFileWriter
 
         $properties = $this->specialTagProcessor->removeHiddenPlaceholders($properties);
 
+        // unwrapBlock ДО data-mpc-attr — порядок критичен. Замена data-mpc-attr
+        // оставляет ГОЛЫЙ Fenom ({$attr}) в позиции HTML-атрибута (<li … {$attr}>),
+        // на котором DiDom-ре-сериализация внутри unwrapBlock спотыкается: невалидный
+        // «атрибут» {$attr} выбрасывается → $search ≠ исходная строка → str_replace
+        // промахивается и обёртка [data-mpc-unwrap] НЕ снимается. В прод-режиме это
+        // частично маскировал strip data-mpc-* атрибутов (ниже), а при mpc_edit_mode
+        // strip пропущен → блок-обёртка целиком торчала в чанке. Снимаем обёртки,
+        // пока HTML ещё валиден (data-mpc-attr="{$attr}" — нормальный атрибут).
+        $properties['html'] = $this->placeholderProcessor->unwrapBlock($properties['html']);
+
         // data-mpc-attr: заменить "data-mpc-attr="attr=val"" на сам атрибут
         if ($attrs = $this->parser->findByAttribute($properties['html'], '[data-mpc-attr]')) {
             foreach ($attrs as $attr) {
@@ -233,8 +243,6 @@ class SectionFileWriter
                 $properties['html'] = str_replace($search, $attrValue, $properties['html']);
             }
         }
-
-        $properties['html'] = $this->placeholderProcessor->unwrapBlock($properties['html']);
 
         // Если это wrapper-секция — вставляем в <body>
         if (strpos((string)$element->getAttribute('data-mpc-section'), $this->properties['wrapperName']) !== false) {
