@@ -136,8 +136,7 @@ class Base
         if ($this->injectedLogging !== null) {
             $this->logging = $this->injectedLogging;
         } else {
-            $this->logging = new Logging();
-            $this->logging->setPath(str_replace('\\', '-', self::class) . '.txt');
+            $this->logging = new Logging($this->modx);
         }
         $this->response = $this->injectedResponse ?? new Response($this->logging);
         $this->parser = new Parser();

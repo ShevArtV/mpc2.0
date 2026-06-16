@@ -1,6 +1,16 @@
 <?php
 
 return [
+    'mpc_debug' => [
+        'xtype' => 'combo-boolean',
+        'value' => false,
+        'area' => 'mpc_general',
+    ],
+    'mpc_log_level' => [
+        'xtype' => 'textfield',
+        'value' => 'debug',
+        'area' => 'mpc_general',
+    ],
     'mpc_base_section_name' => [
         'xtype' => 'textfield',
         'value' => 'mpc_base',

@@ -55,9 +55,8 @@ class Mpc
      */
     private function initialize()
     {
-        $this->logging = new Logging();
-        $logFileName = str_replace('\\', '-', self::class) . '.txt';
-        $this->logging->setPath($logFileName);
+        $this->logging = new Logging($this->modx);
+        $this->logging->setProcess('migxpageconfigurator_' . substr(md5((string) session_id()), 0, 12));
 
         $this->properties = [
             'corePath' => $this->modx->getOption('core_path', null, ''),

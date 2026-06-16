@@ -40,9 +40,7 @@ class Base
     public function __construct(\modX $modx)
     {
         $this->modx = $modx;
-        $this->logging = new Logging();
-        $logFileName = str_replace('\\', '-', self::class) . '.txt';
-        $this->logging->setPath($logFileName);
+        $this->logging = new Logging($this->modx);
         $this->response = new Response($this->logging);
     }
 
