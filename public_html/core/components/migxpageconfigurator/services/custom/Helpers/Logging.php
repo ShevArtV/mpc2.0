@@ -60,9 +60,9 @@ class Logging
     public function __construct(\modX $modx, ?bool $debug = null, ?string $minLevel = null)
     {
         $this->modx = $modx;
-        $this->debug = $debug === null ? (bool) $modx->getOption('mpc_debug', null, false) : (bool) $debug;
+        $this->debug = $debug === null ? (bool) $modx->getOption('mpc_debug', null, true) : (bool) $debug;
         $this->minLevel = $this->normalizeLevel(
-            $minLevel === null ? $modx->getOption('mpc_log_level', null, 'debug') : $minLevel
+            $minLevel === null ? $modx->getOption('mpc_log_level', null, 'error') : $minLevel
         );
     }
 

@@ -3,12 +3,12 @@
 return [
     'mpc_debug' => [
         'xtype' => 'combo-boolean',
-        'value' => false,
+        'value' => true,
         'area' => 'mpc_general',
     ],
     'mpc_log_level' => [
         'xtype' => 'textfield',
-        'value' => 'debug',
+        'value' => 'error',
         'area' => 'mpc_general',
     ],
     'mpc_base_section_name' => [
