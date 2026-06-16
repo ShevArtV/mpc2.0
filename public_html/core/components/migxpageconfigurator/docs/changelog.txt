@@ -1,3 +1,14 @@
+2.5.38-rc
+==============
+- ИСПРАВЛЕНО (критично): установка/обновление пакета роняла сайт с Fatal error
+  "Failed opening required '.../myclabs/deep-copy/.../deep_copy.php'". Причина:
+  composer-генератор прописывал в files-autoload dev-зависимости (myclabs/deep-copy,
+  phpunit Functions.php), которые сборка физически исключает из пакета; files-autoload
+  грузится eagerly при vendor/autoload.php → require несуществующего файла → Fatal.
+  Теперь _build/build.php перед упаковкой приводит services/vendor к боевому виду
+  (composer dump-autoload --no-dev, с детерминированным fallback-вычищением
+  files-autoload, если composer на сборочном хосте недоступен).
+
 2.5.37-rc
 ==============
 - Логирование (MpcServices\Helpers\Logging) переведено с файлов на mxLogger. Делегирует
