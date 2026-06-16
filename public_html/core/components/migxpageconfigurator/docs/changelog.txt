@@ -3,8 +3,8 @@
 - Логирование (MpcServices\Helpers\Logging) переведено с файлов на mxLogger. Делегирует
   записи сервису mxLogger (если установлен); иначе молчит и один раз предупреждает в журнале.
   Затронуты все 3 точки создания логгера (Mpc, Handlers\Base, Processors\Base) — им передан $modx.
-- Новые настройки mpc_debug (вкл/выкл логирования, по умолчанию No) и mpc_log_level
-  (минимальный уровень debug|info|warning|error, по умолчанию debug). Консистентно с
+- Новые настройки mpc_debug (вкл/выкл, включено из коробки) и mpc_log_level
+  (минимальный уровень debug|info|warning|error, по умолчанию error; единый приёмник mxLogger, включено из коробки). Консистентно с
   mxlogger.min_level. Захардкожены в _build/elements/settings.php.
 - Тэги: базовые migxpageconfigurator + mpc; process_uid воронки по сессии. Числовые
   уровни Logging (DEBUG/WARN/ERROR) маппятся на debug/warning/error mxLogger. Сигнатура

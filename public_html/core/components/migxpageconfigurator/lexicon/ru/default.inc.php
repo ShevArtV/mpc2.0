@@ -1,9 +1,9 @@
 <?php
 
 $_lang['setting_mpc_debug'] = 'Включить логирование (mxLogger)?';
-$_lang['setting_mpc_debug_desc'] = 'Операционные/отладочные записи пишутся в mxLogger (если установлен). По умолчанию: Нет.';
+$_lang['setting_mpc_debug_desc'] = 'Операционные/отладочные записи пишутся в mxLogger (если установлен). По умолчанию: Да.';
 $_lang['setting_mpc_log_level'] = 'Минимальный уровень логирования';
-$_lang['setting_mpc_log_level_desc'] = 'Записи ниже уровня не пишутся: debug, info, warning, error. По умолчанию: debug. Требует mxLogger.';
+$_lang['setting_mpc_log_level_desc'] = 'Записи ниже уровня не пишутся: debug, info, warning, error. По умолчанию: error. Требует mxLogger.';
 $_lang['setting_mpc_base_section_name'] = 'Имя базовой секции';
 $_lang['setting_mpc_base_section_name_desc'] = 'значение по умолчанию mpc_base.';
 $_lang['setting_mpc_common_config_name'] = 'Имя общей конфигурации в интерфейсе MIGX';

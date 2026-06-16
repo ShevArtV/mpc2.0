@@ -1,9 +1,9 @@
 <?php
 
 $_lang['setting_mpc_debug'] = 'Enable logging (mxLogger)?';
-$_lang['setting_mpc_debug_desc'] = 'Operational/debug records are written to mxLogger (if installed). Default: No.';
+$_lang['setting_mpc_debug_desc'] = 'Operational/debug records are written to mxLogger (if installed). Default: Yes.';
 $_lang['setting_mpc_log_level'] = 'Minimum log level';
-$_lang['setting_mpc_log_level_desc'] = 'Records below this level are dropped: debug, info, warning, error. Default: debug. Requires mxLogger.';
+$_lang['setting_mpc_log_level_desc'] = 'Records below this level are dropped: debug, info, warning, error. Default: error. Requires mxLogger.';
 $_lang['setting_mpc_base_section_name'] = 'Name of the base section';
 $_lang['setting_mpc_base_section_name_desc'] = 'the default value is mpc_base.';
 $_lang['setting_mpc_common_config_name'] = 'Name of the shared configuration in the interface MIGX';
