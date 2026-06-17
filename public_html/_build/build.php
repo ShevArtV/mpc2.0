@@ -825,6 +825,27 @@ class modExtraPackage
                 }
                 continue;
             }
+            if ($item === 'lexicon' && is_dir($path)) {
+                // Пакуем ТОЛЬКО UI-лексикон default.inc.php по языкам. Контент-
+                // лексиконы (имена по идентификатору ресурса: contacts/page-types/
+                // <id>/...) — пер-сайтовые артефакты грабера, в дистрибутив не
+                // входят: иначе в пакет утекают демо-переводы сборочного стенда,
+                // которые грузятся на КАЖДОЙ странице (contacts + static-blocks).
+                foreach (scandir($path) as $lang) {
+                    if (in_array($lang, ['.', '..'], true)) {
+                        continue;
+                    }
+                    $langPath    = $path . '/' . $lang;
+                    $defaultFile = $langPath . '/default.inc.php';
+                    if (is_dir($langPath) && is_file($defaultFile)) {
+                        $vehicle->resolve('file', [
+                            'source' => $defaultFile,
+                            'target' => "return MODX_CORE_PATH . 'components/" . $name . "/lexicon/" . $lang . "/';",
+                        ]);
+                    }
+                }
+                continue;
+            }
             $vehicle->resolve('file', [
                 'source' => $path,
                 'target' => $coreTarget,
