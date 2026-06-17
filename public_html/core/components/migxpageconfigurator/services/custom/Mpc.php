@@ -91,27 +91,51 @@ class Mpc
 
 
     /**
+     * Нарезка одного файла или всех (fileName=null → all). Возвращает сводку:
+     * ['success'=>хоть один файл реально нарезан, 'processed'=>сколько пытались,
+     *  'ok'=>успешно, 'failed'=>сколько не нарезано, 'messages'=>причины неудач].
+     * success=false, когда резать было нечего (файл не найден/пуст; для all — нет
+     * файлов шаблонов) — чтобы вызывающий (CLI) не рапортовал ложный успех.
+     *
      * @param string|null $fileName
      * @param bool|null $updContent
-     * @return void
+     * @return array
      */
-    public function process(?string $fileName, ?bool $updContent)
+    public function process(?string $fileName, ?bool $updContent): array
     {
         if ($this->properties['devMode']) {
             $this->render->clearCache();
         }
         $this->grabber->updContent = $updContent ?? false;
+
+        $results = [];
         if (!$fileName) {
             $templatePath = $this->properties['pdotoolsElementsPath'] . $this->properties['pathToSrc'];
-            $fileNames = $this->getFilesList($templatePath);
-            foreach ($fileNames as $fileName) {
-                $this->handleFile($fileName);
+            foreach ($this->getFilesList($templatePath) as $fn) {
+                $results[$fn] = $this->handleFile($fn);
             }
         } else {
-            $this->handleFile($fileName);
+            $results[$fileName] = $this->handleFile($fileName);
         }
 
         $this->refreshSiteCache();
+
+        $ok = 0;
+        $messages = [];
+        foreach ($results as $r) {
+            if (!empty($r['success'])) {
+                $ok++;
+            } elseif (!empty($r['message'])) {
+                $messages[] = $r['message'];
+            }
+        }
+        return [
+            'success'   => $ok > 0,
+            'processed' => count($results),
+            'ok'        => $ok,
+            'failed'    => count($results) - $ok,
+            'messages'  => $messages,
+        ];
     }
 
     /**
@@ -178,17 +202,25 @@ class Mpc
     }
 
     /**
-     * @param $fileName
-     * @return void
+     * Нарезать один файл. Возвращает результат грабера ['success','message','data']:
+     * для пустого/несуществующего файла грабер отдаёт success=false — тогда резать
+     * нечего, cutter/render пропускаем (раньше гонялись вхолостую, а CLI всё равно
+     * рапортовал успех).
+     *
+     * @param string $fileName
+     * @return array
      */
-    public function handleFile($fileName)
+    public function handleFile($fileName): array
     {
         $result = $this->grabber->handle($fileName);
-        $this->cutter->handle($fileName);
-        if ($result['data']['resource']) {
-            $resourceData = $result['data']['resource']->toArray();
-            $this->render->handle($resourceData);
+        if (empty($result['success'])) {
+            return $result;
         }
+        $this->cutter->handle($fileName);
+        if (!empty($result['data']['resource'])) {
+            $this->render->handle($result['data']['resource']->toArray());
+        }
+        return $result;
     }
 
     public function getParsedConfigPath(\modResource $resource): string

@@ -227,9 +227,22 @@ class Cli
             )]);
         }
         $fileName = $isAll ? null : $target;
-        $this->mpc()->process($fileName, $upd);
-        return $out->result(['success' => true, 'message' => 'Нарезка выполнена: ' . ($isAll ? 'all' : $target)
-            . ($upd ? ' (с обновлением контента)' : '') . ' [контекст ' . $ctxKey . ']']);
+        $res = $this->mpc()->process($fileName, $upd);
+        if (empty($res['success'])) {
+            // Резать было нечего: файл не найден/пуст (или для all нет шаблонов).
+            $why = !empty($res['messages']) ? ' — ' . implode('; ', $res['messages'])
+                : ($isAll ? ' — не найдено файлов шаблонов' : ' (файл не найден или пуст)');
+            return $out->result(['success' => false, 'message' =>
+                'Нарезка не выполнена: ' . ($isAll ? 'all' : $target) . $why . ' [контекст ' . $ctxKey . ']']);
+        }
+        return $out->result(['success' => true, 'message' => sprintf(
+            'Нарезка выполнена: %s (файлов: %d%s)%s [контекст %s]',
+            $isAll ? 'all' : $target,
+            (int)$res['ok'],
+            !empty($res['failed']) ? '; с ошибками: ' . (int)$res['failed'] : '',
+            $upd ? ' (с обновлением контента)' : '',
+            $ctxKey
+        )]);
     }
 
     /** Синхронизация MIGX-конфигов из сида (только sync): mpc configs sync. */
