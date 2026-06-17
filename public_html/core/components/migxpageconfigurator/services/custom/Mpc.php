@@ -322,8 +322,36 @@ class Mpc
         $cookieDomain = $this->getContextSettingValue('mpc_lang_cookie_domain') ?: $this->getContextSettingValue('http_host');
 
         $availableLanguages = array_map('trim', explode(',', (string)$this->getContextSettingValue('mpc_available_languages')));
+        $defaultLang        = $this->getContextSettingValue('mpc_default_language');
+
+        // Точка расширения: проект может изменить набор языков / язык по умолчанию /
+        // имя cookie или вовсе пропустить установку (skip=true) — например, когда
+        // язык определяется самим проектом после switchContext. Возврат — через
+        // $modx->event->returnedValues (idiom MODX): available[], default, cookieName, skip.
+        $this->modx->invokeEvent('mpcOnBeforeSetLanguageSettings', [
+            'available'  => $availableLanguages,
+            'default'    => $defaultLang,
+            'cookieName' => $cookieName,
+            'Mpc'        => $this,
+        ]);
+        $rv = (isset($this->modx->event->returnedValues) && is_array($this->modx->event->returnedValues))
+            ? $this->modx->event->returnedValues : [];
+        if (!empty($rv['skip'])) {
+            return;
+        }
+        if (!empty($rv['available'])) {
+            $availableLanguages = is_array($rv['available'])
+                ? $rv['available']
+                : array_map('trim', explode(',', (string)$rv['available']));
+        }
+        if (isset($rv['default']) && $rv['default'] !== '') {
+            $defaultLang = $rv['default'];
+        }
+        if (!empty($rv['cookieName'])) {
+            $cookieName = $rv['cookieName'];
+        }
+
         if (!isset($_COOKIE[$cookieName]) || !in_array($_COOKIE[$cookieName], $availableLanguages, true)) {
-            $defaultLang = $this->getContextSettingValue('mpc_default_language');
             setcookie($cookieName, $defaultLang, 0, '/', $cookieDomain);
             $_COOKIE[$cookieName] = $defaultLang;
         }

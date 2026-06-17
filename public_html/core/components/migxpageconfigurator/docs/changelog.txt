@@ -1,3 +1,16 @@
+2.5.40-rc
+==============
+Управление установкой языка пакетом на OnHandleRequest.
+
+- НОВОЕ: настройка-выключатель mpc_set_language_on_request (по умолчанию Да). Вкл —
+  пакетный плагин OnHandleRequest как раньше зовёт setLanguageSettings (cultureKey +
+  cookie языка). Выкл — пакет язык не трогает; проект делает это сам (например, после
+  switchContext), пакетная установка не мешает.
+- НОВОЕ: событие mpcOnBeforeSetLanguageSettings — вызывается в setLanguageSettings,
+  передаёт available[]/default/cookieName. Плагин проекта через returnedValues может
+  изменить набор языков, язык по умолчанию, имя cookie или пропустить установку
+  (skip=true) — тонкий контроль без полного отключения пакета.
+
 2.5.39-rc
 ==============
 - НОВОЕ: настройка mpc_contacts_page_alias — псевдоним ресурса контактов. Пусто →

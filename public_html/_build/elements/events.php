@@ -13,6 +13,9 @@ return [
     'mpcOnBeforeParseConfig' => [
         'groupname' => 'MigxPageConfigurator',
     ],
+    'mpcOnBeforeSetLanguageSettings' => [
+        'groupname' => 'MigxPageConfigurator',
+    ],
     'mpcOnBeforeRender' => [
         'groupname' => 'MigxPageConfigurator',
     ],

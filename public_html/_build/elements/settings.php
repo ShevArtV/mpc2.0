@@ -255,6 +255,16 @@ return [
         'value' => '',
         'area' => 'mpc_lexicons',
     ],
+    // Выставлять язык (cultureKey + cookie) на OnHandleRequest силами пакета.
+    // Вкл (по умолчанию) — пакетный плагин зовёт setLanguageSettings рано. Выкл —
+    // пакет язык не трогает; проект делает это сам (например, после switchContext).
+    // Тонкая настройка/skip без полного выключения — через событие
+    // mpcOnBeforeSetLanguageSettings (см. setLanguageSettings).
+    'mpc_set_language_on_request' => [
+        'xtype' => 'combo-boolean',
+        'value' => true,
+        'area' => 'mpc_lexicons',
+    ],
     // База манифестов mpc CLI (относительно папки core/ или абсолют). Читается
     // ManifestLoader::baseDir (env MPC_MANIFESTS_PATH > эта настройка > дефолт).
     'mpc_manifests_path' => [
