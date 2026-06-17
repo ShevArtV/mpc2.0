@@ -2,6 +2,7 @@
 
 namespace MpcServices\Handlers\Grabber;
 
+use MpcServices\Handlers\Base;
 use MpcServices\Handlers\Parser;
 
 /**
@@ -128,13 +129,16 @@ class ContactUpdater
             //     → ключ БЕЗ плейсмента: contact_{ckey}_{type}_value (один перевод на все плейсменты);
             //   caption/attributes — оформление (подпись/иконка зависят от места)
             //     → ключ С плейсментом: contact_{ckey}_{type}_{placement}_caption.
-            $translatable = $this->properties['contactLexiconFields'] ?? ['caption'];
-            // Пер-маркер override: data-mpc-translate="caption,value" перекрывает настройку.
+            $map = $this->properties['contactLexiconFields'] ?? ['*' => ['caption']];
+            // Пер-маркер override: data-mpc-translate="caption,value" перекрывает
+            // настройку для ЭТОГО блока. Тип контакта известен → плоский список
+            // парсится в правило '*' (применяется к любому типу этого блока).
             if ($override = trim((string)$item->getAttribute('data-mpc-translate'))) {
-                $translatable = array_values(array_filter(array_map('trim', explode(',', $override))));
+                $map = Base::parseContactLexiconFields($override);
             }
+            $type = (string)$tmp['type'];
             foreach ($tmp as $k => $v) {
-                if (!in_array($k, $translatable, true)) {
+                if (!Base::isContactFieldTranslatable($map, $type, $k)) {
                     continue;
                 }
                 // caption/attributes лексиконим только если поле реально пришло во

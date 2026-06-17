@@ -24,6 +24,7 @@ if ($transport->xpdo) {
             'mpc_expand_enabled',
             'mpc_path_to_presets',
             'mpc_manifests_path',
+            'mpc_contacts_page_alias',
         ];
         foreach ($keys as $key) {
             if (!array_key_exists($key, $options)) {

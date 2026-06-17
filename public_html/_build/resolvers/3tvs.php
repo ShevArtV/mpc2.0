@@ -64,9 +64,10 @@ if ($transport->xpdo) {
             'inputProperties' => [
                 'configs' => 'mpc_contacts',
             ],
-            'templates' => [
-                'Вывод содержимого'
-            ],
+            // Привязку к шаблону делает resolvers/4systemsettings.php — целевой
+            // шаблон зависит от настройки mpc_contacts_page_alias («Контакты»
+            // для нового ресурса / шаблон существующего ресурса).
+            'templates' => [],
             'resources' => ''
         ],
     ];

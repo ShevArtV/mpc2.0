@@ -49,6 +49,52 @@ class Base
     public array $staticSectionNames = [];
 
     /**
+     * Разбирает настройку mpc_contact_lexicon_fields (или per-маркер
+     * data-mpc-translate) в карту тип→поля. Записи через запятую: `поле` →
+     * правило для всех типов (ключ '*'), `тип:поле` → правило для контакта
+     * этого типа. Пример: "caption, address:value" → ['*'=>['caption'],
+     * 'address'=>['value']].
+     *
+     * @param string $raw
+     * @return array<string,string[]>
+     */
+    public static function parseContactLexiconFields(string $raw): array
+    {
+        $map = [];
+        foreach (array_filter(array_map('trim', explode(',', $raw))) as $entry) {
+            if (strpos($entry, ':') !== false) {
+                [$type, $field] = array_map('trim', explode(':', $entry, 2));
+            } else {
+                $type  = '*';
+                $field = $entry;
+            }
+            if ($type === '' || $field === '') {
+                continue;
+            }
+            $map[$type][] = $field;
+        }
+        return $map;
+    }
+
+    /**
+     * Переводимо ли под-поле контакта данного типа: поле есть в правилах для
+     * всех типов ('*') ИЛИ в правилах конкретного типа. Единая точка решения
+     * для грабера (ContactUpdater) и каттера (Cutter::contactFieldExpr).
+     *
+     * @param array<string,string[]> $map
+     * @param string $type
+     * @param string $field
+     * @return bool
+     */
+    public static function isContactFieldTranslatable(array $map, string $type, string $field): bool
+    {
+        if (in_array($field, $map['*'] ?? [], true)) {
+            return true;
+        }
+        return in_array($field, $map[$type] ?? [], true);
+    }
+
+    /**
      * @param \modX $modx
      * @param array $properties
      */
@@ -109,12 +155,14 @@ class Base
             'contactsPageId' => (int)$this->modx->getOption('mpc_contacts_page_id', null, 1),
             'contactsTvName' => $this->modx->getOption('mpc_contacts_tv_name', null, 'contacts'),
             'contactsTvId' => $this->modx->getOption('mpc_contacts_tv_id', null, 0),
-            // Какие под-поля контакта переводимы (лексиконятся). По умолчанию только
-            // caption; трансграничный сайт ставит "caption,value,fvalue,attributes".
-            'contactLexiconFields' => array_values(array_filter(array_map(
-                'trim',
-                explode(',', (string)$this->modx->getOption('mpc_contact_lexicon_fields', null, 'caption'))
-            ))),
+            // Какие под-поля контакта переводимы (лексиконятся), картой тип→поля.
+            // Синтаксис настройки: записи через запятую, каждая либо `поле`
+            // (для всех типов), либо `тип:поле` (только для контакта этого типа).
+            // Пример: "caption, address:value, address:fvalue" → caption у всех +
+            // value/fvalue только у адреса. По умолчанию только caption у всех.
+            'contactLexiconFields' => self::parseContactLexiconFields(
+                (string)$this->modx->getOption('mpc_contact_lexicon_fields', null, 'caption')
+            ),
             // Нативные поля ресурса, которые можно наследовать от «типа страницы»
             // (каскад тип→ресурс) и писать через rfield. Структурные поля сюда
             // не входят и каскадом не затрагиваются.

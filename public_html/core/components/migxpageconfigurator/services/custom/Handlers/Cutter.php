@@ -278,9 +278,17 @@ class Cutter extends Base
             $type      = $contactAttrValue[0];
             $placement = $contactAttrValue[1] ?? 'default';
 
+            // Какие под-поля переводимы для ЭТОГО блока (карта тип→поля). Per-маркер
+            // data-mpc-translate перекрывает глобальную настройку — симметрично
+            // граберу (ContactUpdater), иначе плейсхолдер не получил бы `| lexicon`.
+            $map = $this->properties['contactLexiconFields'] ?? [];
+            if ($override = trim((string)$item->getAttribute('data-mpc-translate'))) {
+                $map = Base::parseContactLexiconFields($override);
+            }
+
             foreach ($fields as $field) {
                 $fieldName   = $field->getAttribute('data-mpc-cfield');
-                $complexName = $this->contactFieldExpr($placement, $key, $fieldName);
+                $complexName = $this->contactFieldExpr($placement, $key, $fieldName, $type, $map);
                 $search[]    = $this->parser->getHTMLString($field);
 
                 if ($fieldName === 'value') {
@@ -293,7 +301,7 @@ class Cutter extends Base
                         }
                         $field->setAttribute('href', $complexName);
                     }
-                    $fvalueExpr = $this->contactFieldExpr($placement, $key, 'fvalue');
+                    $fvalueExpr = $this->contactFieldExpr($placement, $key, 'fvalue', $type, $map);
                     // data-mpc-unwrap (без href) → голый плейсхолдер, иначе обёртка.
                     if ($field->hasAttribute('data-mpc-unwrap') && !$field->hasAttribute('href')) {
                         $replacement[] = $fvalueExpr;
@@ -356,15 +364,16 @@ class Cutter extends Base
     }
 
     /**
-     * Плейсхолдер под-поля контакта. Для переводимых полей (настройка
-     * mpc_contact_lexicon_fields) добавляет `| lexicon` — значение в TV хранит ключ,
-     * перевод резолвится на рендере. Для прочих — сырое чтение.
+     * Плейсхолдер под-поля контакта. Для переводимых полей (карта тип→поля из
+     * mpc_contact_lexicon_fields / per-маркер data-mpc-translate) добавляет
+     * `| lexicon` — значение в TV хранит ключ, перевод резолвится на рендере.
+     * Для прочих — сырое чтение. Решение через Base::isContactFieldTranslatable
+     * (та же точка, что у грабера ContactUpdater).
      */
-    private function contactFieldExpr(string $placement, string $key, string $field): string
+    private function contactFieldExpr(string $placement, string $key, string $field, string $type, array $map): string
     {
         $expr = "\$contacts['$placement']['$key']['$field']";
-        $translatable = $this->properties['contactLexiconFields'] ?? [];
-        if (!empty($this->properties['useLexicons']) && in_array($field, $translatable, true)) {
+        if (!empty($this->properties['useLexicons']) && self::isContactFieldTranslatable($map, $type, $field)) {
             // Отложенная форма: на запекании {$contacts…} интерполирует КЛЮЧ, а
             // `##`→`{` (convertStaticHashToBrace) оставляет в parsed/ живой
             // {'key' | lexicon} → язык переключается без перенарезки.

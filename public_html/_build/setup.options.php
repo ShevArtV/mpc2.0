@@ -1,12 +1,19 @@
 <?php
 /**
- * Setup-options форма пакета MigxPageConfigurator — показывается при установке.
- * Поля сабмитятся в $options резолверов (см. resolvers/Asetupoptions.php),
- * который пишет их в системные настройки.
+ * Setup-options форма пакета MigxPageConfigurator — показывается ТОЛЬКО при
+ * первой установке. Поля сабмитятся в $options резолверов (см.
+ * resolvers/Asetupoptions.php), который пишет их в системные настройки.
  *
  * @var modX  $modx
  * @var array $options
  */
+
+// На обновлении пакета модалку не показываем — настройки уже заданы. Возврат
+// null (а не '') заставляет менеджер пропустить окно setup-options в обоих
+// клиентских ветках (package.grid.js проверяет только !== null).
+if (($options[xPDOTransport::PACKAGE_ACTION] ?? null) === xPDOTransport::ACTION_UPGRADE) {
+    return null;
+}
 
 $get = function ($key, $default = '') use ($modx) {
     $v = $modx->getOption($key, null, null);
@@ -23,6 +30,7 @@ $exclLex   = $get('mpc_exclude_lexicons_filename', 'components/migxpageconfigura
 $lazyload  = $get('mpc_lazyload_enabled', '1');
 $expand    = $get('mpc_expand_enabled', '1');
 $presets   = $get('mpc_path_to_presets', 'presets/');
+$cntAlias  = $get('mpc_contacts_page_alias', '');
 
 $esc = function ($s) { return htmlspecialchars((string)$s, ENT_QUOTES); };
 // boolean-select Да/Нет с предвыбором текущего значения ('1' = Да)
@@ -36,57 +44,65 @@ $boolSelect = function ($name, $value) {
 };
 
 $output = '
-<div style="padding:10px 14px;line-height:1.6">
-  <h3 style="margin:0 0 8px">Настройки MigxPageConfigurator</h3>
-  <p style="color:#666;margin:0 0 14px">Значения применятся при установке; позже их можно изменить в системных настройках.</p>
+<div style="padding:6px 12px;line-height:1.35;max-height:60vh;overflow-y:auto;overflow-x:hidden">
+  <h3 style="margin:0 0 4px">Настройки MigxPageConfigurator</h3>
+  <p style="color:#666;margin:0 0 10px">Значения применятся при установке; позже их можно изменить в системных настройках.</p>
 
-  <h4 style="margin:14px 0 8px;border-bottom:1px solid #eee;padding-bottom:4px">Лексиконы</h4>
+  <h4 style="margin:10px 0 6px;border-bottom:1px solid #eee;padding-bottom:3px">Лексиконы</h4>
 
-  <label style="display:block;margin-bottom:12px">
+  <label style="display:block;margin-bottom:8px">
     <b>Использовать лексиконы (мультиязычность)</b><br>
     ' . $boolSelect('mpc_use_lexicons', $useLex) . '
   </label>
 
-  <label style="display:block;margin-bottom:12px">
+  <label style="display:block;margin-bottom:8px">
     <b>Namespace лексиконов</b><br>
     <input type="text" name="mpc_lexicons_namespace" value="' . $esc($lexNs) . '" style="width:100%">
   </label>
 
-  <label style="display:block;margin-bottom:12px">
+  <label style="display:block;margin-bottom:8px">
     <b>Путь к лексиконам</b> <span style="color:#888">(относительно core/ или абсолютный)</span><br>
     <input type="text" name="mpc_lexicon_path" value="' . $esc($lexPath) . '" style="width:100%">
   </label>
 
-  <label style="display:block;margin-bottom:12px">
+  <label style="display:block;margin-bottom:8px">
     <b>Файл исключений лексиконов</b> <span style="color:#888">(относительно core/ или абсолютный)</span><br>
     <textarea name="mpc_exclude_lexicons_filename" style="width:100%" rows="2">' . $esc($exclLex) . '</textarea>
   </label>
 
-  <label style="display:block;margin-bottom:12px">
+  <label style="display:block;margin-bottom:8px">
     <b>Доступные языки</b> <span style="color:#888">(через запятую, напр. ru,en)</span><br>
     <input type="text" name="mpc_available_languages" value="' . $esc($langs) . '" style="width:100%">
   </label>
 
-  <label style="display:block;margin-bottom:12px">
+  <label style="display:block;margin-bottom:8px">
     <b>Язык по умолчанию</b><br>
     <input type="text" name="mpc_default_language" value="' . $esc($defLang) . '" style="width:100%">
   </label>
 
-  <h4 style="margin:18px 0 8px;border-bottom:1px solid #eee;padding-bottom:4px">Медиа</h4>
+  <h4 style="margin:10px 0 6px;border-bottom:1px solid #eee;padding-bottom:4px">Медиа</h4>
 
-  <label style="display:block;margin-bottom:12px">
+  <label style="display:block;margin-bottom:8px">
     <b>Ленивая загрузка (lazyload)</b><br>
     ' . $boolSelect('mpc_lazyload_enabled', $lazyload) . '
   </label>
 
-  <label style="display:block;margin-bottom:12px">
+  <label style="display:block;margin-bottom:8px">
     <b>Разворачивание SVG (expand)</b><br>
     ' . $boolSelect('mpc_expand_enabled', $expand) . '
   </label>
 
-  <h4 style="margin:18px 0 8px;border-bottom:1px solid #eee;padding-bottom:4px">Пути</h4>
+  <h4 style="margin:10px 0 6px;border-bottom:1px solid #eee;padding-bottom:4px">Контакты</h4>
 
-  <label style="display:block;margin-bottom:12px">
+  <label style="display:block;margin-bottom:4px">
+    <b>Псевдоним ресурса контактов</b><br>
+    <span style="color:#888">Пусто — будет создан ресурс с псевдонимом <code>contacts</code> на шаблоне «Контакты». Укажите псевдоним существующего ресурса, чтобы привязать контакты к нему (шаблон ресурса не меняется). Если ресурса с таким псевдонимом нет — он будет создан на шаблоне «Контакты».</span><br>
+    <input type="text" name="mpc_contacts_page_alias" value="' . $esc($cntAlias) . '" style="width:100%">
+  </label>
+
+  <h4 style="margin:10px 0 6px;border-bottom:1px solid #eee;padding-bottom:4px">Пути</h4>
+
+  <label style="display:block;margin-bottom:8px">
     <b>Путь к пресетам</b> <span style="color:#888">(относительно pdotools_elements_path; задайте вне папки пакета, чтобы пресеты не затёрлись при обновлении)</span><br>
     <input type="text" name="mpc_path_to_presets" value="' . $esc($presets) . '" style="width:100%">
   </label>
