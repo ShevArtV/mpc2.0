@@ -11,6 +11,7 @@
 import { S } from './state.js';
 import { api, loadConfig } from './api.js';
 import { esc, toast, confirmDialog } from './dom.js';
+import { openSectionFields } from './editors/sectionfields.js';
 
 function boolOf(v) { return v === true || v === 1 || v === '1' || v === 'true'; }
 function byPos(a, b) { return (parseInt(a.position, 10) || 0) - (parseInt(b.position, 10) || 0); }
@@ -187,6 +188,7 @@ function ownRow(s, i) {
     return '<div class="mpcve-sec" data-i="' + i + '" draggable="true">' +
         '<span class="mpcve-sec__grip" title="Перетащите, чтобы переставить">⋮⋮</span>' +
         '<span class="mpcve-sec__name' + (hidden ? ' mpcve-sec__name--off' : '') + '">' + esc(s.section_name) + '</span>' +
+        '<button type="button" class="mpcve-sec__btn" data-op="fields" title="Поля секции (вкл. скрытые и списки)">✎</button>' +
         '<button type="button" class="mpcve-sec__btn" data-op="vis" title="' + (hidden ? 'Скрыта — показать' : 'Видна — скрыть') + '">' + (hidden ? '🚫' : '👁') + '</button>' +
         '<button type="button" class="mpcve-sec__btn' + (stat ? ' mpcve-sec__btn--on' : '') + '" data-op="stat" title="' + (stat ? 'Статичная' : 'Не статичная') + '">📌</button>' +
     '</div>';
@@ -229,6 +231,17 @@ function wire(items) {
             return;
         }
         wireDrag(row, i, items);
+        var fieldsBtn = row.querySelector('[data-op=fields]');
+        if (fieldsBtn) {
+            // Панель полей секции (config-driven): скрытые/вырезанные поля + MIGX-списки.
+            // Сайдбар сам — не .mpcve-modal, но панель полей — да; закрываем сайдбар,
+            // чтобы Escape/клики не путались между двумя оверлеями.
+            fieldsBtn.addEventListener('click', function (e) {
+                e.stopPropagation();
+                closeSidebar();
+                openSectionFields(s);
+            });
+        }
         row.querySelector('[data-op=vis]').addEventListener('click', function () {
             var nv = boolOf(s.hide_section) ? 0 : 1;
             sectionOp({ op: 'visibility', section: s.section_name, value: nv }).then(function (r) {

@@ -35,15 +35,16 @@ export function openMediaEditor(el, override) {
     var oldValue = JSON.stringify([rec]);
     var domSources = el ? Array.prototype.slice.call(el.querySelectorAll('source')) : [];
 
-    // основной файл: ключ из конфига + превью-путь из DOM
+    // основной файл: ключ из конфига + превью-путь из DOM (а без DOM — из конфига:
+    // value-based из панели, когда поля нет на странице).
     var main = {
         src: rec.src || '',
-        preview: el ? (el.getAttribute('src') || el.currentSrc || '') : '',
+        preview: el ? (el.getAttribute('src') || el.currentSrc || '') : (rec.src || ''),
         file: null
     };
     var poster = {
         src: rec.poster || '',
-        preview: el ? (el.getAttribute('poster') || '') : '',
+        preview: el ? (el.getAttribute('poster') || '') : (rec.poster || ''),
         file: null
     };
     var sources = (Array.isArray(rec.sources) ? rec.sources : []).map(function (cs, k) {
@@ -52,7 +53,7 @@ export function openMediaEditor(el, override) {
             src: cs.src || '',
             type: cs.type || (dom ? dom.getAttribute('type') : '') || '',
             media: cs.media || (dom ? dom.getAttribute('media') : '') || '',
-            preview: dom ? (dom.getAttribute('src') || dom.getAttribute('data-lazy') || '') : '',
+            preview: dom ? (dom.getAttribute('src') || dom.getAttribute('data-lazy') || '') : (cs.src || ''),
             file: null
         };
     });

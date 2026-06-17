@@ -16,14 +16,47 @@ import { openMediaEditor } from './editors/media.js';
 // Значение лексикона по ключу (в режиме лексиконов конфиг хранит КЛЮЧ, перевод —
 // в файле). Показываем перевод, а не ключ. Если v не ключ (или лексиконы выкл) —
 // возвращаем как есть. Карты приходят из config/get (S.lexicons по уровням).
-function lexValue(v, level) {
+export function lexValue(v, level) {
     if (typeof v !== 'string') { return v; }
     var map = (S.lexicons && S.lexicons[level]) || null;
     return (map && Object.prototype.hasOwnProperty.call(map, v)) ? map[v] : v;
 }
 
 // migx-служебка секции (вне табов mpc_base) — никогда не редактируем.
-var MIGX_SERVICE = ['MIGX_id', 'MIGX_formname', 'limit'];
+export var MIGX_SERVICE = ['MIGX_id', 'MIGX_formname', 'limit'];
+
+// Запись/список MIGX из значения конфига: на вложенных уровнях значение уже
+// распарсено (массив) внешним JSON.parse, на уровне секции — ещё строка.
+// dom.parseRecord парсит только строки → массивы здесь берём как есть.
+function recOf(v) {
+    if (Array.isArray(v)) { return v; }
+    return (typeof v === 'string') ? parseRecord(v) : null;
+}
+
+// Открыватель config-driven редактора строк (editors/sectionfields.js регистрирует
+// его при загрузке через _setRowsOpener — так избегаем циклического импорта
+// panels↔sectionfields). Нужен, чтобы скрытые MIGX-списки в этой панели тоже
+// открывали редактор строк.
+var _rowsOpener = null;
+export function _setRowsOpener(fn) { _rowsOpener = fn; }
+
+// Дескриптор скрытого MIGX-списка для openBlockPanel (тип 'rows' → кнопка-открыватель).
+// path — спуск к строке-владельцу списка ([] для top-level поля секции).
+function rowsDescriptor(level, section, fieldName, rec, path) {
+    var d = {
+        level: level, section: section, fieldName: fieldName, type: 'rows',
+        count: Array.isArray(rec) ? rec.length : 0, label: fieldLabel(fieldName)
+    };
+    if (path && path.length) { d.path = path; }
+    d.openRows = function () {
+        if (!_rowsOpener) { toast('Редактор списков не загружен', true); return; }
+        _rowsOpener({
+            level: level, section: section, parentField: fieldName,
+            path: path || [], resourceId: S.cfg.resourceId || 0
+        }, fieldLabel(fieldName));
+    };
+    return d;
+}
 
 // ЯВНЫЙ список исключений скрытых полей СЕКЦИИ: «Настройки секции» (таб mpc_base,
 // S.settingsFields — id/section_name/file_name/hide_section/copy_from_origin/
@@ -32,7 +65,7 @@ var MIGX_SERVICE = ['MIGX_id', 'MIGX_formname', 'limit'];
 // показываем ОТДЕЛЬНОЙ веткой (sectionStyleFields) — у них каскад-уровень
 // (resource перекрывает global на static-секциях). ВСЁ прочее из конфига, чего
 // нет в DOM (data-mpc-field), попадает в скрытые — включая кастомные поля.
-function isSectionExcluded(fname) {
+export function isSectionExcluded(fname) {
     return S.settingsFields.indexOf(fname) !== -1
         || fname === 'css_file_path'
         || MIGX_SERVICE.indexOf(fname) !== -1
@@ -43,14 +76,14 @@ function isSectionExcluded(fname) {
 // sources/img (так отличаем от picture/video/audio-записей со sources/вложенным
 // img, которые панель пока не редактирует). Такие записи правим value-based
 // (превью+загрузка), сохраняя структуру записи.
-function isImgRecord(rec) {
+export function isImgRecord(rec) {
     return !!(rec && rec.length === 1 && rec[0] &&
         rec[0].src !== undefined && rec[0].sources === undefined && rec[0].img === undefined);
 }
 
 // Тип media-ЗАПИСИ (picture/video/audio) по форме первой строки — для открытия
 // нужного редактора value-based из панели. null — не такая запись.
-function recordKind(rec) {
+export function recordKind(rec) {
     if (!Array.isArray(rec) || !rec.length || !rec[0] || typeof rec[0] !== 'object') { return null; }
     var r = rec[0];
     var src0 = (Array.isArray(r.sources) && r.sources.length) ? r.sources[0] : null;
@@ -113,7 +146,7 @@ function sectionHidden(sectionEl) {
         Object.keys(sc.obj).forEach(function (fname) {
             if (isSectionExcluded(fname) || visible[fname]) { return; }
             var v = sc.obj[fname];
-            var rec = parseRecord(v);
+            var rec = recOf(v);
             if (isImgRecord(rec)) {
                 out.push({
                     level: sc.level, section: sc.section, fieldName: fname,
@@ -130,6 +163,11 @@ function sectionHidden(sectionEl) {
                     type: (kind === 'picture') ? 'picture' : 'media',
                     isVideo: (kind === 'video'), recordEditor: true, label: fieldLabel(fname)
                 });
+                return;
+            }
+            if (Array.isArray(rec)) {
+                // MIGX-список (строки) → редактор строк (config-driven).
+                out.push(rowsDescriptor(sc.level, sc.section, fname, rec, []));
                 return;
             }
             if (!isScalar(v) || rec) { return; } // прочие записи/не-скаляры пока пропускаем
@@ -183,7 +221,7 @@ function itemHidden(itemEl) {
     Object.keys(row).forEach(function (sub) {
         if (sub === 'MIGX_id' || STRUCTURAL.indexOf(sub) !== -1 || vis[sub]) { return; }
         var sv = row[sub];
-        var rec = parseRecord(sv);
+        var rec = recOf(sv);
         if (isImgRecord(rec)) {
             out.push({
                 level: info.level, section: info.section,
@@ -193,7 +231,23 @@ function itemHidden(itemEl) {
             });
             return;
         }
-        if (!isScalar(sv) || rec) { return; } // прочие записи/не-скаляры пока пропускаем
+        var kind = recordKind(rec); // picture/video/audio-запись под-поля строки
+        if (kind) {
+            out.push({
+                level: info.level, section: info.section,
+                parentField: info.parentField, idx: info.idx, fieldName: sub,
+                type: (kind === 'picture') ? 'picture' : 'media',
+                isVideo: (kind === 'video'), recordEditor: true, label: fieldLabel(sub)
+            });
+            return;
+        }
+        if (Array.isArray(rec)) {
+            // Вложенный MIGX-список внутри строки → редактор строк с path к этой строке.
+            out.push(rowsDescriptor(info.level, info.section, sub, rec,
+                [{ field: info.parentField, idx: info.idx }]));
+            return;
+        }
+        if (!isScalar(sv)) { return; } // не-скаляр, не запись — пропускаем
         out.push({
             level: info.level, section: info.section,
             parentField: info.parentField, idx: info.idx,
@@ -266,6 +320,12 @@ export function removeHiddenTriggers() {
 //   richtext — contenteditable (форматирование видно), значение = innerHTML;
 //   иначе    — input / textarea (длинное/многострочное → textarea).
 function controlHtml(f) {
+    if (f.type === 'rows') {
+        // MIGX-список — кнопка открытия редактора строк (config-driven, см.
+        // sectionfields.js). Число строк — для подсказки.
+        return '<button type="button" class="mpcve-btn" data-rows-edit="1">📋 Список (' +
+            (f.count || 0) + ' стр.)…</button>';
+    }
     if (f.recordEditor) {
         // picture/video/audio-запись — кнопка открытия полного редактора (value-based).
         return '<button type="button" class="mpcve-btn" data-rec-edit="1">✎ Редактировать ' +
@@ -291,8 +351,8 @@ function rowHtml(f, idx) {
     return '<div class="mpcve-hpanel__row" data-i="' + idx + '">' +
         '<div class="mpcve-hpanel__label">' + esc(f.label) + '</div>' +
         '<div class="mpcve-hpanel__ctrl">' + controlHtml(f) +
-        // У record-редактора своя кнопка-открыватель; общий «Сохранить» не нужен.
-        (f.recordEditor ? '' : '<button type="button" class="mpcve-btn mpcve-btn--primary" data-act="save">Сохранить</button>') +
+        // У record-редактора и списка своя кнопка-открыватель; общий «Сохранить» не нужен.
+        (f.recordEditor || f.type === 'rows' ? '' : '<button type="button" class="mpcve-btn mpcve-btn--primary" data-act="save">Сохранить</button>') +
         '</div></div>';
 }
 
@@ -343,7 +403,7 @@ function wireControl(rowEl, f, btn) {
     return function () { return ctrl.value; };
 }
 
-function openBlockPanel(title, descriptors) {
+export function openBlockPanel(title, descriptors) {
     if (document.querySelector('.mpcve-modal')) { return; }
     var body = descriptors.map(function (f, i) { return rowHtml(f, i); }).join('');
 
@@ -378,6 +438,15 @@ function openBlockPanel(title, descriptors) {
         // picture/video/audio-ЗАПИСЬ → открываем полноценный редактор value-based.
         // Панель — сама .mpcve-modal, поэтому СНАЧАЛА закрываем её (иначе guard
         // редактора заблокирует открытие), затем открываем редактор.
+        if (f.type === 'rows') {
+            // MIGX-список → конфиг-driven редактор строк (callback задаёт enumerator,
+            // чтобы не было циклического импорта panels↔sectionfields).
+            rowEl.querySelector('[data-rows-edit]').addEventListener('click', function () {
+                close();
+                if (typeof f.openRows === 'function') { f.openRows(); }
+            });
+            return;
+        }
         if (f.recordEditor) {
             rowEl.querySelector('[data-rec-edit]').addEventListener('click', function () {
                 close();
@@ -385,6 +454,8 @@ function openBlockPanel(title, descriptors) {
                     type: 'field', level: f.level, section: f.section,
                     fieldName: f.fieldName, resourceId: S.cfg.resourceId || 0
                 };
+                if (f.path) { raddr.path = f.path; }
+                if (f.parentField != null) { raddr.parentField = f.parentField; raddr.idx = f.idx; }
                 if (f.type === 'picture') { openPictureEditor(null, { addr: raddr }); }
                 else { openMediaEditor(null, { addr: raddr, isVideo: !!f.isVideo }); }
             });
@@ -397,6 +468,7 @@ function openBlockPanel(title, descriptors) {
                 type: 'field', level: f.level, section: f.section,
                 fieldName: f.fieldName, resourceId: S.cfg.resourceId || 0
             };
+            if (f.path) { addr.path = f.path; }
             if (f.parentField != null) { addr.parentField = f.parentField; addr.idx = f.idx; }
             var value = getValue();
             var old = (f.value == null) ? '' : f.value; // прежнее значение — для журнала/отката

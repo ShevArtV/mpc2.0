@@ -301,6 +301,8 @@ export function sectionConfig(sectionEl) {
 }
 
 // Конфиг-запись поля (picture/video) по адресу: первая строка [{…}] или null.
+// Учитывает ВЛОЖЕННЫЕ адреса: addr.path [{field,idx},…] — спуск к строке-владельцу
+// поля (для медиа-полей внутри строк списка), иначе берём поле прямо у секции.
 export function fieldConfigRecord(addr) {
     if (!S.configData) { return null; }
     var levelCfg = S.configData[addr.level] || {};
@@ -308,7 +310,18 @@ export function fieldConfigRecord(addr) {
     for (var i = 0; i < keys.length; i++) {
         var s = levelCfg[keys[i]];
         if (s && (s.section_name === addr.section || s.MIGX_formname === addr.section)) {
-            var rec = parseRecord(s[addr.fieldName]);
+            // На уровне секции значение — строка (parseRecord парсит), на вложенных
+            // уровнях оно уже распарсено в массив (внешний JSON.parse) → берём как есть.
+            var recAny = function (v) { return Array.isArray(v) ? v : parseRecord(v); };
+            var container = s;
+            if (addr.path && addr.path.length) {
+                for (var j = 0; j < addr.path.length; j++) {
+                    var rows = recAny(container[addr.path[j].field]);
+                    if (!rows || !rows[addr.path[j].idx]) { return null; }
+                    container = rows[addr.path[j].idx];
+                }
+            }
+            var rec = recAny(container[addr.fieldName]);
             return rec ? rec[0] : null;
         }
     }
