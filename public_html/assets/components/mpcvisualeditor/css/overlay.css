@@ -49,6 +49,49 @@ body.mpcve-active {
     padding-top: 44px;
 }
 
+/* --- положение панели снизу (настройка mpcve_toolbar_position=bottom) --- */
+.mpcve-toolbar--bottom {
+    top: auto;
+    bottom: 0;
+    box-shadow: 0 -2px 8px rgba(0, 0, 0, .25);
+}
+
+body.mpcve-active.mpcve-pos-bottom {
+    padding-top: 0;
+    padding-bottom: 44px;
+}
+
+/* баннер блокировки уезжает к верху, когда панель снизу */
+body.mpcve-pos-bottom .mpcve-lockbanner {
+    top: 0;
+}
+
+/* --- свёрнутая панель: остаётся компактный хэндл в левом углу --- */
+.mpcve-toolbar--collapsed {
+    right: auto;
+    left: 0;
+    gap: 0;
+    padding: 4px 6px;
+}
+
+.mpcve-toolbar--collapsed > :not([data-mpcve="collapse"]) {
+    display: none;
+}
+
+/* свёрнутая панель не резервирует место под контент */
+body.mpcve-active.mpcve-collapsed {
+    padding-top: 0;
+}
+
+body.mpcve-active.mpcve-collapsed.mpcve-pos-bottom {
+    padding-bottom: 0;
+}
+
+.mpcve-toolbar__collapse {
+    font-weight: 700;
+    line-height: 1;
+}
+
 /* Подсветка редактируемых полей + аффорданс по типу */
 .mpcve-editable {
     position: relative;

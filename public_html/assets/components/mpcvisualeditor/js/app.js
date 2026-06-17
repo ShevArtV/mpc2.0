@@ -4,7 +4,7 @@
  * (cookie mpcve_editing). Редактор диспатчится по ТИПУ поля. Сохранение —
  * пер-полевое (field/save), без ре-граба DOM.
  */
-import { S, setCookie } from './state.js';
+import { S, setCookie, getCookie } from './state.js';
 import { SELECTOR, INFO_SELECTOR } from './constants.js';
 import { api, loadConfig } from './api.js';
 import { toast } from './dom.js';
@@ -101,9 +101,17 @@ function applyEditingState() {
 
 // --- UI ----------------------------------------------------------------
 function buildToolbar() {
+    // Положение панели — из системной настройки mpcve_toolbar_position (top|bottom).
+    var pos = (S.cfg && S.cfg.toolbarPosition === 'bottom') ? 'bottom' : 'top';
+    // Свёрнутость панели — клиентское состояние (cookie), переживает перезагрузку.
+    var collapsed = getCookie('mpcve_collapsed') === '1';
+
     var bar = document.createElement('div');
-    bar.className = 'mpcve-toolbar';
+    bar.className = 'mpcve-toolbar'
+        + (pos === 'bottom' ? ' mpcve-toolbar--bottom' : '')
+        + (collapsed ? ' mpcve-toolbar--collapsed' : '');
     bar.innerHTML =
+        '<button type="button" class="mpcve-toolbar__collapse" data-mpcve="collapse"></button>' +
         '<span class="mpcve-toolbar__title">mpcVisualEditor</span>' +
         '<span class="mpcve-toolbar__hint">клик по полю — править; Enter или уход — сохранить</span>' +
         (S.editing ? '<button type="button" data-mpcve="sections">☰ Секции</button>' : '') +
@@ -114,6 +122,23 @@ function buildToolbar() {
         '<button type="button" data-mpcve="toggle"></button>';
     document.body.appendChild(bar);
     document.body.classList.add('mpcve-active');
+    if (pos === 'bottom') { document.body.classList.add('mpcve-pos-bottom'); }
+    if (collapsed) { document.body.classList.add('mpcve-collapsed'); }
+
+    // Сворачивание/разворачивание панели (остаётся компактный хэндл в углу).
+    var colBtn = bar.querySelector('[data-mpcve="collapse"]');
+    function syncCollapse() {
+        var c = bar.classList.contains('mpcve-toolbar--collapsed');
+        colBtn.textContent = c ? '☰' : '–';
+        colBtn.title = c ? 'Развернуть панель' : 'Свернуть панель';
+    }
+    syncCollapse();
+    colBtn.addEventListener('click', function () {
+        var c = bar.classList.toggle('mpcve-toolbar--collapsed');
+        document.body.classList.toggle('mpcve-collapsed', c);
+        setCookie('mpcve_collapsed', c ? '1' : '0');
+        syncCollapse();
+    });
 
     var secBtn = bar.querySelector('[data-mpcve="sections"]');
     if (secBtn) { secBtn.addEventListener('click', toggleSidebar); }

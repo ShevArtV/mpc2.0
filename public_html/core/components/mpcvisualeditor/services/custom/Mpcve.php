@@ -79,6 +79,8 @@ class Mpcve
             'nonce'        => $this->nonce(),
             // Для кнопки «Открыть в админке» (тулбар).
             'managerUrl'   => (string)$this->modx->getOption('manager_url', null, '/manager/'),
+            // Положение панели редактора: top | bottom (настройка mpcve_toolbar_position).
+            'toolbarPosition' => $this->modx->getOption('mpcve_toolbar_position', null, 'top') === 'bottom' ? 'bottom' : 'top',
         ];
     }
 

@@ -20,6 +20,12 @@ return [
         'value' => true,
         'area'  => 'mpcve_general',
     ],
+    // Положение панели редактора: top (вверху, по умолчанию) или bottom (внизу).
+    'mpcve_toolbar_position' => [
+        'xtype' => 'textfield',
+        'value' => 'top',
+        'area'  => 'mpcve_editor',
+    ],
     // Query-параметр включения edit-режима (?mpcedit=1)
     'mpcve_edit_param' => [
         'xtype' => 'textfield',

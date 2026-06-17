@@ -36,6 +36,8 @@ $_lang['area_mpcve_editor']  = 'Редактор';
 // --- Настройки ---
 $_lang['setting_mpcve_active'] = 'Включить mpcVisualEditor';
 $_lang['setting_mpcve_active_desc'] = 'Мастер-выключатель пакета. Выкл — режим редактирования недоступен, на фронт ничего не подключается. Для работы также требуется включённая настройка mpc_edit_mode (пакет MigxPageConfigurator) и перенарезка страниц — иначе в чанках нет data-mpc-* маркеров и редактор не подключится (предупреждение пишется в системный лог).';
+$_lang['setting_mpcve_toolbar_position'] = 'Положение панели редактора';
+$_lang['setting_mpcve_toolbar_position_desc'] = 'Где закреплена панель (тулбар) редактора: top — вверху страницы (по умолчанию), bottom — внизу. Панель можно свернуть кнопкой на самой панели (состояние запоминается).';
 $_lang['setting_mpcve_edit_param'] = 'Query-параметр входа в режим правки';
 $_lang['setting_mpcve_edit_param_desc'] = 'Имя GET-параметра для включения редактора на странице. По умолчанию mpcedit (→ ?mpcedit=1).';
 $_lang['setting_mpcve_permission'] = 'Permission для редактирования';
