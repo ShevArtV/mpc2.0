@@ -42,6 +42,31 @@ function unmarkEditable() {
     });
 }
 
+// Копии лексикона: элементы с data-mpc-copy, НЕ являющиеся секцией. Их контент
+// принадлежит оригиналу (адрес — в значении data-mpc-copy); правка идёт там.
+// Помечаем информером (бейдж + тултип), чтобы менеджер видел, что это копия и
+// где оригинал. Editability не трогаем — только уведомляем.
+function markCopies() {
+    document.querySelectorAll('[data-mpc-copy]:not([data-mpc-section])').forEach(function (el) {
+        el.classList.add('mpcve-copy');
+        var orig = (el.getAttribute('data-mpc-copy') || '').trim();
+        var note = orig
+            ? 'Это копия лексикона. Оригинал: ' + orig
+            : 'Это копия лексикона (оригинал не указан)';
+        // Поле может быть и редактируемым — markEl уже поставил подсказку типа;
+        // добавляем примечание о копии в начало, не затирая её.
+        var existing = el.getAttribute('title');
+        el.setAttribute('title', (existing && existing !== note) ? (note + ' · ' + existing) : note);
+    });
+}
+
+function unmarkCopies() {
+    document.querySelectorAll('.mpcve-copy').forEach(function (el) {
+        el.classList.remove('mpcve-copy');
+        if (!el.classList.contains('mpcve-editable')) { el.removeAttribute('title'); }
+    });
+}
+
 // <audio> целиком занят нативным контрол-баром: UA глотает клики по нему и НЕ
 // шлёт click на host-элемент → наш bindClicks не срабатывает (в отличие от video,
 // где есть кликабельный кадр над баром). Поэтому вешаем на аудио явный аффорданс
@@ -85,15 +110,47 @@ function removeAudioBadges() {
     });
 }
 
+// Списки (data-mpcve-type="rows"): когда обёртка списка и её элементы одинаковой
+// ширины, hover-пиктограммы (::after, левый верхний угол) налезают друг на друга,
+// и до обёртки не докликаться (клик ловит самый глубокий элемент, бейджи
+// pointer-events:none). Поэтому даём списку ОТДЕЛЬНУЮ всегда-видимую кликабельную
+// кнопку ☰ (правый верхний угол), открывающую редактор строк (порядок/добавить/
+// удалить) — независимо от перекрытий. Абсолютная позиция → не влияет на flex/grid.
+function attachRowsBadges() {
+    document.querySelectorAll('.mpcve-editable[data-mpcve-type="rows"]').forEach(function (el) {
+        if (el.querySelector(':scope > .mpcve-rows-badge')) { return; }
+        var badge = document.createElement('button');
+        badge.type = 'button';
+        badge.className = 'mpcve-rows-badge';
+        badge.textContent = '☰'; // ☰
+        badge.title = 'Список: порядок, добавить, удалить';
+        badge.addEventListener('click', function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            markActivity();
+            if (editors.rows && editors.rows.open) { editors.rows.open(el); }
+        });
+        el.appendChild(badge);
+    });
+}
+
+function removeRowsBadges() {
+    document.querySelectorAll('.mpcve-rows-badge').forEach(function (b) { b.remove(); });
+}
+
 function applyEditingState() {
     if (S.editing) {
         markEditable();
+        markCopies();
         attachAudioBadges();
+        attachRowsBadges();
         buildHiddenTriggers();
         document.body.classList.add('mpcve-on');
     } else {
         unmarkEditable();
+        unmarkCopies();
         removeAudioBadges();
+        removeRowsBadges();
         removeHiddenTriggers();
         document.body.classList.remove('mpcve-on');
     }

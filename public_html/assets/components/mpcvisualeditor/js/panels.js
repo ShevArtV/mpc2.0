@@ -66,7 +66,8 @@ function rowsDescriptor(level, section, fieldName, rec, path) {
 // (resource перекрывает global на static-секциях). ВСЁ прочее из конфига, чего
 // нет в DOM (data-mpc-field), попадает в скрытые — включая кастомные поля.
 export function isSectionExcluded(fname) {
-    return S.settingsFields.indexOf(fname) !== -1
+    return fname.charAt(0) === '_'   // синтетические клиентские ключи (напр. _origin сайдбара) — не поля конфига
+        || S.settingsFields.indexOf(fname) !== -1
         || fname === 'css_file_path'
         || MIGX_SERVICE.indexOf(fname) !== -1
         || SECTION_STYLE_FIELDS.indexOf(fname) !== -1;

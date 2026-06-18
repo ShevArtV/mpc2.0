@@ -87,13 +87,17 @@ function asArray(src) {
 // Объединённый список: свои + наследуемые из типа (которых нет у ресурса).
 function sectionList() {
     var d = S.configData || {};
-    var own = asArray(d.resource).map(function (s) { s._origin = 'resource'; return s; });
+    // КЛОН перед добавлением служебного _origin: иначе мутируем общие объекты
+    // секций в S.configData, и синтетический ключ _origin утекает в панель скрытых
+    // полей (Object.keys) как мнимое поле «_origin = resource». Shallow-копии
+    // достаточно — сайдбар читает только _origin + плоские поля секции.
+    var own = asArray(d.resource).map(function (s) { var c = Object.assign({}, s); c._origin = 'resource'; return c; });
     if (d.isType) { return own.sort(byPosition); }
     var ownKeys = {};
     own.forEach(function (s) { ownKeys[keyOf(s)] = true; });
     var inherited = asArray(d.type)
         .filter(function (s) { return !ownKeys[keyOf(s)]; })
-        .map(function (s) { s._origin = 'type'; return s; });
+        .map(function (s) { var c = Object.assign({}, s); c._origin = 'type'; return c; });
     // Порядок как на странице (DOM); наследуемые/скрытые — в конец.
     return own.concat(inherited).sort(byPosition);
 }

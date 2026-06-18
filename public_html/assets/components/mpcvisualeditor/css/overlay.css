@@ -129,6 +129,36 @@ body.mpcve-active.mpcve-collapsed.mpcve-pos-bottom {
 .mpcve-editable[data-mpcve-type="media"]:hover::after { content: "\25B6"; }  /* ▶ */
 .mpcve-editable[data-mpcve-type="rows"]:hover::after  { content: "\2630"; }  /* ☰ */
 
+/* Копия лексикона (data-mpc-copy на не-секции): информер — контент принадлежит
+   оригиналу (адрес в data-mpc-copy, виден в нативном тултипе title). Фиолетовый,
+   чтобы отличать от редактируемых (синие). Бейдж 📋 в правом верхнем углу —
+   не конфликтует с ::after editable (левый верхний). */
+.mpcve-copy {
+    position: relative;
+}
+.mpcve-copy:not(.mpcve-editable) {
+    outline: 1px dashed rgba(168, 85, 247, .6);
+    outline-offset: 2px;
+}
+.mpcve-copy::before {
+    content: "\1F4CB"; /* 📋 */
+    position: absolute;
+    top: -10px;
+    right: -10px;
+    z-index: 99997;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    font: 11px/1 -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    background: #a855f7;
+    border-radius: 50%;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, .3);
+    pointer-events: none;
+}
+body:not(.mpcve-on) .mpcve-copy::before { display: none; }
+
 /* Пустые редактируемые поля (напр. поля только что добавленной строки)
    схлопываются в ноль → по ним нельзя кликнуть. В edit-mode даём минимальный
    размер и подсказку-плейсхолдер, чтобы поле можно было заполнить. */
@@ -399,6 +429,38 @@ body:not(.mpcve-on) .mpcve-hidden-trigger {
 }
 
 body:not(.mpcve-on) .mpcve-media-badge {
+    display: none;
+}
+
+/* Кнопка-хэндл списка (порядок/добавить/удалить). Всегда видима в edit-mode,
+   правый верхний угол обёртки — отдельно от полевых афордансов (левый верхний),
+   кликается напрямую (pointer-events auto), поэтому до неё докликаться можно даже
+   когда обёртка списка и её элементы одинаковой ширины. */
+.mpcve-rows-badge {
+    position: absolute;
+    top: -12px;
+    right: -12px;
+    z-index: 99996;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    border: 0;
+    border-radius: 999px;
+    background: #3b82f6;
+    color: #fff;
+    font: 600 13px/24px -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    text-align: center;
+    cursor: pointer;
+    opacity: .9;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, .3);
+}
+
+.mpcve-rows-badge:hover {
+    opacity: 1;
+    background: #2563eb;
+}
+
+body:not(.mpcve-on) .mpcve-rows-badge {
     display: none;
 }
 
