@@ -401,7 +401,9 @@
                         </li>
                         <li data-mpc-contact="email|footer" data-mpc-key="mainemail">
                             <img class="site-footer__ico" src="assets/project_files/img/envelope.svg" data-svg data-mpc-nothumb data-mpc-cfield="icon" alt="">
-                            <a href="" data-mpc-cfield="value">email@domain.ru</a>
+                            <a href="mailto:email@domain.ru" data-mpc-cfield="fvalue">
+                                <span data-mpc-cfield="value">email@domain.ru</span>
+                            </a>
                         </li>
                     </ul>
                 </div>
