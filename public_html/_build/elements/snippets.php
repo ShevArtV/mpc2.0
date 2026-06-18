@@ -21,4 +21,9 @@ return [
         'description' => 'обёртка над pThumb с проверкой существования файла',
         'properties' => []
     ],
+    'mpcContacts' => [
+        'file' => 'snippet.mpccontacts',
+        'description' => 'выборка контактов с фильтрацией по типу/плейсменту/ключу и рендером через чанк',
+        'properties' => []
+    ],
 ];

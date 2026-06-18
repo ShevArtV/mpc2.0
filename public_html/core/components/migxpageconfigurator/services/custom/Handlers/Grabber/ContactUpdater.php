@@ -69,6 +69,13 @@ class ContactUpdater
             foreach ($fields as $field) {
                 $key = $field->getAttribute('data-mpc-cfield');
                 if ($key === 'fvalue') {
+                    // Явный fvalue (отформатированное/отображаемое значение) — берём
+                    // href, иначе текст. Перекрывает стандартный fvalue=value ниже
+                    // (см. блок форматирования): если автор задал fvalue в вёрстке,
+                    // он пишется поверх авто-вставки.
+                    $tmp['fvalue'] = ($fHref = $field->getAttribute('href'))
+                        ? $fHref
+                        : trim($this->fieldValueExtractor->getValue($field));
                     continue;
                 }
                 if ($key === 'value') {
@@ -111,7 +118,8 @@ class ContactUpdater
                         trim($tmp['value'])
                     );
                 }
-            } else {
+            } elseif (!$tmp['fvalue']) {
+                // Авто-fvalue только если автор не задал его явно (data-mpc-cfield="fvalue").
                 $tmp['fvalue'] = $tmp['value'];
             }
 
