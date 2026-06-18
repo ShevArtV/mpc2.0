@@ -245,6 +245,11 @@ return [
         'value' => 'ru',
         'area' => 'mpc_lexicons',
     ],
+    'mpc_arbitrary_lexicon_topics' => [
+        'xtype' => 'textfield',
+        'value' => '',
+        'area' => 'mpc_lexicons',
+    ],
     'mpc_lang_cookie_name' => [
         'xtype' => 'textfield',
         'value' => 'mpc_lang',

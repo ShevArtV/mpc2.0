@@ -172,6 +172,13 @@ class Grabber extends Base
             $this->sectionProcessor->properties['fromPlugin']  = $this->fromPlugin;
             $this->sectionProcessor->properties['fileName']    = $this->fileName;
             $this->sectionProcessor->handleSections($html);
+
+            // Произвольные лексиконные ключи (data-mpc-lexicon="topic:key"):
+            // вырезаем innerHtml в указанный топик. Только на нарезке (не на
+            // сохранении ресурса плагином — fromPlugin), как и секции.
+            if (!$this->fromPlugin) {
+                $this->handleArbitraryLexicons($html);
+            }
         }
 
         return $this->response->success(
@@ -179,6 +186,65 @@ class Grabber extends Base
             "Processing of file $this->fileName is completed",
             ['resource' => $this->properties['resource']]
         );
+    }
+
+    /**
+     * Вырезка произвольных лексиконных ключей `data-mpc-lexicon="topic:key"`.
+     *
+     * Аналог текстового data-mpc-field, но: (1) ключ/топик заданы автором в
+     * маркере, привязки к секции/ресурсу нет; (2) вырезается innerHtml (вложенные
+     * теги, не только текст) — после санитайза выживают только теги из allowedTags.
+     * Значение пишем в файл топика дефолтного языка; syncOtherLanguages внутри
+     * createLexicons раскидывает ключ-плейсхолдер по остальным языкам. Плейсхолдер
+     * `##'key'|lexicon}` ставит каттер (он бежит вторым) — здесь только значение.
+     *
+     * Топик: явный из маркера, иначе первый из mpc_arbitrary_lexicon_topics. Без
+     * топика писать некуда — пропускаем. Существующие ключи топика предзагружаем,
+     * чтобы overwrite-запись не потеряла чужие ключи того же файла.
+     */
+    private function handleArbitraryLexicons(string $html): void
+    {
+        if (empty($this->properties['useLexicons'])) {
+            return;
+        }
+        if (!$items = $this->getItems($html, '[data-mpc-lexicon]')) {
+            return;
+        }
+
+        $topics   = $this->properties['arbitraryLexiconTopics'] ?? [];
+        $default  = ArbitraryLexicon::defaultTopic($topics);
+        $basePath = (string)($this->properties['basePathToLexiconFile'] ?? '');
+        $map      = [];
+
+        foreach ($items as $item) {
+            // На секции data-mpc-lexicon — это ПРЕФИКС лексикона секции (давняя
+            // семантика, см. SectionProcessor/PlaceholderProcessor), а не произвольный
+            // ключ. Произвольные ключи — только на НЕ-секционных элементах.
+            if ($item->hasAttribute('data-mpc-section')) {
+                continue;
+            }
+            $parsed = ArbitraryLexicon::parse((string)$item->getAttribute('data-mpc-lexicon'));
+            if ($parsed === null) {
+                continue;
+            }
+            $topic = $parsed['topic'] !== '' ? $parsed['topic'] : $default;
+            if ($topic === '') {
+                if ($this->debug) {
+                    $this->logging->write(__METHOD__, "Пропуск '{$parsed['key']}': топик не задан (mpc_arbitrary_lexicon_topics пуст)");
+                }
+                continue;
+            }
+            if (!isset($map[$topic])) {
+                $map[$topic] = $this->lexiconManager->getLexicons($topic, $basePath);
+            }
+            $map[$topic][$parsed['key']] = $this->lexiconManager->sanitizeValue($item->innerHtml());
+        }
+
+        if (!empty($map)) {
+            // overwrite=updContent — единая семантика с секциями: без `1`
+            // существующие переводы/правки сохраняем, с `1` шаблон перезаписывает.
+            $this->lexiconManager->createLexicons($map, !empty($this->updContent));
+        }
     }
 
     /**

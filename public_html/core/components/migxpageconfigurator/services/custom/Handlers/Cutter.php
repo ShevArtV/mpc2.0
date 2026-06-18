@@ -189,6 +189,7 @@ class Cutter extends Base
         $this->handleInformation();
         $this->handleContacts();
         $this->handleResourceFields();
+        $this->handleArbitraryLexicons();
         $this->handleSections();
 
         return $this->response->success(__METHOD__, "Processing of file $fileName is completed");
@@ -544,6 +545,45 @@ class Cutter extends Base
             }
 
             $this->html = str_replace($itemHtml, $itemHtmlNew, $this->html);
+        }
+    }
+
+    /**
+     * Заменяет содержимое [data-mpc-lexicon="topic:key"] на плейсхолдер
+     * `##'key' | lexicon}` (литеральный ключ; после `##`→`{` —
+     * `{'key' | lexicon}`, живой резолв на каждый запрос в текущем языке, как у
+     * resource-полей). Значение (innerHtml) в файл топика пишет грабер — он бежит
+     * первым и видит оригинальный контент; каттер ставит только плейсхолдер.
+     *
+     * Атрибут data-mpc-lexicon НЕ снимаем: он нужен редактору в edit-mode (читает
+     * topic:key), а на лайве его убирает общий strip-regex (SectionFileWriter).
+     * Без useLexicons плейсхолдер бессмыслен (модификатор отдаст пусто, грабер не
+     * пишет) — оставляем исходный контент как есть.
+     *
+     * @return void
+     */
+    private function handleArbitraryLexicons(): void
+    {
+        if (empty($this->properties['useLexicons'])) {
+            return;
+        }
+        if (!$items = $this->getItems($this->html, '[data-mpc-lexicon]')) {
+            return;
+        }
+
+        foreach ($items as $item) {
+            // На секции data-mpc-lexicon = префикс лексикона секции (давняя
+            // семантика), не произвольный ключ — пропускаем.
+            if ($item->hasAttribute('data-mpc-section')) {
+                continue;
+            }
+            $parsed = ArbitraryLexicon::parse((string)$item->getAttribute('data-mpc-lexicon'));
+            if ($parsed === null) {
+                continue;
+            }
+            $itemHtml = $this->parser->getHTMLString($item);
+            $item->setInnerHtml("##'" . $parsed['key'] . "' | lexicon}");
+            $this->html = str_replace($itemHtml, $this->parser->getHTMLString($item), $this->html);
         }
     }
 

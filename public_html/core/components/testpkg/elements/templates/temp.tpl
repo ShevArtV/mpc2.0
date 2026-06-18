@@ -274,10 +274,24 @@
     <style>
       #{$id} { {$inline_styles} }
     </style>
+
+    <div data-mpc-field="list_simple_video" data-mpc-remove="1">
+        <div data-mpc-item="1">
+            <span data-mpc-field-1="content">web</span>
+            <video data-mpc-field-1="video" controls muted poster="https://loremflickr.com/960/540/screen">
+                <source src="https://www.w3schools.com/html/mov_bbb.mp4" type="video/mp4">
+            </video>
+        </div>
+    </div>
+
     <div class="container">
         <h6 data-mpc-field="kicker">Один блок — на всех страницах</h6>
         <h1 data-mpc-field="title">Попробуйте редактор</h1>
         <p data-mpc-field="content">Эта секция статична: её правят один раз, и изменение видно на всех страницах сайта.</p>
+        <p data-mpc-lexicon="common:site_test_msg">Это <b>тестовое</b> сообщение для <em>лексиконов.</em></p>
+        <div data-mpc-lexicon="common:site_test_msg_one" data-mpc-unwrap="1">
+            <p>Это <b>ещё одно тестовое</b> сообщение для <em>лексиконов.</em></p>
+        </div>
         <a href="#" data-mpc-field="cta"><span data-mpc-field="cta_text"><b>Открыть документацию</b></span></a>
     </div>
 </section>

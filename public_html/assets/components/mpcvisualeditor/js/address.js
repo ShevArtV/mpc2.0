@@ -17,6 +17,21 @@ var RFIELD_TYPES = {
 // --- адрес поля из DOM -------------------------------------------------
 export function resolveAddress(el) {
     var type = null, fieldName = null;
+    // Произвольный лексиконный ключ: data-mpc-lexicon="topic:key" (топик опционален,
+    // двоеточие — разделитель). Привязки к секции/ресурсу/полю нет — топик и ключ
+    // самодостаточны для записи (FieldWriter type=lexicon).
+    // На секции data-mpc-lexicon = префикс лексикона секции, не произвольный ключ.
+    if (el.hasAttribute('data-mpc-lexicon') && !el.hasAttribute('data-mpc-section')) {
+        var raw = (el.getAttribute('data-mpc-lexicon') || '').trim();
+        var topic = '', key = raw;
+        var ci = raw.indexOf(':');
+        if (ci !== -1) {
+            topic = raw.slice(0, ci).trim();
+            key = raw.slice(ci + 1).trim();
+        }
+        if (!key) { return null; }
+        return { type: 'lexicon', fieldName: key, topic: topic, key: key };
+    }
     if (el.hasAttribute('data-mpc-rfield')) {
         type = 'rfield';
         fieldName = el.getAttribute('data-mpc-rfield');
@@ -43,6 +58,12 @@ export function fieldAddress(el) {
     var addr = resolveAddress(el);
     if (!addr) {
         return null;
+    }
+    // Произвольный лексикон: адрес самодостаточен (topic/key), секция/уровень/
+    // path не нужны — язык сервер берёт из cookie mpc_lang.
+    if (addr.type === 'lexicon') {
+        addr.resourceId = S.cfg.resourceId || 0;
+        return addr;
     }
     var sectionEl = el.closest('[data-mpc-section]');
     addr.section = sectionEl ? sectionEl.getAttribute('data-mpc-section') : '';
@@ -161,6 +182,11 @@ export function isListEl(el) {
 }
 
 export function editorTypeFor(el, addr) {
+    // Произвольный лексикон: инлайн-правка содержимого (текст/HTML). Автор может
+    // переопределить редактор через data-mpc-ftype (textarea/richtext); иначе text.
+    if (addr && addr.type === 'lexicon') {
+        return ftypeToEditor(el.getAttribute('data-mpc-ftype')) || 'text';
+    }
     // Маркер НА самом теге <a>/<link> → каттер кладёт плейсхолдер в href
     // (Cutter.php), значит значение поля — это АДРЕС ссылки. Правим href
     // (редактор link), а не текст. Текст ссылки правится отдельным маркером

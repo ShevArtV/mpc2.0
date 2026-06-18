@@ -175,6 +175,14 @@ class Base
             'defaultLanguageKey' => $this->modx->getOption('mpc_default_language', '', 'ru'),
             'translatableContentTypes' => explode(',', $translatableContentTypes),
             'excludeLexiconFields' => $excludeLexiconFields,
+            // Топики (имена файлов лексикона без .inc.php), куда каттер вырезает
+            // произвольные ключи data-mpc-lexicon и где редактор ищет ключ без
+            // явного топика. Первый в списке — топик по умолчанию для маркеров
+            // вида data-mpc-lexicon="key" (без префикса topic:).
+            'arbitraryLexiconTopics' => array_values(array_filter(array_map(
+                'trim',
+                explode(',', (string)$this->modx->getOption('mpc_arbitrary_lexicon_topics', null, ''))
+            ))),
         ];
         $this->properties = array_merge($this->properties, $properties);
 

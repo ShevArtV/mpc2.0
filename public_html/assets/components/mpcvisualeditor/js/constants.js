@@ -4,7 +4,10 @@
 
 // Атрибуты-маркеры редактируемых полей в DOM (edit-mode сохраняет их в рендере).
 export var FIELD_ATTRS = ['data-mpc-field', 'data-mpc-rfield', 'data-mpc-tv',
-    'data-mpc-field-1', 'data-mpc-field-2', 'data-mpc-field-3'];
+    'data-mpc-field-1', 'data-mpc-field-2', 'data-mpc-field-3',
+    // Произвольный лексиконный ключ (data-mpc-lexicon="topic:key") — правится
+    // инлайн как текст/HTML, привязки к секции/ресурсу нет.
+    'data-mpc-lexicon'];
 export var SELECTOR = FIELD_ATTRS.map(function (a) { return '[' + a + ']'; }).join(',');
 
 // Служебная информация (data-mpc-info) — ГЛОБАЛЬНЫЕ настройки (системные/

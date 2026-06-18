@@ -225,6 +225,13 @@ class FieldWriter
     public function write(array $address, $value): array
     {
         $type       = (string)($address['type'] ?? 'field');
+
+        // Произвольный лексиконный ключ (data-mpc-lexicon) — без привязки к
+        // ресурсу/секции/полю, поэтому ДО гварда resourceId/fieldName.
+        if ($type === 'lexicon') {
+            return $this->writeArbitraryLexicon($address, $value);
+        }
+
         $resourceId = (int)($address['resourceId'] ?? 0);
         $fieldName  = (string)($address['fieldName'] ?? '');
 
@@ -242,6 +249,51 @@ class FieldWriter
             default:
                 return $this->result(false, 'unknown address type: ' . $type);
         }
+    }
+
+    /**
+     * Правка произвольного лексиконного ключа (data-mpc-lexicon) из редактора.
+     * Адрес: ['type'=>'lexicon','topic'=>?string,'key'=>string]. Топик берём из
+     * маркера; если пуст — резолвер сканирует mpc_arbitrary_lexicon_topics. Поиск:
+     * текущий язык → дефолт (создаём в текущем) → «Ключ не найден». Пишем в файл
+     * ТЕКУЩЕГО языка (LexiconWriter::set — read-modify-write + санитайз).
+     */
+    private function writeArbitraryLexicon(array $address, $value): array
+    {
+        if (!$this->useLexicons) {
+            return $this->result(false, 'лексиконы выключены (mpc_use_lexicons)');
+        }
+        $key   = trim((string)($address['key'] ?? ''));
+        $topic = trim((string)($address['topic'] ?? ''));
+        if (!ArbitraryLexicon::validKey($key)) {
+            return $this->result(false, 'некорректный ключ лексикона');
+        }
+        if (!is_scalar($value)) {
+            return $this->result(false, 'значение лексикона должно быть скалярным');
+        }
+
+        $topics = array_values(array_filter(array_map(
+            'trim',
+            explode(',', (string)$this->modx->getOption('mpc_arbitrary_lexicon_topics', null, ''))
+        )));
+        $resolver = new ArbitraryLexiconResolver(
+            $this->lexProps['corePath'] . $this->lexProps['lexiconPath'],
+            $this->defaultLanguage(),
+            $topics
+        );
+        $resolved = $resolver->resolve($topic, $key, $this->lexProps['culture']);
+        if ($resolved === null) {
+            return $this->result(false, 'Ключ не найден');
+        }
+
+        if (!$this->lexiconWriter()->set($resolved['topic'], $key, (string)$value)) {
+            return $this->result(false, 'не удалось записать лексикон');
+        }
+        return $this->result(true, 'saved', [
+            'type'  => 'lexicon',
+            'topic' => $resolved['topic'],
+            'key'   => $key,
+        ]);
     }
 
     private function writeResourceField(int $rid, string $field, $value): array

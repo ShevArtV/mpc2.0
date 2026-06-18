@@ -328,7 +328,17 @@ class Mpc
             }
         }
         $names[] = $this->grabber->getResourceIdentifierById($rid);
-        return $names;
+
+        // Топики произвольных лексиконов (data-mpc-lexicon): грузим их, чтобы
+        // {'key'|lexicon} резолвился на лайве (mpc-модификатор отдаёт пусто для
+        // незагруженного ключа) и значения читались редактором.
+        foreach (($this->grabber->properties['arbitraryLexiconTopics'] ?? []) as $topic) {
+            if (\MpcServices\Handlers\ArbitraryLexicon::validTopic((string)$topic)) {
+                $names[] = (string)$topic;
+            }
+        }
+
+        return array_values(array_unique(array_filter($names, 'strlen')));
     }
 
     public function getParentResourceId(int $templateId): int
