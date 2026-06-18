@@ -81,7 +81,7 @@ class SectionFileWriter
                 mkdir($baseDir . $dirName, 0777, true);
             }
 
-            $this->putToFile($innerChunk, $baseDir . $chunkName, false);
+            $this->putToFile($innerChunk, $baseDir . $chunkName, false, true);
         }
     }
 
@@ -198,7 +198,7 @@ class SectionFileWriter
     /**
      * Применяет все трансформации к HTML элемента и записывает в файл.
      */
-    public function putToFile(Element $element, string $pathToFile, bool $isStatic): void
+    public function putToFile(Element $element, string $pathToFile, bool $isStatic, bool $isChunk = false): void
     {
         $html = $this->parser->getHTMLString($element);
         $sectionLexiconPrefix = trim((string)$element->getAttribute('data-mpc-lexicon'));
@@ -283,7 +283,23 @@ class SectionFileWriter
         // _edit/_unstatic_edit вариантов (реальному пользователю атрибуты не мешают).
         // На прод-деплое mpc_edit_mode=0 → перенарезка даёт чистые файлы.
         // _unstatic генерится из ЭТОГО же файла (createSectionFiles) → тоже с маркерами.
-        if (file_put_contents($pathToFile, !empty($this->properties['editMode']) ? $htmlMarked : $properties['html']) === false) {
+        $output = !empty($this->properties['editMode']) ? $htmlMarked : $properties['html'];
+
+        // ЧАНКИ вызываются через parse/include/сниппет (pdoTools) и НЕ проходят
+        // финальный `##`→`{` Render'а (тот обрабатывает только файлы секций), поэтому
+        // деферред-плейсхолдеры (`##'key' | lexicon}`, `##$item.field | lexicon}`) в
+        // чанке надо развернуть в `{…}` здесь, при записи файла.
+        //
+        // ПЛОСКИЙ str_replace, а НЕ convertStaticHashToBrace: тот защищает data-mpc-*
+        // атрибуты, кодируя в них `{`→`&#123;`. Для секции это верно (маркеры не должны
+        // переразбираться), но в чанке сломало бы data-mpc-res="{$id}" — его `{$id}`
+        // ДОЛЖЕН резолвиться pdoResources при per-row рендере (кросс-ресурс правка в
+        // редакторе). Плоская замена трогает только `##`, оставляя `{` в маркерах.
+        if ($isChunk) {
+            $output = str_replace('##', '{', $output);
+        }
+
+        if (file_put_contents($pathToFile, $output) === false) {
             throw new \RuntimeException('Не удалось записать файл секции/чанка: ' . $pathToFile);
         }
     }
