@@ -66,54 +66,53 @@ class MediaLibraryTest extends TestCase
 
     public function testCanonicalDirDefault(): void
     {
+        // База — источник файлов; canonicalDir относителен ему (без префикса).
         $lib = new MediaLibrary($this->modx());
-        $this->assertSame('assets/components/migxpageconfigurator/media/images/', $lib->canonicalDir('images'));
-        $this->assertSame('assets/components/migxpageconfigurator/media/videos/', $lib->canonicalDir('videos'));
+        $this->assertSame('images/', $lib->canonicalDir('images'));
+        $this->assertSame('videos/', $lib->canonicalDir('videos'));
     }
 
     public function testCanonicalDirCustomSubfolder(): void
     {
         $lib = new MediaLibrary($this->modx([
-            'mpc_media_path'     => 'media/',
             'mpc_download_paths' => json_encode(['images' => 'gallery/img', 'videos' => '']),
         ]));
-        $this->assertSame('media/gallery/img/', $lib->canonicalDir('images'));
-        $this->assertSame('media/videos/', $lib->canonicalDir('videos')); // пусто → имя типа
+        $this->assertSame('gallery/img/', $lib->canonicalDir('images'));
+        $this->assertSame('videos/', $lib->canonicalDir('videos')); // пусто → имя типа
     }
 
     public function testCanonicalDirAcceptsArrayOption(): void
     {
         // getOption может вернуть уже распарсенный массив (как у грабера).
         $lib = new MediaLibrary($this->modx([
-            'mpc_media_path'     => 'm',
             'mpc_download_paths' => ['audios' => 'sound'],
         ]));
-        $this->assertSame('m/sound/', $lib->canonicalDir('audios'));
+        $this->assertSame('sound/', $lib->canonicalDir('audios'));
     }
 
     // --- Гибридная защита «тип ↔ папка» -------------------------------------
 
     public function testDirTypeKey(): void
     {
-        $lib = new MediaLibrary($this->modx(['mpc_media_path' => 'media/']));
-        $this->assertSame('images', $lib->dirTypeKey('media/images'));
-        $this->assertSame('images', $lib->dirTypeKey('media/images/2024')); // вложенная
-        $this->assertSame('videos', $lib->dirTypeKey('media/videos/'));
-        $this->assertNull($lib->dirTypeKey('media/random'));
+        $lib = new MediaLibrary($this->modx());
+        $this->assertSame('images', $lib->dirTypeKey('images'));
+        $this->assertSame('images', $lib->dirTypeKey('images/2024')); // вложенная
+        $this->assertSame('videos', $lib->dirTypeKey('videos/'));
+        $this->assertNull($lib->dirTypeKey('random'));
         $this->assertNull($lib->dirTypeKey('uploads/foo'));
     }
 
     public function testTypeFitsDir(): void
     {
-        $lib = new MediaLibrary($this->modx(['mpc_media_path' => 'media/']));
+        $lib = new MediaLibrary($this->modx());
         // картинка в папку картинок — ок; видео в папку картинок — нет.
-        $this->assertTrue($lib->typeFitsDir('jpg', 'media/images'));
-        $this->assertFalse($lib->typeFitsDir('mp4', 'media/images'));
+        $this->assertTrue($lib->typeFitsDir('jpg', 'images'));
+        $this->assertFalse($lib->typeFitsDir('mp4', 'images'));
         // картинка в папку аудио — нет.
-        $this->assertFalse($lib->typeFitsDir('png', 'media/audios'));
+        $this->assertFalse($lib->typeFitsDir('png', 'audios'));
         // обычная (нетипизированная) папка и others/ — пропускаем всё.
         $this->assertTrue($lib->typeFitsDir('mp4', 'uploads/clips'));
-        $this->assertTrue($lib->typeFitsDir('pdf', 'media/others'));
+        $this->assertTrue($lib->typeFitsDir('pdf', 'others'));
     }
 
     // --- resolveUploaded (контракт sgUploads + фолбэк) ----------------------

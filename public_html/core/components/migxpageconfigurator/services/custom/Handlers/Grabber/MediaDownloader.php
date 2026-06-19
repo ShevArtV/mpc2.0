@@ -248,15 +248,15 @@ class MediaDownloader
             return $attrValue;
         }
 
-        // Каталог внутри источника: <mediaPath><download_paths[type]|type>/[<section>/].
-        // Подпапка типа берётся из mpc_download_paths (относительно mediaPath);
-        // пусто → fallback на имя типа (images/videos/audios/others).
-        $prefix = trim((string)($this->properties['mediaPath'] ?? ''), '/');
+        // Каталог ВНУТРИ источника файлов: <download_paths[type]|type>/[<section>/].
+        // Источник mpcMedia заскоуплен на медиа-папку (его basePath), поэтому путь
+        // относителен ему — без отдельного префикса. Подпапка типа из
+        // mpc_download_paths; пусто → имя типа (images/videos/audios/others).
         $typeDir = trim((string)($this->properties['downloadPaths'][$type] ?? ''), '/');
         if ($typeDir === '') {
             $typeDir = $type;
         }
-        $dir = ($prefix !== '' ? $prefix . '/' : '') . $typeDir . '/';
+        $dir = $typeDir . '/';
         if ($this->currentSectionName) {
             $dir .= $this->sanitizeFileName($this->currentSectionName) . '/';
         }

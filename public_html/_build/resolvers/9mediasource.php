@@ -3,11 +3,12 @@
  * Resolver: создаёт выделенный filesystem-источник «mpcMedia» для медиа mpc
  * и проставляет настройку mpc_media_source (если она пустая).
  *
- * Источник ЗАСКОУПЛЕН на папку медиа (basePath/baseUrl = mpc_media_path, по
- * умолчанию assets/components/migxpageconfigurator/media/) — файл-менеджер mpcVE
- * видит только медиа, а не корень сайта (раньше basePath='' открывал весь сайт,
- * включая core/ и конфиги). Путь живёт в самом источнике, поэтому при создании
- * mpc_media_path обнуляется (иначе путь задвоился бы: basePath + mpc_media_path).
+ * Источник ЗАСКОУПЛЕН на папку медиа (basePath/baseUrl = assets/components/
+ * migxpageconfigurator/media/) — файл-менеджер mpcVE видит только медиа, а не
+ * корень сайта (раньше basePath='' открывал весь сайт, включая core/ и конфиги).
+ * Путь захардкожен здесь и живёт ТОЛЬКО в basePath источника; прежняя настройка
+ * mpc_media_path удалена (в рантайме была пустой и лишь вводила в заблуждение) —
+ * резолвер сносит её на install/upgrade.
  * Внутри источника медиа кладутся в images/videos/audios. Структура properties
  * берётся от источника по умолчанию (полный набор) и переопределяется в нужных
  * ключах. На uninstall источник НЕ удаляем — там могут лежать загруженные файлы.
@@ -25,14 +26,11 @@ $modx =& $transport->xpdo;
 switch ($options[xPDOTransport::PACKAGE_ACTION]) {
     case xPDOTransport::ACTION_INSTALL:
     case xPDOTransport::ACTION_UPGRADE:
-        // Папка медиа: из mpc_media_path (если задана), иначе дефолт. На неё
-        // скоупится источник. Нормализуем к виду 'path/' (без ведущего слэша,
-        // с завершающим).
-        $mediaDir = trim((string)$modx->getOption('mpc_media_path', null, 'assets/components/migxpageconfigurator/media/'), '/');
-        if ($mediaDir === '') {
-            $mediaDir = 'assets/components/migxpageconfigurator/media';
-        }
-        $mediaDir .= '/';
+        // Папка медиа mpc — захардкожена (настройка mpc_media_path удалена как
+        // вводящая в заблуждение: реальный якорь базового пути — basePath источника
+        // mpcMedia). На неё скоупится источник; внутри — подпапки типов
+        // (mpc_download_paths). Вид 'path/'.
+        $mediaDir = 'assets/components/migxpageconfigurator/media/';
 
         $name = 'mpcMedia';
         $source = $modx->getObject('sources.modMediaSource', ['name' => $name]);
@@ -50,7 +48,7 @@ switch ($options[xPDOTransport::PACKAGE_ACTION]) {
             if ($def = $modx->getObject('sources.modMediaSource', (int)$modx->getOption('default_media_source', null, 1))) {
                 $props = $def->getProperties();
             }
-            // Источник заскоуплен на папку медиа (basePath/baseUrl = mpc_media_path,
+            // Источник заскоуплен на папку медиа (basePath/baseUrl = $mediaDir,
             // relative) → файл-менеджер видит только её, не корень сайта.
             $overrides = [
                 'basePath'         => $mediaDir,
@@ -70,12 +68,6 @@ switch ($options[xPDOTransport::PACKAGE_ACTION]) {
 
             if ($source->save()) {
                 $modx->log(modX::LOG_LEVEL_INFO, "Created media source '{$name}' (id " . $source->get('id') . ')');
-                // Путь теперь в basePath источника → обнуляем mpc_media_path, иначе
-                // при адресации он задвоится (basePath + mpc_media_path).
-                if ($mp = $modx->getObject('modSystemSetting', 'mpc_media_path')) {
-                    $mp->set('value', '');
-                    $mp->save();
-                }
             } else {
                 $modx->log(modX::LOG_LEVEL_ERROR, "Failed to create media source '{$name}'");
             }
@@ -94,6 +86,15 @@ switch ($options[xPDOTransport::PACKAGE_ACTION]) {
                 @mkdir($abs, 0755, true);
             }
             $modx->getCacheManager()->refresh(['system_settings' => []]);
+        }
+
+        // Сносим legacy-настройку mpc_media_path: путь медиа теперь живёт ТОЛЬКО в
+        // basePath источника mpcMedia, отдельная настройка лишь вводила в
+        // заблуждение (в рантайме всё равно была пустой).
+        if ($legacy = $modx->getObject('modSystemSetting', 'mpc_media_path')) {
+            $legacy->remove();
+            $modx->getCacheManager()->refresh(['system_settings' => []]);
+            $modx->log(modX::LOG_LEVEL_INFO, 'Removed legacy setting mpc_media_path');
         }
         break;
 

@@ -10,7 +10,7 @@ namespace MpcVEServices\Handlers\Support;
  * единый источник истины.
  *
  * Каноническая папка типа берётся из той же настройки, что и у грабера
- * (`mpc_download_paths` относительно `mpc_media_path`): ручная загрузка и
+ * (`mpc_download_paths` относительно базы источника файлов mpc): ручная загрузка и
  * автоскачивание кладут файлы одного типа в одно место.
  *
  * Чистые хелперы (имя/mime/sanitize/коллизии/url) — СТАТИЧЕСКИЕ: их зовут оба
@@ -345,16 +345,6 @@ class MediaLibrary
 
     // --- Зависящие от настроек (нужен modX) --------------------------------
 
-    /** База медиа внутри источника (mpc_media_path), без ведущего/хвостового слэша. */
-    public function mediaPath(): string
-    {
-        return trim((string)$this->modx->getOption(
-            'mpc_media_path',
-            null,
-            'assets/components/migxpageconfigurator/media/'
-        ), '/');
-    }
-
     /** Маппинг тип-ключ → подпапка из mpc_download_paths (json|array; пусто допустимо). */
     public function downloadPaths(): array
     {
@@ -367,18 +357,19 @@ class MediaLibrary
     }
 
     /**
-     * Каноническая папка типа (с хвостовым слэшем): <mediaPath>/<download_paths[type]|type>/.
-     * Та же логика, что у грабера (MediaDownloader::downloadFile): пустая подпапка
-     * → имя типа. Сюда по умолчанию кладётся НОВЫЙ файл, если у поля ещё нет значения.
+     * Каноническая папка типа (с хвостовым слэшем) ОТНОСИТЕЛЬНО базы источника:
+     * <download_paths[type]|type>/. Источник mpcMedia заскоуплен на медиа-папку
+     * (его basePath), поэтому отдельного префикса нет. Та же логика, что у грабера
+     * (MediaDownloader::downloadFile): пустая подпапка → имя типа. Сюда по умолчанию
+     * кладётся НОВЫЙ файл, если у поля ещё нет значения.
      */
     public function canonicalDir(string $typeKey): string
     {
-        $prefix = $this->mediaPath();
         $sub = trim((string)($this->downloadPaths()[$typeKey] ?? ''), '/');
         if ($sub === '') {
             $sub = $typeKey;
         }
-        return ($prefix !== '' ? $prefix . '/' : '') . $sub . '/';
+        return $sub . '/';
     }
 
     /**

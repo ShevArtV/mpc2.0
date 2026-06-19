@@ -53,7 +53,7 @@ $_lang['setting_mpc_thumb_snippet_desc'] = 'default value is mpcThumb (bundled w
 $_lang['setting_mpc_expand_attr'] = 'Attribute for SVG images that need to be added to the markup';
 $_lang['setting_mpc_expand_attr_desc'] = 'default value data-svg.';
 $_lang['setting_mpc_download_paths'] = 'Paths to downloadable files';
-$_lang['setting_mpc_download_paths_desc'] = 'JSON with a subfolder for each media type RELATIVE to the media base path (mpc_media_path) inside the source. Empty value for a type → the type name is used (images/videos/audios/others). Default {"images":"","videos":"","audios":"","others":""}.';
+$_lang['setting_mpc_download_paths_desc'] = 'JSON with a subfolder for each media type RELATIVE to the mpc file source base. Empty value for a type → the type name is used (images/videos/audios/others). Default {"images":"","videos":"","audios":"","others":""}.';
 $_lang['setting_mpc_download_extensions'] = 'Allowed file extensions for auto-download';
 $_lang['setting_mpc_download_extensions_desc'] = 'comma-separated list of extensions; default: jpg,jpeg,png,webp,mp4,mp3,txt';
 $_lang['setting_mpc_lazyload_enabled'] = 'Enable lazy loading?';
@@ -103,8 +103,6 @@ $_lang['setting_mpc_edit_mode'] = 'Edit mode (mpcVisualEditor)';
 $_lang['setting_mpc_edit_mode_desc'] = 'When enabled, the cutter also writes _edit variants of section chunks keeping data-mpc-* markers (needed by the mpcVE frontend editor). Re-cut after enabling. Does not affect production render.';
 $_lang['setting_mpc_media_source'] = 'Media file source';
 $_lang['setting_mpc_media_source_desc'] = 'Single media source (modMediaSource) where all downloaded media go. Empty = use default_media_source.';
-$_lang['setting_mpc_media_path'] = 'Media base path in source';
-$_lang['setting_mpc_media_path_desc'] = 'Relative path inside the source under which images/videos/audios subfolders are created. Default assets/components/migxpageconfigurator/media/.';
 $_lang['setting_mpc_editable_resource_fields'] = 'Editable resource fields';
 $_lang['setting_mpc_editable_resource_fields_desc'] = 'Comma-separated list of native resource fields writable via the write-API (FieldWriter, type=rfield).';
 $_lang['setting_mpc_protected_resource_fields'] = 'Protected resource fields';

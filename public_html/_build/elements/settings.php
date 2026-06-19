@@ -43,11 +43,6 @@ return [
         'value' => '',
         'area' => 'mpc_media',
     ],
-    'mpc_media_path' => [
-        'xtype' => 'textfield',
-        'value' => 'assets/components/migxpageconfigurator/media/',
-        'area' => 'mpc_media',
-    ],
     'mpc_common_config_name' => [
         'xtype' => 'textfield',
         'value' => 'mpc_config',

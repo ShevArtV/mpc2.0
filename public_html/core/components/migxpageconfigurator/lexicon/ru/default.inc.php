@@ -53,7 +53,7 @@ $_lang['setting_mpc_thumb_snippet_desc'] = 'значение по умолчан
 $_lang['setting_mpc_expand_attr'] = 'Атрибут для SVG картинок, которые нужно добавить в разметку';
 $_lang['setting_mpc_expand_attr_desc'] = 'значение по умолчанию data-svg.';
 $_lang['setting_mpc_download_paths'] = 'Пути к загружаемым файлам';
-$_lang['setting_mpc_download_paths_desc'] = 'JSON с подпапкой для каждого типа медиа ОТНОСИТЕЛЬНО базового пути медиа (mpc_media_path) внутри источника. Пустое значение типа → используется имя типа (images/videos/audios/others). По умолчанию {"images":"","videos":"","audios":"","others":""}.';
+$_lang['setting_mpc_download_paths_desc'] = 'JSON с подпапкой для каждого типа медиа ОТНОСИТЕЛЬНО базы источника файлов mpc. Пустое значение типа → используется имя типа (images/videos/audios/others). По умолчанию {"images":"","videos":"","audios":"","others":""}.';
 $_lang['setting_mpc_lazyload_enabled'] = 'Включить ленивую загрузку?';
 $_lang['setting_mpc_lazyload_enabled_desc'] = 'Глобальный выключатель lazyload. Выкл — JS ленивой загрузки не подключается, картинки грузятся сразу.';
 $_lang['setting_mpc_expand_enabled'] = 'Включить разворачивание svg?';
@@ -103,8 +103,6 @@ $_lang['setting_mpc_edit_mode'] = 'Режим редактирования (mpcV
 $_lang['setting_mpc_edit_mode_desc'] = 'Если включено — при нарезке создаются _edit-варианты чанков секций с сохранёнными data-mpc-* маркерами (нужны фронт-редактору mpcVE). После включения перенарезать. На прод-рендер не влияет.';
 $_lang['setting_mpc_media_source'] = 'Источник файлов для медиа';
 $_lang['setting_mpc_media_source_desc'] = 'Единый источник (modMediaSource), куда загружаются все скачанные медиа. Пусто — используется источник по умолчанию (default_media_source).';
-$_lang['setting_mpc_media_path'] = 'Базовый путь медиа в источнике';
-$_lang['setting_mpc_media_path_desc'] = 'Относительный путь внутри источника, под которым создаются подпапки images/videos/audios. По умолчанию assets/components/migxpageconfigurator/media/.';
 $_lang['setting_mpc_editable_resource_fields'] = 'Редактируемые поля ресурса';
 $_lang['setting_mpc_editable_resource_fields_desc'] = 'Список (через запятую) нативных полей ресурса, которые разрешено писать через write-API (FieldWriter, type=rfield).';
 $_lang['setting_mpc_protected_resource_fields'] = 'Защищённые поля ресурса';

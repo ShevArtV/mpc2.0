@@ -138,7 +138,6 @@ class MediaDownloaderTest extends TestCase
 
         $props = array_merge([
             'downloadExtensions' => ['jpg', 'png', 'webp', 'mp4'],
-            'mediaPath'          => '', // пусто → каталог в источнике = <type>/[section/]
             'mimeToExt' => [
                 'image/jpeg' => 'jpg', 'image/png' => 'png', 'image/webp' => 'webp',
                 'video/mp4' => 'mp4', 'audio/mpeg' => 'mp3',
@@ -361,26 +360,24 @@ class MediaDownloaderTest extends TestCase
 
     public function testDownloadFileUsesCustomTypeDirFromDownloadPaths(): void
     {
-        // mpc_download_paths задаёт подпапку типа относительно mediaPath
+        // mpc_download_paths задаёт подпапку типа относительно базы источника
         $d = $this->makeDownloader([
-            'mediaPath'     => 'assets/media',
             'downloadPaths' => ['images' => 'gallery/img', 'videos' => ''],
         ]);
         $d->downloadFile('https://example.com/photo.jpg', 'images');
 
-        $this->assertEquals('assets/media/gallery/img/', $d->fakeSource->created[0]['dir']);
+        $this->assertEquals('gallery/img/', $d->fakeSource->created[0]['dir']);
     }
 
     public function testDownloadFileFallsBackToTypeNameWhenDownloadPathEmpty(): void
     {
         // пустое значение типа в mpc_download_paths → имя типа
         $d = $this->makeDownloader([
-            'mediaPath'     => 'assets/media',
             'downloadPaths' => ['images' => '', 'videos' => 'clips'],
         ]);
         $d->downloadFile('https://example.com/photo.jpg', 'images');
 
-        $this->assertEquals('assets/media/images/', $d->fakeSource->created[0]['dir']);
+        $this->assertEquals('images/', $d->fakeSource->created[0]['dir']);
     }
 
     public function testDownloadFileAddsLanguagePrefixToFilename(): void

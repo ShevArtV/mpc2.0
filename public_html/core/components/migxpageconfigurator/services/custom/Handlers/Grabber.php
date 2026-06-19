@@ -89,7 +89,6 @@ class Grabber extends Base
             'phoneFormat'             => $this->modx->getOption('mpc_phone_format', '', '8 (\2) \3-\4-\5'),
             'downloadPaths'           => $downloadPaths,
             'mediaSourceId'           => (int)$this->modx->getOption('mpc_media_source', null, 0),
-            'mediaPath'               => $this->modx->getOption('mpc_media_path', null, 'assets/components/migxpageconfigurator/media/'),
             'lexiconPath'             => $this->modx->getOption('mpc_lexicon_path', '', 'components/migxpageconfigurator/lexicon/'),
             'allowModxTags'           => $this->modx->getOption('mpc_allow_modx_tags', '', false),
             'downloadExtensions'      => explode(',', $this->modx->getOption('mpc_download_extensions', '', '')),
