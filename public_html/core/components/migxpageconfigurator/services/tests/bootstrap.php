@@ -69,3 +69,19 @@ if (!class_exists('modResource')) {
 
 require_once __DIR__ . '/Stubs/ModxObjectStub.php';
 require_once __DIR__ . '/Stubs/ModxStub.php';
+
+// PSR-4 для соседнего компонента mpcVisualEditor (другой namespace, своего
+// автолоадера в тестах нет). Тесты Unit/Mpcve грузят хендлеры, а те тянут
+// MpcVEServices\Handlers\Support\* — резолвим как в рантайме (autoload.php mpcVE).
+spl_autoload_register(static function (string $class): void {
+    $prefix = 'MpcVEServices\\';
+    if (strpos($class, $prefix) !== 0) {
+        return;
+    }
+    $rel = substr($class, strlen($prefix));
+    $file = dirname(__DIR__, 3)
+        . '/mpcvisualeditor/services/custom/' . str_replace('\\', '/', $rel) . '.php';
+    if (is_file($file)) {
+        require_once $file;
+    }
+});

@@ -2,7 +2,7 @@
  * mpcVisualEditor — редактор изображений (загрузка файла, замена src/фона,
  * migx-запись img с атрибутами alt/title/width/height).
  */
-import { api } from '../api.js';
+import { api, folderOf } from '../api.js';
 import { toast, bgUrl, hasBg } from '../dom.js';
 import { fieldAddress } from '../address.js';
 import { openFileManager } from '../filemanager.js';
@@ -143,9 +143,12 @@ export function openImageEditor(el, forcedAddr) {
 
     input.addEventListener('change', function () { pick(input.files[0]); });
 
-    // Выбрать существующий файл через файловый менеджер (без загрузки).
+    // Выбрать существующий файл через файловый менеджер (без загрузки). Менеджер
+    // открываем в папке текущей картинки (если она есть).
     overlay.querySelector('[data-act=browse]').addEventListener('click', function () {
-        openFileManager({ accept: 'image', title: 'Выбрать изображение' }).then(function (file) {
+        folderOf(cur).then(function (startPath) {
+            return openFileManager({ accept: 'image', title: 'Выбрать изображение', startPath: startPath });
+        }).then(function (file) {
             if (!file) { return; }
             chosen = null;
             picked = file.url;
@@ -219,7 +222,12 @@ export function openImageEditor(el, forcedAddr) {
         }
         busy(true, 'Сохранение…');
         if (chosen) {
-            api.upload('image/upload', chosen).then(function (res) {
+            // Грузим в папку текущей картинки (folderOf); нет текущей → canonicalDir.
+            folderOf(cur).then(function (folder) {
+                var extra = { accept: 'image' };
+                if (folder != null) { extra.path = folder; }
+                return api.upload('files/upload', chosen, extra);
+            }).then(function (res) {
                 if (!res || !res.success || !res.data || !res.data.url) {
                     toast((res && res.message) || 'Ошибка загрузки', true);
                     busy(false, 'Сохранить');

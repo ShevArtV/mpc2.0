@@ -28,6 +28,7 @@ $_lang['mpcve_fm_created'] = 'Папка создана';
 $_lang['mpcve_fm_renamed'] = 'Переименовано';
 $_lang['mpcve_fm_removed'] = 'Удалено';
 $_lang['mpcve_fm_err_name'] = 'Не указано имя.';
+$_lang['mpcve_fm_err_type_dir'] = 'В эту папку нельзя загружать файлы такого типа.';
 
 // --- Заголовки групп настроек ---
 $_lang['area_mpcve_general'] = 'Основные';

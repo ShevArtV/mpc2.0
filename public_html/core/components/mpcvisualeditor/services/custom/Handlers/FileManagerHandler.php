@@ -3,6 +3,7 @@
 namespace MpcVEServices\Handlers;
 
 use MpcVEServices\Mpcve;
+use MpcVEServices\Handlers\Support\MediaLibrary;
 
 /**
  * Мини-файловый менеджер редактора поверх modMediaSource: навигация по папкам,
@@ -10,14 +11,16 @@ use MpcVEServices\Mpcve;
  * медиа/картинок («Выбрать существующий» рядом с «Загрузить») и TV-полем file.
  *
  * Работает РОВНО с одним источником — выделенным источником mpc (настройка
- * `mpc_media_source`, тот же, что у грабера/ImageUploadHandler; fallback —
- * `default_media_source`). Источник из запроса НЕ принимается: редактор
- * ограничен медиа-папкой mpc, а не всей файловой системой сайта.
+ * `mpc_media_source`, тот же, что у грабера; fallback — `default_media_source`).
+ * Источник из запроса НЕ принимается: редактор ограничен медиа-папкой mpc, а не
+ * всей файловой системой сайта.
  *
  * Доступ уже проверен на уровне коннектора (право mpcve_edit). Поэтому файловые
  * права самого источника принудительно включаются (иначе getContainerList
- * фильтрует выдачу по mgr-правам, которых у пользователя нет в web-контексте),
- * по той же модели доверия, что и ImageUploadHandler.
+ * фильтрует выдачу по mgr-правам, которых у пользователя нет в web-контексте).
+ *
+ * upload() обслуживает И файловый менеджер (явный `path`), И загрузку из
+ * редакторов (image/media/picture — без `path` → каноническая папка по accept).
  *
  * Пути-токены — ОТНОСИТЕЛЬНЫЕ базе источника (поле `id` ноды getContainerList).
  * Большинство методов источника принимают их через getBases() как есть; ИСКЛЮЧЕНИЕ
@@ -26,34 +29,21 @@ use MpcVEServices\Mpcve;
  */
 class FileManagerHandler
 {
-    /** Белые списки расширений по «accept» (синхронны ImageUploadHandler). */
-    private const IMAGE_EXT = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'avif'];
-    private const VIDEO_EXT = ['mp4', 'webm', 'ogv', 'ogg', 'mov', 'm4v'];
-    private const AUDIO_EXT = ['mp3', 'ogg', 'oga', 'wav', 'm4a', 'aac', 'weba'];
-
     /** Файловые права источника, которые включаем после доверенной проверки. */
     private const GRANT_PERMS = [
         'directory_list', 'directory_create', 'directory_remove', 'directory_update',
         'file_list', 'file_remove', 'file_update', 'file_upload', 'file_create', 'file_view',
     ];
 
-    /**
-     * Исполняемые/опасные расширения — блок при upload и rename НЕЗАВИСИМО от
-     * accept (иначе accept=any пропускал .php → webshell, если источник в webroot).
-     */
-    private const BLOCKED_EXT = [
-        'php', 'php3', 'php4', 'php5', 'php7', 'php8', 'phtml', 'pht', 'phps', 'phar',
-        'shtml', 'cgi', 'pl', 'py', 'sh', 'bash', 'htaccess', 'htpasswd', 'user.ini',
-        'asp', 'aspx', 'jsp', 'jspx', 'exe', 'com', 'bat', 'cmd', 'msi', 'dll', 'so',
-    ];
-
     private \modX $modx;
     private Mpcve $mpcve;
+    private MediaLibrary $lib;
 
     public function __construct(\modX $modx, Mpcve $mpcve)
     {
         $this->modx  = $modx;
         $this->mpcve = $mpcve;
+        $this->lib   = new MediaLibrary($modx);
     }
 
     /** Листинг папки источника: подпапки + файлы (с фильтром по accept). */
@@ -88,7 +78,7 @@ class FileManagerHandler
                     'path'  => (string)$node['id'],
                     'url'   => (string)$source->getObjectUrl((string)$node['id']),
                     'ext'   => $ext,
-                    'image' => in_array($ext, self::IMAGE_EXT, true),
+                    'image' => in_array($ext, MediaLibrary::IMAGE_EXT, true),
                 ];
             }
         }
@@ -172,7 +162,12 @@ class FileManagerHandler
             : $this->err($this->sourceErr($source));
     }
 
-    /** Загрузить файл в текущую папку. accept ограничивает типы. */
+    /**
+     * Загрузить файл. Целевая папка — `path` из запроса (drag-drop шлёт папку
+     * текущего файла поля; менеджер — открытую папку). accept ограничивает типы.
+     * Единое ядро MediaLibrary: блок-лист + mime, гибридная защита «тип ↔ папка»,
+     * SVG-санитайз, дедуп+авто-суффикс (без молчаливой перезаписи).
+     */
     public function upload(array $request): array
     {
         $source = $this->getSource();
@@ -193,28 +188,81 @@ class FileManagerHandler
         }
 
         $accept = (string)($request['accept'] ?? 'any');
-        $ext    = strtolower((string)pathinfo((string)$file['name'], PATHINFO_EXTENSION));
+        $tmp    = (string)$file['tmp_name'];
+        $ext    = MediaLibrary::extOf((string)$file['name']);
         // accept=any пропускал любое расширение → блок-лист исполняемых ОБЯЗАТЕЛЕН
         // независимо от accept; MIME содержимого тоже не должен быть скриптом.
         if (!$this->acceptExt($ext, $accept) || $this->isBlockedName((string)$file['name'])
-            || !$this->mimeNotExecutable((string)$file['tmp_name'])) {
+            || !MediaLibrary::mimeNotExecutable($tmp)) {
+            return $this->err($this->modx->lexicon('mpcve_err_upload_ext'));
+        }
+        // Содержимое действительно того типа, что заявлено расширением (поддельный
+        // .jpg, не являющийся картинкой, отклоняем — то же делал ImageUploadHandler).
+        $typeKey = MediaLibrary::typeKeyOfExt($ext);
+        if ($typeKey === 'images' && !MediaLibrary::isImageContent($tmp, $ext)) {
+            return $this->err($this->modx->lexicon('mpcve_err_upload_ext'));
+        }
+        if (($typeKey === 'videos' || $typeKey === 'audios')
+            && !MediaLibrary::isMediaContent($tmp, $typeKey === 'videos' ? 'video' : 'audio')) {
             return $this->err($this->modx->lexicon('mpcve_err_upload_ext'));
         }
 
-        $name = $this->sanitizeFileName((string)$file['name']);
-        $dir = $this->cleanPath((string)($request['path'] ?? ''));
-        // createObject ждёт каталог с завершающим слэшем (getBases + dir + name).
-        $dir = $dir === '' ? '' : rtrim($dir, '/') . '/';
-        $res = $source->createObject($dir, $name, (string)file_get_contents($file['tmp_name']));
-        if ($res === false) {
+        // Папка: менеджер шлёт явный `path` (даже '' = корень); редактор папку не
+        // указывает → каноническая папка типа из mpc_download_paths (по accept), как
+        // раньше делал ImageUploadHandler по kind. Различаем по наличию ключа.
+        if (array_key_exists('path', $request)) {
+            $cleanDir = $this->cleanPath((string)$request['path']);
+        } else {
+            $cleanDir = $this->cleanPath($this->lib->canonicalDir(MediaLibrary::typeKeyOfAccept($accept)));
+        }
+        // Гибридная защита: в каноническую папку типа (images/videos/audios из
+        // mpc_download_paths) нельзя класть файл другого типа.
+        if (!$this->lib->typeFitsDir($ext, $cleanDir)) {
+            return $this->err($this->modx->lexicon('mpcve_fm_err_type_dir'));
+        }
+
+        // SVG исполняется браузером → stored XSS. Нативный путь перемещает СЫРОЙ
+        // tmp-файл (move_uploaded_file), поэтому очищенный контент пишем обратно в
+        // tmp ДО перемещения; is_uploaded_file после перезаписи остаётся истинным.
+        if ($ext === 'svg') {
+            file_put_contents($tmp, MediaLibrary::sanitizeSvg((string)file_get_contents($tmp)));
+        }
+
+        $dir     = $cleanDir === '' ? '' : rtrim($cleanDir, '/') . '/';
+        $base    = MediaLibrary::sanitizeBase((string)pathinfo((string)$file['name'], PATHINFO_FILENAME)) ?: 'file';
+        $desired = $base . '.' . $ext;
+
+        // Имя задаёт mpc; финальное имя/URL вернёт пайплайн (контракт sgUploads).
+        $files = ['file' => array_merge($file, ['name' => $desired])];
+        MediaLibrary::ensureContainer($source, $dir);
+        if ($source->uploadObjectsToContainer($dir, $files) === false) {
             return $this->err($this->sourceErr($source) ?: $this->modx->lexicon('mpcve_err_upload'));
         }
 
-        $url = $source->getObjectUrl($dir . $name);
+        $res = MediaLibrary::resolveUploaded($source, $dir, $desired);
         return [
             'success' => true,
             'message' => $this->modx->lexicon('mpcve_uploaded'),
-            'data'    => ['url' => $url, 'path' => $dir . $name],
+            'data'    => ['url' => $res['url'], 'path' => $res['path']],
+        ];
+    }
+
+    /**
+     * Папка внутри источника, где лежит файл по его URL (обратное к getObjectUrl).
+     * Фронт зовёт перед открытием менеджера/загрузкой, чтобы стартовать в папке
+     * текущего значения поля. Не резолвится → '' (корень).
+     */
+    public function locate(array $request): array
+    {
+        $source = $this->getSource();
+        if (!$source) {
+            return $this->err($this->modx->lexicon('mpcve_err_source'));
+        }
+        $path = $this->cleanPath(MediaLibrary::folderOfUrl($source, (string)($request['url'] ?? '')));
+        return [
+            'success' => true,
+            'message' => '',
+            'data'    => ['path' => $path, 'sourceId' => (int)$source->get('id')],
         ];
     }
 
@@ -222,7 +270,7 @@ class FileManagerHandler
      * Выделенный источник mpc (mpc_media_source → default_media_source) с
      * принудительно включёнными файловыми правами и контекстом (нужен
      * getContainerList для построения ссылок/превью). Источник один и тот же
-     * для грабера, ImageUploadHandler и файлового менеджера.
+     * для грабера и файлового менеджера.
      */
     private function getSource(): ?\modMediaSource
     {
@@ -249,18 +297,18 @@ class FileManagerHandler
     private function acceptExt(string $ext, string $accept): bool
     {
         if ($accept === 'image') {
-            return in_array($ext, self::IMAGE_EXT, true);
+            return in_array($ext, MediaLibrary::IMAGE_EXT, true);
         }
         if ($accept === 'video') {
-            return in_array($ext, self::VIDEO_EXT, true);
+            return in_array($ext, MediaLibrary::VIDEO_EXT, true);
         }
         if ($accept === 'audio') {
-            return in_array($ext, self::AUDIO_EXT, true);
+            return in_array($ext, MediaLibrary::AUDIO_EXT, true);
         }
         if ($accept === 'media') {
-            return in_array($ext, self::IMAGE_EXT, true)
-                || in_array($ext, self::VIDEO_EXT, true)
-                || in_array($ext, self::AUDIO_EXT, true);
+            return in_array($ext, MediaLibrary::IMAGE_EXT, true)
+                || in_array($ext, MediaLibrary::VIDEO_EXT, true)
+                || in_array($ext, MediaLibrary::AUDIO_EXT, true);
         }
         return true; // any
     }
@@ -282,17 +330,11 @@ class FileManagerHandler
         return implode('/', $segments);
     }
 
-    /** Расширение имени в нижнем регистре. */
-    private function extOf(string $name): string
-    {
-        return strtolower((string)pathinfo($name, PATHINFO_EXTENSION));
-    }
-
     /** Исполняемое/опасное расширение (любой вариант php-тега тоже). */
     private function isBlockedExt(string $ext): bool
     {
         $ext = strtolower($ext);
-        return in_array($ext, self::BLOCKED_EXT, true) || strpos($ext, 'php') !== false;
+        return in_array($ext, MediaLibrary::BLOCKED_EXT, true) || strpos($ext, 'php') !== false;
     }
 
     /**
@@ -325,28 +367,6 @@ class FileManagerHandler
         $name = preg_replace('#\.{2,}#', '.', (string)$name);
         $name = ltrim((string)$name, '.');
         return (string)$name;
-    }
-
-    /** Содержимое не является исполняемым скриптом по реальному MIME (finfo). */
-    private function mimeNotExecutable(string $tmp): bool
-    {
-        if (!function_exists('finfo_open')) {
-            return true;
-        }
-        $finfo = @finfo_open(FILEINFO_MIME_TYPE);
-        if (!$finfo) {
-            return true;
-        }
-        $mime = (string)@finfo_file($finfo, $tmp);
-        @finfo_close($finfo);
-        foreach (['application/x-php', 'text/x-php', 'application/x-httpd-php',
-                  'application/x-perl', 'application/x-python', 'text/x-shellscript',
-                  'application/x-sh', 'application/x-executable', 'application/x-dosexec'] as $bad) {
-            if (strpos($mime, $bad) === 0) {
-                return false;
-            }
-        }
-        return true;
     }
 
     private function sourceErr($source): string

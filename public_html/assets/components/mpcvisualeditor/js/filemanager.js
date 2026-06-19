@@ -4,7 +4,8 @@
  * + загрузка в текущую папку + ВЫБОР существующего файла.
  *
  * openFileManager(opts) → Promise<{url,name,path}|null>
- *   opts: { accept:'image'|'media'|'any', title }
+ *   opts: { accept:'image'|'media'|'any', title, startPath } — startPath открывает
+ *   менеджер сразу в нужной папке (напр. папке текущего файла поля).
  * Промис резолвится выбранным файлом («Выбрать»/двойной клик) или null (отмена).
  * Бэк — экшены files/* (FileManagerHandler). Источник один — выделенный источник
  * mpc (mpc_media_source); фронт его не выбирает. Пути относительны базе источника.
@@ -197,6 +198,6 @@ export function openFileManager(opts) {
             }).catch(function () { uploadEl.value = ''; toast('Сетевая ошибка', true); });
         });
 
-        navigate('');
+        navigate(opts.startPath ? String(opts.startPath) : '');
     });
 }

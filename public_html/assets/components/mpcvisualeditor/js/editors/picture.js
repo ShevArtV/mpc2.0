@@ -2,7 +2,7 @@
  * mpcVisualEditor — редактор PICTURE: главная картинка (fallback) + источники
  * <source> (адаптив). Конфиг — источник правды (лексикон-ключи), DOM — превью.
  */
-import { api, uploadAndProbe } from '../api.js';
+import { api, uploadAndProbe, folderOf } from '../api.js';
 import { toast, parseRecord } from '../dom.js';
 import { fieldAddress, fieldConfigRecord } from '../address.js';
 import { openFileManager } from '../filemanager.js';
@@ -77,7 +77,7 @@ export function openPictureEditor(el, override) {
 
     // мини-загрузчик: превью + file-input + «Выбрать существующий». onPick(file)
     // кладёт загружаемый файл в модель, onPickExisting(url) — готовый URL (без загрузки).
-    function mediaSlot(container, getPreview, onPick, onPickExisting) {
+    function mediaSlot(container, getPreview, onPick, onPickExisting, getCurrentUrl) {
         container.innerHTML = '<div class="mpcve-pic__thumb"></div>' +
             '<label class="mpcve-pic__pick">Заменить<input type="file" accept="image/*" hidden></label>' +
             '<button type="button" class="mpcve-pick-existing">📁 Выбрать существующий</button>';
@@ -93,7 +93,9 @@ export function openPictureEditor(el, override) {
             if (f && f.type.indexOf('image/') === 0) { onPick(f, draw); }
         });
         container.querySelector('.mpcve-pick-existing').addEventListener('click', function () {
-            openFileManager({ accept: 'image', title: 'Выбрать изображение' }).then(function (file) {
+            folderOf(getCurrentUrl ? getCurrentUrl() : '').then(function (startPath) {
+                return openFileManager({ accept: 'image', title: 'Выбрать изображение', startPath: startPath });
+            }).then(function (file) {
                 if (file) { onPickExisting(file.url, draw); }
             });
         });
@@ -114,7 +116,8 @@ export function openPictureEditor(el, override) {
             probe.onload = function () { main.width = String(probe.naturalWidth || ''); main.height = String(probe.naturalHeight || ''); };
             probe.src = url;
             draw();
-        });
+        },
+        function () { return main.src; });
 
     function renderSources() {
         var box = overlay.querySelector('.mpcve-pic__sources');
@@ -140,7 +143,8 @@ export function openPictureEditor(el, override) {
                 function (url, draw) {
                     s.file = null; s.srcset = url; s.preview = url;
                     draw();
-                });
+                },
+                function () { return s.srcset; });
         });
     }
     renderSources();
@@ -155,9 +159,9 @@ export function openPictureEditor(el, override) {
         saveBtn.disabled = true; saveBtn.textContent = 'Загрузка…';
         // грузим все выбранные файлы (основной + источники)
         var jobs = [];
-        if (main.file) { jobs.push(uploadAndProbe(main.file).then(function (r) { main.src = r.url; main.width = r.width; main.height = r.height; })); }
+        if (main.file) { jobs.push(uploadAndProbe(main.file, main.src).then(function (r) { main.src = r.url; main.width = r.width; main.height = r.height; })); }
         sources.forEach(function (s) {
-            if (s.file) { jobs.push(uploadAndProbe(s.file).then(function (r) { s.srcset = r.url; })); }
+            if (s.file) { jobs.push(uploadAndProbe(s.file, s.srcset).then(function (r) { s.srcset = r.url; })); }
         });
         Promise.all(jobs).then(function () {
             // собираем запись: неизменённые src/srcset остаются КЛЮЧАМИ → бэк их не трогает

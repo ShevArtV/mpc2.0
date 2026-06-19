@@ -1,7 +1,7 @@
 <?php
 /**
  * Роутер запросов фронт-коннектора mpcVisualEditor.
- * action → метод-обработчик. Сами экшены (field/save, row/save, image/upload)
+ * action → метод-обработчик. Сами экшены (field/save, row/save, files/upload)
  * реализуются в M7 (Handlers/*). На этапе скаффолда (M6) — каркас + проверка прав.
  */
 
@@ -33,12 +33,12 @@ class Connector
         'lock/release'   => [Handlers\LockHandler::class,         'release'],
         'log/list'       => [Handlers\LogHandler::class,          'list'],
         'log/revert'     => [Handlers\LogHandler::class,          'revert'],
-        'image/upload'   => [Handlers\ImageUploadHandler::class,  'handle'],
         'files/list'     => [Handlers\FileManagerHandler::class,  'list'],
         'files/mkdir'    => [Handlers\FileManagerHandler::class,  'mkdir'],
         'files/rename'   => [Handlers\FileManagerHandler::class,  'rename'],
         'files/remove'   => [Handlers\FileManagerHandler::class,  'remove'],
         'files/upload'   => [Handlers\FileManagerHandler::class,  'upload'],
+        'files/locate'   => [Handlers\FileManagerHandler::class,  'locate'],
     ];
 
     private \modX $modx;

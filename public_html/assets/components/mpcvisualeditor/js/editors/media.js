@@ -14,7 +14,7 @@
  * renderBoolAttrs), поэтому 0 реально выключает атрибут. Работает только если
  * атрибут присутствовал в разметке на нарезке (иначе {if} не сгенерён).
  */
-import { api, uploadMedia } from '../api.js';
+import { api, uploadMedia, folderOf } from '../api.js';
 import { toast, esc } from '../dom.js';
 import { fieldAddress, fieldConfigRecord } from '../address.js';
 import { openFileManager } from '../filemanager.js';
@@ -120,7 +120,9 @@ export function openMediaEditor(el, override) {
             if (f) { model.file = f; name.textContent = label(); }
         });
         container.querySelector('.mpcve-pick-existing').addEventListener('click', function () {
-            openFileManager({ accept: fmAccept, title: 'Выбрать файл' }).then(function (file) {
+            folderOf(model.src).then(function (startPath) {
+                return openFileManager({ accept: fmAccept, title: 'Выбрать файл', startPath: startPath });
+            }).then(function (file) {
                 if (file) { model.file = null; model.src = file.url; model.preview = file.url; name.textContent = label(); }
             });
         });
@@ -147,7 +149,9 @@ export function openMediaEditor(el, override) {
             }
         });
         container.querySelector('.mpcve-pick-existing').addEventListener('click', function () {
-            openFileManager({ accept: 'image', title: 'Выбрать постер' }).then(function (file) {
+            folderOf(poster.src).then(function (startPath) {
+                return openFileManager({ accept: 'image', title: 'Выбрать постер', startPath: startPath });
+            }).then(function (file) {
                 if (file) { poster.file = null; poster.src = file.url; poster.preview = file.url; draw(); }
             });
         });
@@ -184,10 +188,13 @@ export function openMediaEditor(el, override) {
         var saveBtn = e.currentTarget;
         saveBtn.disabled = true; saveBtn.textContent = 'Загрузка…';
         var jobs = [];
-        if (main.file) { jobs.push(uploadMedia(main.file, isVideo ? 'video' : 'audio').then(function (url) { main.src = url; })); }
-        if (isVideo && poster.file) { jobs.push(uploadMedia(poster.file, 'image').then(function (url) { poster.src = url; })); }
+        // currentUrl (model.src) → грузим рядом с текущим файлом этого слота; нет
+        // текущего → каноническая папка типа. По-слотно: постер-картинка не уедет
+        // в папку видео (гибрид-защита бэка иначе отклонила бы).
+        if (main.file) { jobs.push(uploadMedia(main.file, isVideo ? 'video' : 'audio', main.src).then(function (url) { main.src = url; })); }
+        if (isVideo && poster.file) { jobs.push(uploadMedia(poster.file, 'image', poster.src).then(function (url) { poster.src = url; })); }
         sources.forEach(function (s) {
-            if (s.file) { jobs.push(uploadMedia(s.file, isVideo ? 'video' : 'audio').then(function (url) { s.src = url; })); }
+            if (s.file) { jobs.push(uploadMedia(s.file, isVideo ? 'video' : 'audio', s.src).then(function (url) { s.src = url; })); }
         });
         Promise.all(jobs).then(function () {
             // Переносим запись целиком (литеральные ключи сохраняются), переопределяя

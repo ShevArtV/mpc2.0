@@ -28,6 +28,7 @@ $_lang['mpcve_fm_created'] = 'Folder created';
 $_lang['mpcve_fm_renamed'] = 'Renamed';
 $_lang['mpcve_fm_removed'] = 'Removed';
 $_lang['mpcve_fm_err_name'] = 'Name is required.';
+$_lang['mpcve_fm_err_type_dir'] = 'This folder does not accept files of this type.';
 
 // --- Settings area headers ---
 $_lang['area_mpcve_general'] = 'General';

@@ -122,24 +122,45 @@ export var files = {
     }
 };
 
-// Загрузка медиа-файла (video|audio|image) → Promise<url>. Без замера размеров
-// (для видео/аудио он не нужен). kind задаёт белый список/подпапку на бэке.
-export function uploadMedia(file, kind) {
-    return api.upload('image/upload', file, { kind: kind }).then(function (res) {
-        if (!res || !res.success || !res.data || !res.data.url) {
-            throw new Error((res && res.message) || 'Ошибка загрузки');
-        }
-        return res.data.url;
-    });
+// Папка ИСТОЧНИКА, где лежит текущее значение поля (по его url), через files/locate
+// → Promise<string|null>. null = нет значения / не резолвится → загрузка пойдёт в
+// каноническую папку типа (бэк подставит canonicalDir). Используется и для старта
+// файлового менеджера в нужной папке, и как path при загрузке «рядом с текущим».
+export function folderOf(url) {
+    if (!url) { return Promise.resolve(null); }
+    return rawPost('files/locate', { url: url }).then(function (r) {
+        return (r && r.success && r.data && typeof r.data.path === 'string') ? r.data.path : null;
+    }).catch(function () { return null; });
 }
 
-// Загрузка файла + замер размеров → Promise<{url,width,height}>.
-export function uploadAndProbe(file) {
-    return api.upload('image/upload', file).then(function (res) {
-        if (!res || !res.success || !res.data || !res.data.url) {
-            throw new Error((res && res.message) || 'Ошибка загрузки');
-        }
-        var url = res.data.url;
+// extra для загрузки редактора: accept + path (если папка резолвлена; null → бэк
+// кладёт в каноническую папку типа — НЕ шлём path вовсе).
+function uploadExtra(accept, folder) {
+    var extra = { accept: accept };
+    if (folder != null) { extra.path = folder; }
+    return extra;
+}
+
+function uploadResultUrl(res) {
+    if (!res || !res.success || !res.data || !res.data.url) {
+        throw new Error((res && res.message) || 'Ошибка загрузки');
+    }
+    return res.data.url;
+}
+
+// Загрузка медиа-файла (video|audio|image) → Promise<url>. Без замера размеров.
+// currentUrl — текущее значение поля: грузим в его папку (или canonicalDir, если нет).
+export function uploadMedia(file, kind, currentUrl) {
+    return folderOf(currentUrl).then(function (folder) {
+        return api.upload('files/upload', file, uploadExtra(kind, folder));
+    }).then(uploadResultUrl);
+}
+
+// Загрузка файла + замер размеров → Promise<{url,width,height}>. currentUrl — как выше.
+export function uploadAndProbe(file, currentUrl) {
+    return folderOf(currentUrl).then(function (folder) {
+        return api.upload('files/upload', file, uploadExtra('image', folder));
+    }).then(uploadResultUrl).then(function (url) {
         return new Promise(function (resolve) {
             var probe = new Image();
             probe.onload = function () { resolve({ url: url, width: String(probe.naturalWidth || ''), height: String(probe.naturalHeight || '') }); };

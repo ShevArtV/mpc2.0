@@ -374,7 +374,7 @@ function wireControl(rowEl, f, btn) {
             var file = fileInput.files[0];
             if (!file || file.type.indexOf('image/') !== 0) { return; }
             btn.disabled = true; btn.textContent = '⇧';
-            api.upload('image/upload', file).then(function (res) {
+            api.upload('files/upload', file, { accept: 'image' }).then(function (res) {
                 if (res && res.success && res.data && res.data.url) { curUrl = res.data.url; changed = true; draw(); }
                 else { toast((res && res.message) || 'Ошибка загрузки', true); }
             }).catch(function () { toast('Сетевая ошибка', true); })
