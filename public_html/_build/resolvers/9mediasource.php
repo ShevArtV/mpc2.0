@@ -33,7 +33,18 @@ switch ($options[xPDOTransport::PACKAGE_ACTION]) {
         $mediaDir = 'assets/components/migxpageconfigurator/media/';
 
         $name = 'mpcMedia';
-        $source = $modx->getObject('sources.modMediaSource', ['name' => $name]);
+        // Ищем существующий источник, чтобы НЕ плодить дубль на апгрейде: сначала по
+        // настройке mpc_media_source (если заполнена и объект с таким id есть — юзер
+        // мог переименовать источник, тогда поиск по name промахнулся бы), затем
+        // фолбэк по имени 'mpcMedia'. Создаём новый только если не нашли никак.
+        $source = null;
+        $configuredId = (int)$modx->getOption('mpc_media_source', null, 0);
+        if ($configuredId) {
+            $source = $modx->getObject('sources.modMediaSource', $configuredId);
+        }
+        if (!$source) {
+            $source = $modx->getObject('sources.modMediaSource', ['name' => $name]);
+        }
         if (!$source) {
             /** @var modMediaSource $source */
             $source = $modx->newObject('sources.modFileMediaSource');
