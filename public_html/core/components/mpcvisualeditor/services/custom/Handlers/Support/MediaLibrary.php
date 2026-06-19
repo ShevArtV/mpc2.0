@@ -236,51 +236,67 @@ class MediaLibrary
     }
 
     /**
-     * Финальный URL загруженного файла после нативного пайплайна
-     * (uploadObjectsToContainer). Имя на диске могло измениться: транслитерация
-     * ядром + смена расширения при конвертации (jpg→webp) на стороне плагинов.
+     * Финальный URL/путь загруженного файла после нативного пайплайна
+     * (uploadObjectsToContainer). Имя на диске могло измениться: проектный плагин-
+     * конвертер на OnFileManagerUpload приводит растровые картинки к формату
+     * источника. mpc НЕ знает про конкретный плагин — общий контракт идёт через сам
+     * источник файлов:
+     *  - имя пишет ЯДРО через fileHandler->sanitizePath() — им же вычисляем ожидаемое
+     *    имя $pred (как записал нативный пайплайн ДО конвертации);
+     *  - целевой формат конвертации — штатное свойство источника thumbnailType
+     *    (так же, как его читают ядро и конвертер).
      *
-     * Контракт sleepandglow: плагин на OnFileManagerUpload пишет в $source->sgUploads
-     * массив [{original,name,path,url}] по каждому файлу (original = имя, что mpc
-     * положил в files['name']). Берём элемент по original (или единственный — редактор
-     * грузит по одному) и возвращаем его url/path.
+     * Кандидатов ровно два, детерминированы по имени: $pred и base.<thumbnailType>.
+     * Существуют оба (конвертер не удалил оригинал) → берём новее по mtime; так
+     * требование «конвертер делает replace» снимается, а старый одноимённый файл с
+     * прошлой загрузки не перебивает свежий результат.
      *
-     * Фолбэк (плагина нет / источник не mpcMedia / свойство пусто): считаем, что
-     * кроме нативного санитайза имени ничего не было — строим путь/URL детерминированно
-     * через sanitizePath(desired) + getObjectUrl.
+     * Файловый источник (есть getBasePath) — проверяем диск; иначе фолбэк на $pred.
      *
-     * @return array{url:string,path:string} финальные URL и путь (с учётом конвертации)
+     * @return array{url:string,path:string}
      */
     public static function resolveUploaded($source, string $dir, string $desired): array
     {
-        $uploads = (isset($source->sgUploads) && is_array($source->sgUploads)) ? $source->sgUploads : [];
-        if ($uploads) {
-            $pick = null;
-            foreach ($uploads as $u) {
-                if (is_array($u) && (string)($u['original'] ?? '') === $desired) {
-                    $pick = $u;
-                    break;
-                }
-            }
-            if ($pick === null) {
-                $pick = is_array($uploads[0] ?? null) ? $uploads[0] : null;
-            }
-            if ($pick !== null && (!empty($pick['url']) || !empty($pick['path']))) {
-                $path = (string)($pick['path'] ?? '');
-                $url  = !empty($pick['url'])
-                    ? (string)$pick['url']
-                    : (string)$source->getObjectUrl($path);
-                return ['url' => $url, 'path' => $path];
-            }
-        }
+        $dirPath = trim($dir, '/') === '' ? '' : rtrim($dir, '/') . '/';
 
-        $name = $desired;
+        // Имя, под которым нативный пайплайн записал файл (тот же sanitizePath ядра).
+        $pred = $desired;
         $fh = $source->fileHandler ?? null;
         if (is_object($fh) && method_exists($fh, 'sanitizePath')) {
-            $name = (string)$fh->sanitizePath($desired);
+            $pred = (string)$fh->sanitizePath($desired);
         }
-        $finalPath = ($dir === '' ? '' : rtrim($dir, '/') . '/') . $name;
-        return ['url' => (string)$source->getObjectUrl($finalPath), 'path' => $finalPath];
+
+        $base = method_exists($source, 'getBasePath') ? (string)$source->getBasePath() : '';
+        if ($base === '') {
+            // не файловый источник — диск не проверить, отдаём ожидаемое имя.
+            return self::uploadedResult($source, $dirPath, $pred);
+        }
+        $absDir = rtrim($base, '/') . '/' . $dirPath;
+
+        // Второй детерминированный кандидат: base.<thumbnailType> (результат конвертации).
+        $tt  = strtolower((string)$source->getOption('thumbnailType', null, 'png'));
+        $alt = $tt !== '' ? pathinfo($pred, PATHINFO_FILENAME) . '.' . $tt : '';
+
+        $predExists = is_file($absDir . $pred);
+        $altExists  = $alt !== '' && $alt !== $pred && is_file($absDir . $alt);
+
+        // Конвертированный новее оригинала → берём его (даже если оригинал не удалён).
+        if ($altExists && (!$predExists || (int)@filemtime($absDir . $alt) >= (int)@filemtime($absDir . $pred))) {
+            return self::uploadedResult($source, $dirPath, $alt);
+        }
+        if ($predExists) {
+            return self::uploadedResult($source, $dirPath, $pred);
+        }
+        if ($altExists) {
+            return self::uploadedResult($source, $dirPath, $alt);
+        }
+        return self::uploadedResult($source, $dirPath, $pred); // фолбэк
+    }
+
+    private static function uploadedResult($source, string $dirPath, string $name): array
+    {
+        $path = $dirPath . $name;
+        return ['url' => (string)$source->getObjectUrl($path), 'path' => $path];
     }
 
     /**

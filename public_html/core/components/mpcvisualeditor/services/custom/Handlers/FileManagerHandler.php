@@ -232,7 +232,8 @@ class FileManagerHandler
         $base    = MediaLibrary::sanitizeBase((string)pathinfo((string)$file['name'], PATHINFO_FILENAME)) ?: 'file';
         $desired = $base . '.' . $ext;
 
-        // Имя задаёт mpc; финальное имя/URL вернёт пайплайн (контракт sgUploads).
+        // Имя задаёт mpc; финальное имя/URL после возможной конвертации резолвим от
+        // источника (resolveUploaded: pred + base.<thumbnailType>).
         $files = ['file' => array_merge($file, ['name' => $desired])];
         MediaLibrary::ensureContainer($source, $dir);
         if ($source->uploadObjectsToContainer($dir, $files) === false) {

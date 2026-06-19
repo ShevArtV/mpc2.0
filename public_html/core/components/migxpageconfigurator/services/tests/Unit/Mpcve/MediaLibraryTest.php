@@ -115,71 +115,103 @@ class MediaLibraryTest extends TestCase
         $this->assertTrue($lib->typeFitsDir('pdf', 'others'));
     }
 
-    // --- resolveUploaded (контракт sgUploads + фолбэк) ----------------------
+    // --- resolveUploaded (резолв финала от источника: pred + base.<thumbnailType>) --
 
-    /** Источник с getObjectUrl (root-anchored) и опциональными sgUploads/fileHandler. */
-    private function urlSource(?array $sgUploads, bool $withFileHandler = false): object
+    private string $tmp = '';
+
+    protected function tearDown(): void
     {
-        $src = new class {
-            public ?array $sgUploads = null;
-            public ?object $fileHandler = null;
+        if ($this->tmp !== '') {
+            @system('rm -rf ' . escapeshellarg($this->tmp));
+            $this->tmp = '';
+        }
+    }
+
+    /** Файловый fake-source: getBasePath(temp), thumbnailType, sanitizePath(no-op), getObjectUrl. */
+    private function fsUploadSource(string $thumbnailType = 'webp'): object
+    {
+        $this->tmp = sys_get_temp_dir() . '/mpcve_ru_' . uniqid('', true);
+        @mkdir($this->tmp, 0777, true);
+        return new class($this->tmp, $thumbnailType) {
+            public string $base;
+            public string $tt;
+            public object $fileHandler;
+            public function __construct(string $b, string $tt)
+            {
+                $this->base = rtrim($b, '/');
+                $this->tt   = $tt;
+                $this->fileHandler = new class {
+                    public function sanitizePath($p) { return (string)$p; }
+                };
+            }
+            public function getBasePath($o = '') { return $this->base . '/'; }
+            public function getOption($k, $o = null, $d = null) { return $k === 'thumbnailType' ? $this->tt : $d; }
             public function getObjectUrl($p) { return '/' . ltrim((string)$p, '/'); }
         };
-        $src->sgUploads = $sgUploads;
-        if ($withFileHandler) {
-            $src->fileHandler = new class {
-                // имитируем нормализацию ядра: пробел → подчёркивание
-                public function sanitizePath($p) { return str_replace(' ', '_', (string)$p); }
-            };
-        }
-        return $src;
     }
 
-    public function testResolveUploadedFromContractByOriginal(): void
+    /** Положить файл в источник (относительно base) с опц. mtime. */
+    private function putFile(object $src, string $relPath, int $mtime = 0): void
     {
-        $src = $this->urlSource([
-            ['original' => 'other.jpg', 'name' => 'other.webp', 'path' => 'm/images/other.webp', 'url' => 'https://x/other.webp'],
-            ['original' => 'foo.jpg',   'name' => 'foo.webp',   'path' => 'm/images/foo.webp',   'url' => 'https://x/foo.webp'],
-        ]);
-        $res = MediaLibrary::resolveUploaded($src, 'm/images/', 'foo.jpg');
-        $this->assertSame('https://x/foo.webp', $res['url']);
-        $this->assertSame('m/images/foo.webp', $res['path']);
+        $full = $src->getBasePath() . ltrim($relPath, '/');
+        @mkdir(dirname($full), 0777, true);
+        file_put_contents($full, 'x');
+        if ($mtime) { @touch($full, $mtime); }
     }
 
-    public function testResolveUploadedSingleElementWhenOriginalMissing(): void
+    public function testResolveUploadedExactName(): void
     {
-        // редактор грузит по одному → если original не совпал, берём единственный
-        $src = $this->urlSource([
-            ['original' => 'whatever.jpg', 'path' => 'm/images/conv.webp', 'url' => 'https://x/conv.webp'],
-        ]);
-        $res = MediaLibrary::resolveUploaded($src, 'm/images/', 'foo.jpg');
-        $this->assertSame('https://x/conv.webp', $res['url']);
+        // конвертации не было (файл под исходным именем на месте)
+        $src = $this->fsUploadSource('webp');
+        $this->putFile($src, 'images/foo.jpg');
+        $res = MediaLibrary::resolveUploaded($src, 'images/', 'foo.jpg');
+        $this->assertSame('images/foo.jpg', $res['path']);
+        $this->assertSame('/images/foo.jpg', $res['url']);
     }
 
-    public function testResolveUploadedPathOnlyBuildsUrl(): void
+    public function testResolveUploadedConvertedReplaced(): void
     {
-        // в контракте только path → URL строим через getObjectUrl(path)
-        $src = $this->urlSource([
-            ['original' => 'foo.jpg', 'path' => 'm/images/foo.webp'],
-        ]);
-        $res = MediaLibrary::resolveUploaded($src, 'm/images/', 'foo.jpg');
-        $this->assertSame('/m/images/foo.webp', $res['url']);
-        $this->assertSame('m/images/foo.webp', $res['path']);
+        // конвертер заменил: оригинала нет, есть base.<thumbnailType>
+        $src = $this->fsUploadSource('webp');
+        $this->putFile($src, 'images/foo.webp');
+        $res = MediaLibrary::resolveUploaded($src, 'images/', 'foo.jpg');
+        $this->assertSame('images/foo.webp', $res['path']);
     }
 
-    public function testResolveUploadedFallbackNoPlugin(): void
+    public function testResolveUploadedConvertedOriginalKept(): void
     {
-        // sgUploads пуст (sleepandglow нет) → детерминированный путь + sanitizePath
-        $src = $this->urlSource(null, true);
-        $res = MediaLibrary::resolveUploaded($src, 'm/images/', 'my photo.jpg');
-        $this->assertSame('m/images/my_photo.jpg', $res['path']);
-        $this->assertSame('/m/images/my_photo.jpg', $res['url']);
+        // оба файла есть (конвертер не удалил оригинал) → новее по mtime (alt)
+        $src = $this->fsUploadSource('webp');
+        $this->putFile($src, 'images/foo.jpg', 1000);
+        $this->putFile($src, 'images/foo.webp', 2000);
+        $res = MediaLibrary::resolveUploaded($src, 'images/', 'foo.jpg');
+        $this->assertSame('images/foo.webp', $res['path']);
     }
 
-    public function testResolveUploadedFallbackWithoutFileHandler(): void
+    public function testResolveUploadedStaleAltDoesNotWin(): void
     {
-        // нет fileHandler → имя как есть
-        $src = $this->urlSource(null, false);
+        // старый одноимённый .webp с прошлой загрузки НЕ перебивает свежий оригинал
+        $src = $this->fsUploadSource('webp');
+        $this->putFile($src, 'images/foo.webp', 1000); // старый
+        $this->putFile($src, 'images/foo.jpg', 2000);  // свежий, конвертации не было
+        $res = MediaLibrary::resolveUploaded($src, 'images/', 'foo.jpg');
+        $this->assertSame('images/foo.jpg', $res['path']);
+    }
+
+    public function testResolveUploadedFallbackMissing(): void
+    {
+        // ни pred, ни alt нет (плагин унёс файл) → фолбэк на ожидаемое имя
+        $src = $this->fsUploadSource('webp');
+        $res = MediaLibrary::resolveUploaded($src, 'images/', 'foo.jpg');
+        $this->assertSame('images/foo.jpg', $res['path']);
+    }
+
+    public function testResolveUploadedNonFileSource(): void
+    {
+        // источник без getBasePath → диск не проверяем, отдаём ожидаемое имя
+        $src = new class {
+            public function getObjectUrl($p) { return '/' . ltrim((string)$p, '/'); }
+        };
         $res = MediaLibrary::resolveUploaded($src, 'img/', 'foo.png');
         $this->assertSame('img/foo.png', $res['path']);
         $this->assertSame('/img/foo.png', $res['url']);
