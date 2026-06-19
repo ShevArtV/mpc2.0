@@ -145,7 +145,7 @@ class MediaLibraryTest extends TestCase
                 };
             }
             public function getBasePath($o = '') { return $this->base . '/'; }
-            public function getOption($k, $o = null, $d = null) { return $k === 'thumbnailType' ? $this->tt : $d; }
+            public function getPropertyList() { return ['thumbnailType' => $this->tt]; }
             public function getObjectUrl($p) { return '/' . ltrim((string)$p, '/'); }
         };
     }

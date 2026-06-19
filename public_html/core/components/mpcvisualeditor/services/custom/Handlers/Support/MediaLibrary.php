@@ -274,7 +274,11 @@ class MediaLibrary
         $absDir = rtrim($base, '/') . '/' . $dirPath;
 
         // Второй детерминированный кандидат: base.<thumbnailType> (результат конвертации).
-        $tt  = strtolower((string)$source->getOption('thumbnailType', null, 'png'));
+        // thumbnailType — СВОЙСТВО источника: читаем через getPropertyList(). getOption()
+        // здесь НЕ годится — без передачи свойств источника он вернул бы дефолт 'png'
+        // (искали бы base.png, не нашли webp → откат на оригинал → 404).
+        $props = method_exists($source, 'getPropertyList') ? (array)$source->getPropertyList() : [];
+        $tt  = strtolower((string)($props['thumbnailType'] ?? ''));
         $alt = $tt !== '' ? pathinfo($pred, PATHINFO_FILENAME) . '.' . $tt : '';
 
         $predExists = is_file($absDir . $pred);
