@@ -81,6 +81,8 @@ class Cli
                     return $this->configs($action, $args, $opts, $out);
                 case 'cache':
                     return $this->cache($action, $args, $opts, $out);
+                case 'theme':
+                    return $this->theme($action, $args, $opts, $out);
                 case 'lexicon':
                     return $this->lexicon($action, $args, $opts, $out);
                 default:
@@ -219,15 +221,24 @@ class Cli
         // с --upd — нарезка + полная перезапись контента/переводов из вёрстки. Сам
         // флаг --upd и есть осознанный выбор перезаписи — доп. подтверждения не нужно.
         $upd = !empty($opts['upd']) ? 1 : '';
+        // --theme=<name>: нарезать ВЁРСТКУ темы (исходник из templates/<subdir>/<name>/,
+        // выхлоп в sections/<subdir>/<name>/), не трогая контент. Grabber/Render не
+        // запускаются; --upd в этом режиме неприменим (контент не пишется).
+        $theme = trim((string)($opts['theme'] ?? ''));
+        if ($theme !== '' && (strpbrk($theme, '/\\') !== false || strpos($theme, '..') !== false)) {
+            return $out->result(['success' => false, 'message' => 'Имя темы (--theme) без / \\ и ..']);
+        }
         $ctxKey = $this->modx->context ? $this->modx->context->get('key') : '?';
         if (!empty($opts['dry-run'])) {
             return $out->result(['success' => true, 'message' => sprintf(
                 'dry-run: нарезал бы «%s» в контексте %s%s (без --dry-run выполнится)',
-                $isAll ? 'all' : $target, $ctxKey, $upd ? ', с обновлением контента' : ''
+                $isAll ? 'all' : $target, $ctxKey,
+                $theme !== '' ? ', вёрстку темы «' . $theme . '» (контент не трогается)'
+                    : ($upd ? ', с обновлением контента' : '')
             )]);
         }
         $fileName = $isAll ? null : $target;
-        $res = $this->mpc()->process($fileName, $upd);
+        $res = $this->mpc()->process($fileName, $upd, $theme);
         if (empty($res['success'])) {
             // Резать было нечего: файл не найден/пуст (или для all нет шаблонов).
             $why = !empty($res['messages']) ? ' — ' . implode('; ', $res['messages'])
@@ -240,7 +251,8 @@ class Cli
             $isAll ? 'all' : $target,
             (int)$res['ok'],
             !empty($res['failed']) ? '; с ошибками: ' . (int)$res['failed'] : '',
-            $upd ? ' (с обновлением контента)' : '',
+            $theme !== '' ? ' (вёрстка темы «' . $theme . '», контент не тронут)'
+                : ($upd ? ' (с обновлением контента)' : ''),
             $ctxKey
         )]);
     }
@@ -289,6 +301,118 @@ class Cli
         $ids = (string)($args[0] ?? ($opts['ids'] ?? ''));
         $this->mpc()->render->clearCache($ids);
         return $out->result(['success' => true, 'message' => $ids !== '' ? "Очищены parsed: $ids" : 'Очищены все parsed-файлы']);
+    }
+
+    /**
+     * Переключение темы оформления + инвалидация parsed/:
+     *   mpc theme set <name> [--template=ID]   — включить тему (на весь сайт или
+     *                                            для шаблона ID; приоритет шаблона)
+     *   mpc theme clear [--template=ID]         — сбросить на базовую вёрстку
+     *   mpc theme status                        — показать текущее состояние
+     * Смена настройки чистит parsed (для --template — только ресурсов шаблона).
+     */
+    private function theme(string $action, array $args, array $opts, Output $out): int
+    {
+        $this->useContext($opts);
+        $tpl = isset($opts['template']) ? (int)$opts['template'] : 0;
+
+        if ($action === 'status') {
+            $map = json_decode($this->getSetting('mpc_theme_templates') ?: '{}', true);
+            return $out->result(['success' => true, 'message' => sprintf(
+                'Тема (mpc_theme): «%s»; по шаблонам: %s; папка тем: %s',
+                $this->getSetting('mpc_theme') ?: '— базовая',
+                is_array($map) && $map ? json_encode($map, JSON_UNESCAPED_UNICODE) : '—',
+                $this->getSetting('mpc_themes_subdir') ?: '_themes/'
+            ), 'data' => ['theme' => $this->getSetting('mpc_theme'), 'templates' => $map]]);
+        }
+
+        if ($action === 'set') {
+            $name = trim((string)($args[0] ?? ''));
+            if ($name === '' || strpbrk($name, '/\\') !== false || strpos($name, '..') !== false) {
+                return $out->result(['success' => false, 'message' =>
+                    'theme set <name> [--template=ID] — имя темы без / \\ и .. (папка внутри ' .
+                    ($this->getSetting('mpc_themes_subdir') ?: '_themes/') . ')']);
+            }
+            if ($tpl > 0) {
+                $this->setTemplateTheme($tpl, $name);
+                $msg = "Шаблону $tpl назначена тема «$name»";
+            } else {
+                $this->setSetting('mpc_theme', $name);
+                $msg = "Тема на весь сайт: «$name»";
+            }
+            $this->afterThemeChange($tpl);
+            return $out->result(['success' => true, 'message' => $msg . ' (parsed очищены)']);
+        }
+
+        if ($action === 'clear') {
+            if ($tpl > 0) {
+                $this->setTemplateTheme($tpl, '');
+                $msg = "Шаблон $tpl сброшен на базовую вёрстку";
+            } else {
+                $this->setSetting('mpc_theme', '');
+                $msg = 'Тема на весь сайт сброшена (базовая вёрстка)';
+            }
+            $this->afterThemeChange($tpl);
+            return $out->result(['success' => true, 'message' => $msg . ' (parsed очищены)']);
+        }
+
+        return $out->result(['success' => false, 'message' =>
+            'theme set <name> [--template=ID] | theme clear [--template=ID] | theme status']);
+    }
+
+    /** Значение системной настройки (пусто, если её нет). */
+    private function getSetting(string $key): string
+    {
+        $s = $this->modx->getObject('modSystemSetting', ['key' => $key]);
+        return $s ? (string)$s->get('value') : '';
+    }
+
+    /** Записать системную настройку (создать, если отсутствует). */
+    private function setSetting(string $key, string $value): void
+    {
+        $s = $this->modx->getObject('modSystemSetting', ['key' => $key]);
+        if (!$s) {
+            $s = $this->modx->newObject('modSystemSetting');
+            $s->fromArray(['key' => $key, 'namespace' => 'migxpageconfigurator', 'area' => 'mpc_paths', 'xtype' => 'textfield'], '', true, true);
+        }
+        $s->set('value', $value);
+        $s->save();
+    }
+
+    /** Установить/снять тему шаблона в карте mpc_theme_templates (пустая тема — удалить ключ). */
+    private function setTemplateTheme(int $tpl, string $theme): void
+    {
+        $map = json_decode($this->getSetting('mpc_theme_templates') ?: '{}', true);
+        if (!is_array($map)) {
+            $map = [];
+        }
+        if ($theme === '') {
+            unset($map[(string)$tpl]);
+        } else {
+            $map[(string)$tpl] = $theme;
+        }
+        $this->setSetting('mpc_theme_templates', $map ? json_encode($map, JSON_UNESCAPED_UNICODE) : '');
+    }
+
+    /** Рефреш кэша настроек + чистка parsed (для --template — только ресурсов шаблона). */
+    private function afterThemeChange(int $tpl): void
+    {
+        if ($cm = $this->modx->getCacheManager()) {
+            $cm->refresh(['system_settings' => []]);
+        }
+        if ($tpl > 0) {
+            $q = $this->modx->newQuery('modResource', ['template' => $tpl]);
+            $q->select('id');
+            $q->prepare();
+            $q->stmt->execute();
+            $ids = $q->stmt->fetchAll(\PDO::FETCH_COLUMN);
+            if (!$ids) {
+                return; // у шаблона нет ресурсов — чистить нечего (не сносим всё)
+            }
+            $this->mpc()->render->clearCache(implode(',', $ids));
+            return;
+        }
+        $this->mpc()->render->clearCache();
     }
 
     /** Лексиконы через существующие процессоры. */
@@ -354,8 +478,10 @@ class Cli
             '  plugins   apply [файл]   — создать/обновить плагины (код+категория+static) и синк событий',
             '  packages  apply [файл]   — установка/удаление пакетов (нужен --force)',
             '  cut <файл.tpl|all> [--upd]   — нарезка: без --upd умный мерж, с --upd полная перезапись',
+            '  cut <файл.tpl|all> --theme=<имя>   — нарезать ТОЛЬКО вёрстку темы (контент не трогается)',
             '  configs sync             — применить сид MIGX-конфигов (merge)',
             '  cache clear [id,…]       — очистить запечённые parsed/ (без id — все)',
+            '  theme set <name> [--template=ID] | clear [--template=ID] | status   — переключение темы оформления',
             '  lexicon   export-all | export-untranslated <filename> | list',
             '',
             'Флаги: --dry-run (только план), --force (деструктив), --only=ref (точечно), --json',

@@ -39,6 +39,16 @@ class SectionFileWriter
     }
 
     /**
+     * Переопределить базовый путь записи секций (для нарезки темы — выхлоп идёт
+     * в подпапку темы внутри pathToSections). Конструктор кэширует properties по
+     * значению, поэтому смену пути прокидываем явным сеттером.
+     */
+    public function setSectionsBase(string $pathToSections): void
+    {
+        $this->properties['pathToSections'] = $pathToSections;
+    }
+
+    /**
      * Рекурсивно обрабатывает вложенные data-mpc-chunk и создаёт файлы.
      */
     public function parseInnerChunks(array $innerChunks): void

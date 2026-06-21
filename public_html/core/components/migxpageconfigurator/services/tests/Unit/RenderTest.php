@@ -125,6 +125,116 @@ class RenderTest extends TestCase
         $this->assertSame('@FILE sections/hero.tpl', $binding);
     }
 
+    // --- темы оформления (applyTheme / resolveTheme) ----------------------
+
+    /** Привязка чанка с активной темой и заданными свойствами темы. */
+    private function themedBinding(array $section, string $theme, array $properties = []): string
+    {
+        $ref      = new ReflectionClass(Render::class);
+        $instance = $ref->newInstanceWithoutConstructor();
+        $instance->properties = array_merge([
+            'pdotoolsElementsPath' => '/var/www/core/elements/',
+            'pathToSections'       => 'sections/',
+            'extension'            => '.tpl',
+            'themesSubdir'         => '_themes/',
+        ], $properties);
+        $instance->currentTheme = $theme;
+        $method = $ref->getMethod('getSectionChunkBinding');
+        $method->setAccessible(true);
+
+        return $method->invoke($instance, $section);
+    }
+
+    /** Тема переопределяет секцию: при наличии файла темы берётся он. */
+    public function testChunkBindingAppliesThemeOverride(): void
+    {
+        $dir = sys_get_temp_dir() . '/mpc_theme_test_' . getmypid() . '/';
+        @mkdir($dir . 'sections/_themes/dark/', 0777, true);
+        file_put_contents($dir . 'sections/_themes/dark/hero.tpl', 'x');
+        try {
+            $section = ['MIGX_formname' => 'Hero', 'is_static' => true];
+            $binding = $this->themedBinding($section, 'dark', ['pdotoolsElementsPath' => $dir]);
+            $this->assertSame('@FILE sections/_themes/dark/hero.tpl', $binding);
+        } finally {
+            @unlink($dir . 'sections/_themes/dark/hero.tpl');
+            @rmdir($dir . 'sections/_themes/dark/');
+            @rmdir($dir . 'sections/_themes/');
+            @rmdir($dir . 'sections/');
+            @rmdir($dir);
+        }
+    }
+
+    /** Тема задана, но файла секции в ней нет → fallback на базовую вёрстку. */
+    public function testChunkBindingFallsBackWhenThemeFileMissing(): void
+    {
+        $section = ['MIGX_formname' => 'Hero', 'is_static' => true];
+        $binding = $this->themedBinding($section, 'dark', ['pdotoolsElementsPath' => '/no/such/dir/']);
+        $this->assertSame('@FILE sections/hero.tpl', $binding);
+    }
+
+    /** Кастомный file_name вне sections/ темой не затрагивается. */
+    public function testChunkBindingIgnoresThemeForPathOutsideSections(): void
+    {
+        $section = ['file_name' => 'custom/promo.tpl', 'is_static' => true];
+        $binding = $this->themedBinding($section, 'dark', ['pdotoolsElementsPath' => '/no/such/dir/']);
+        $this->assertSame('@FILE custom/promo.tpl', $binding);
+    }
+
+    /** Имя темы с обходом пути (`..`) игнорируется — берётся базовый путь. */
+    public function testChunkBindingRejectsThemeTraversal(): void
+    {
+        $section = ['MIGX_formname' => 'Hero', 'is_static' => true];
+        $binding = $this->themedBinding($section, '../../etc', ['pdotoolsElementsPath' => '/no/such/dir/']);
+        $this->assertSame('@FILE sections/hero.tpl', $binding);
+    }
+
+    private function resolveTheme(int $templateId, array $properties): string
+    {
+        $ref      = new ReflectionClass(Render::class);
+        $instance = $ref->newInstanceWithoutConstructor();
+        $instance->properties = $properties;
+        $method = $ref->getMethod('resolveTheme');
+        $method->setAccessible(true);
+
+        return $method->invoke($instance, $templateId);
+    }
+
+    /** Карта шаблонов приоритетнее глобальной темы. */
+    public function testResolveThemePrefersTemplateMap(): void
+    {
+        $props = ['theme' => 'light', 'themeTemplates' => [5 => 'dark']];
+        $this->assertSame('dark', $this->resolveTheme(5, $props));
+        $this->assertSame('light', $this->resolveTheme(12, $props));
+    }
+
+    /** Нет ни карты, ни глобалки → пустая тема (базовая вёрстка). */
+    public function testResolveThemeEmptyByDefault(): void
+    {
+        $this->assertSame('', $this->resolveTheme(5, ['theme' => '', 'themeTemplates' => []]));
+    }
+
+    private function parseThemeTemplates(string $raw): array
+    {
+        $ref    = new ReflectionClass(Render::class);
+        $method = $ref->getMethod('parseThemeTemplates');
+        $method->setAccessible(true);
+
+        return $method->invoke(null, $raw);
+    }
+
+    /** JSON-карта парсится в [int=>string], пустые/нулевые ключи отбрасываются. */
+    public function testParseThemeTemplatesParsesJson(): void
+    {
+        $this->assertSame([5 => 'dark', 12 => 'summer'], $this->parseThemeTemplates('{"5":"dark","12":"summer","0":"x","7":""}'));
+    }
+
+    /** Невалидный JSON / пустая строка → пустая карта. */
+    public function testParseThemeTemplatesHandlesInvalid(): void
+    {
+        $this->assertSame([], $this->parseThemeTemplates(''));
+        $this->assertSame([], $this->parseThemeTemplates('not json'));
+    }
+
     // --- quoteSnippetParamValues ------------------------------------------
 
     /** Голое скалярное значение (eager-резолв ## в static) → в кавычки. */

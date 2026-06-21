@@ -24,6 +24,14 @@ class Render extends Base
      */
     public array $contacts;
     /**
+     * Активная тема оформления для текущего ресурса. Резолвится один раз в
+     * prepareResourceData (по шаблону ресурса) и накладывается на пути чанков
+     * секций и wrapper-а в applyTheme. Пусто → базовая вёрстка (легаси).
+     *
+     * @var string
+     */
+    public string $currentTheme = '';
+    /**
      * @return void
      */
     protected function initialize(): void
@@ -38,6 +46,17 @@ class Render extends Base
         $properties = [
             'commonConfigTvId' => $this->modx->getOption('mpc_config_tv_id', '', 0),
             'extension' => $this->modx->getOption('mpc_tpl_file_extension', '', '.tpl'),
+            // Тема оформления — оверрайд-слой вёрстки секций (подпапка-зеркало
+            // внутри pathToSections). mpc_theme — тема на весь сайт;
+            // mpc_theme_templates ({"5":"dark"}) — переопределение по шаблонам
+            // (приоритетнее глобалки); mpc_themes_subdir — где лежат темы.
+            // Контент (mpc_config/лексиконы/медиа) темой не затрагивается —
+            // меняется только резолв файла чанка на рендере (см. applyTheme).
+            'theme' => trim((string)$this->modx->getOption('mpc_theme', null, '')),
+            'themeTemplates' => self::parseThemeTemplates(
+                (string)$this->modx->getOption('mpc_theme_templates', null, '')
+            ),
+            'themesSubdir' => trim((string)$this->modx->getOption('mpc_themes_subdir', null, '_themes/')),
         ];
 
         $this->properties = array_merge($this->properties, $properties);
@@ -74,6 +93,9 @@ class Render extends Base
      */
     private function prepareResourceData(array $resourceData): array
     {
+        // Активную тему резолвим ПЕРВОЙ — до wrapper и секций (оба прогоняются
+        // через applyTheme, опираясь на $this->currentTheme).
+        $this->currentTheme = $this->resolveTheme((int)($resourceData['template'] ?? 0));
         $this->contacts = $this->getContacts();
         $this->wrapperTpl = $this->getWrapperTpl($resourceData['template']);
 
@@ -192,7 +214,10 @@ class Render extends Base
         $q->select('description');
         $q->where(['id' => $templateId]);
         if ($result = $this->execute($q, [\PDO::FETCH_COLUMN])) {
-            return $result[0];
+            // Wrapper — часть темы: если description указывает на файл
+            // (@FILE sections/wrapper.tpl), накладываем активную тему с
+            // fallback на базовый wrapper.
+            return $this->applyThemeToBinding((string)$result[0]);
         }
         return '';
     }
@@ -461,7 +486,101 @@ class Render extends Base
             }
         }
 
-        return '@FILE ' . $relPath;
+        // Оверрайд активной темой (если файл темы существует), иначе базовый путь.
+        return '@FILE ' . $this->applyTheme($relPath);
+    }
+
+    /**
+     * Тема для шаблона: карта mpc_theme_templates по templateId приоритетнее
+     * глобальной mpc_theme. Пусто → базовая вёрстка.
+     *
+     * @param int $templateId
+     * @return string
+     */
+    private function resolveTheme(int $templateId): string
+    {
+        $map = $this->properties['themeTemplates'] ?? [];
+        if ($templateId > 0 && isset($map[$templateId]) && $map[$templateId] !== '') {
+            return (string)$map[$templateId];
+        }
+        return (string)($this->properties['theme'] ?? '');
+    }
+
+    /**
+     * Накладывает активную тему (currentTheme) на относительный путь чанка.
+     * Тема — подпапка-зеркало ВНУТРИ pathToSections (mpc_themes_subdir, дефолт
+     * `_themes/`): sections/hero.tpl → sections/_themes/dark/hero.tpl. Файла
+     * темы нет → возвращаем базовый путь (оверрайд-слой, безопасный fallback).
+     *
+     * Не трогаем: пустую тему, путь вне pathToSections (кастомный file_name на
+     * произвольный чанк) и имя темы с разделителями/`..` (защита от выхода за
+     * пределы папки секций — тема приходит из системной настройки).
+     *
+     * @param string $relPath относительный путь чанка (от pdotools_elements_path)
+     * @return string
+     */
+    private function applyTheme(string $relPath): string
+    {
+        $theme = $this->currentTheme;
+        if ($theme === '' || strpbrk($theme, '/\\') !== false || strpos($theme, '..') !== false) {
+            return $relPath;
+        }
+        $base = (string)($this->properties['pathToSections'] ?? '');
+        if ($base === '' || strpos($relPath, $base) !== 0) {
+            return $relPath;
+        }
+        $sub       = rtrim((string)($this->properties['themesSubdir'] ?? '_themes/'), '/') . '/';
+        $tail      = substr($relPath, strlen($base));
+        $themedRel = $base . $sub . $theme . '/' . $tail;
+        if (file_exists($this->properties['pdotoolsElementsPath'] . $themedRel)) {
+            return $themedRel;
+        }
+        return $relPath;
+    }
+
+    /**
+     * Накладывает тему на @FILE-привязку (wrapper из modTemplate.description).
+     * Не-@FILE строку (inline-tpl) возвращаем как есть.
+     *
+     * @param string $binding
+     * @return string
+     */
+    private function applyThemeToBinding(string $binding): string
+    {
+        if (strpos($binding, '@FILE ') !== 0) {
+            return $binding;
+        }
+        $rel = ltrim(substr($binding, 6));
+        return '@FILE ' . $this->applyTheme($rel);
+    }
+
+    /**
+     * Разбирает настройку mpc_theme_templates (JSON `{"templateId":"theme"}`) в
+     * карту [int templateId => string theme]. Невалидный JSON/пустые значения
+     * отбрасываются (карта пустая → работает только глобальная mpc_theme).
+     *
+     * @param string $raw
+     * @return array<int,string>
+     */
+    private static function parseThemeTemplates(string $raw): array
+    {
+        $raw = trim($raw);
+        if ($raw === '') {
+            return [];
+        }
+        $decoded = json_decode($raw, true);
+        if (!is_array($decoded)) {
+            return [];
+        }
+        $map = [];
+        foreach ($decoded as $tplId => $theme) {
+            $tplId = (int)$tplId;
+            $theme = trim((string)$theme);
+            if ($tplId > 0 && $theme !== '') {
+                $map[$tplId] = $theme;
+            }
+        }
+        return $map;
     }
 
     /**

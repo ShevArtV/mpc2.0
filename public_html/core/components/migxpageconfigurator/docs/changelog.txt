@@ -1,3 +1,33 @@
+2.5.49-rc
+==============
+Темы оформления: один контент — разная вёрстка, переключение через настройки.
+Порт фичи с mpc3 (1.0.6-rc).
+
+- НОВОЕ: тема = оверрайд-слой вёрстки секций. Для секции рендер сначала ищет файл
+  в подпапке темы (sections/<mpc_themes_subdir>/<тема>/<секция>.tpl), нет файла —
+  базовая вёрстка sections/<секция>.tpl. Контент (mpc_config/лексиконы/медиа) темой
+  НЕ затрагивается: меняется только резолв файла чанка на рендере. file_name в
+  данных секции пишется как раньше (базовый путь) — тема накладывается на лету.
+- НОВОЕ: системные настройки mpc_theme (тема на весь сайт), mpc_theme_templates
+  (JSON {"templateId":"тема"} — переопределение по шаблонам, приоритетнее глобалки),
+  mpc_themes_subdir (папка тем внутри секций, дефолт _themes/).
+- НОВОЕ: wrapper (modTemplate.description = @FILE sections/wrapper.tpl) тоже
+  темизируется с тем же fallback.
+- НОВОЕ: вёрстка темы ГЕНЕРИРУЕТСЯ нарезкой как обычная —
+  `mpc cut <file|all> --theme=<name>`: исходник из templates/<subdir>/<name>/,
+  выхлоп секций+wrapper в sections/<subdir>/<name>/. Запускается ТОЛЬКО Cutter,
+  Grabber/Render пропускаются — контент общий, не дублируется/не перетирается.
+  Mpc::process($f,$upd,$theme), handleThemeFile, Cutter::setTheme,
+  SectionFileWriter::setSectionsBase.
+- НОВОЕ: CLI `mpc theme set <name> [--template=ID] | clear [--template=ID] | status`
+  — переключение с чисткой parsed (для --template — только ресурсов шаблона). Смена
+  настройки через админку чистит parsed автоматически (OnCacheUpdate).
+- БЕЗОПАСНОСТЬ: имя темы с разделителями/`..` игнорируется; путь вне sections/
+  (кастомный file_name) темой не трогается.
+- Render: resolveTheme/applyTheme/applyThemeToBinding/parseThemeTemplates +
+  currentTheme; правки getSectionChunkBinding/getWrapperTpl/prepareResourceData.
+  +10 unit-тестов (488 зелёных).
+
 2.5.48-rc
 ==============
 - ИСПРАВЛЕНО: резолвер 9mediasource на апгрейде плодил дубль media-источника, если

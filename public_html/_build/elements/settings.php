@@ -120,6 +120,30 @@ return [
         'value' => 'sections/',
         'area' => 'mpc_paths',
     ],
+    // --- Темы оформления (оверрайд-слой вёрстки секций) --------------------
+    // Тема = подпапка-зеркало внутри mpc_path_to_sections: для секции ищется
+    // sections/<mpc_themes_subdir>/<тема>/<секция>.tpl, нет файла → базовая
+    // вёрстка sections/<секция>.tpl. Контент (mpc_config/лексиконы/медиа) темой
+    // НЕ затрагивается. Смена настройки чистит parsed/ через OnCacheUpdate.
+    // Активная тема на весь сайт. Пусто → базовая вёрстка (легаси-поведение).
+    'mpc_theme' => [
+        'xtype' => 'textfield',
+        'value' => '',
+        'area' => 'mpc_paths',
+    ],
+    // Переопределение темы по шаблонам, JSON {"templateId":"тема"}. Приоритетнее
+    // mpc_theme. Пример: {"5":"dark","12":"summer"}. Пусто → действует mpc_theme.
+    'mpc_theme_templates' => [
+        'xtype' => 'textarea',
+        'value' => '',
+        'area' => 'mpc_paths',
+    ],
+    // Подпапка внутри mpc_path_to_sections, где лежат темы.
+    'mpc_themes_subdir' => [
+        'xtype' => 'textfield',
+        'value' => '_themes/',
+        'area' => 'mpc_paths',
+    ],
     'mpc_path_to_src' => [
         'xtype' => 'textfield',
         'value' => 'templates/',

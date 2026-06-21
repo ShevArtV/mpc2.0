@@ -169,6 +169,29 @@ class Cutter extends Base
     // ---------------------------------------------------------------
 
     /**
+     * Режим нарезки темы: исходник читается из подпапки темы внутри pathToSrc,
+     * а выхлоп вёрстки (секции + wrapper) пишется в подпапку темы внутри
+     * pathToSections (зеркало базовой структуры). Имена секций/полей те же —
+     * меняется только разметка/сетка. Контент (mpc_config/лексиконы) НЕ
+     * затрагивается: тему режет только Cutter, без Grabber (см. Mpc::process).
+     *
+     * @param string $theme       имя темы (папка; без / \ и ..)
+     * @param string $themesSubdir подпапка тем (mpc_themes_subdir, напр. _themes/)
+     * @return void
+     */
+    public function setTheme(string $theme, string $themesSubdir): void
+    {
+        $theme = trim($theme);
+        if ($theme === '' || strpbrk($theme, '/\\') !== false || strpos($theme, '..') !== false) {
+            return;
+        }
+        $sub = rtrim($themesSubdir, '/') . '/' . $theme . '/';
+        $this->properties['pathToSrc']      .= $sub;
+        $this->properties['pathToSections'] .= $sub;
+        $this->sectionFileWriter->setSectionsBase($this->properties['pathToSections']);
+    }
+
+    /**
      * Точка входа: загружает файл и запускает все этапы обработки.
      *
      * @param string $fileName

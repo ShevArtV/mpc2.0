@@ -71,6 +71,7 @@ class Mpc
             'expandEnabled' => $this->modx->getOption('mpc_expand_enabled', null, true),
             'lexiconsNamespace' => $this->modx->getOption('mpc_lexicons_namespace', null, 'migxpageconfigurator'),
             'useLexicons' => $this->modx->getOption('mpc_use_lexicons', '', false),
+            'themesSubdir' => trim((string)$this->modx->getOption('mpc_themes_subdir', null, '_themes/')),
         ];
 
         $this->properties['pdotoolsElementsPath'] = str_replace('{core_path}', '', $this->properties['pdotoolsElementsPath']);
@@ -101,23 +102,40 @@ class Mpc
      * @param bool|null $updContent
      * @return array
      */
-    public function process(?string $fileName, ?bool $updContent): array
+    public function process(?string $fileName, ?bool $updContent, string $theme = ''): array
     {
         if ($this->properties['devMode']) {
             $this->render->clearCache();
         }
-        $this->grabber->updContent = $updContent ?? false;
+
+        // Нарезка темы: тот же Cutter, но исходник читается из подпапки темы, а
+        // вёрстка пишется в подпапку темы. Grabber/Render НЕ запускаем — контент
+        // (mpc_config/лексиконы/медиа) общий для всех тем, его не дублируем и не
+        // перетираем. Без темы — обычный полный пайплайн (Grabber→Cutter→Render).
+        $isTheme = trim($theme) !== '';
+        if ($isTheme) {
+            $this->cutter->setTheme($theme, $this->properties['themesSubdir']);
+        } else {
+            $this->grabber->updContent = $updContent ?? false;
+        }
 
         $results = [];
         if (!$fileName) {
             $templatePath = $this->properties['pdotoolsElementsPath'] . $this->properties['pathToSrc'];
+            if ($isTheme) {
+                $templatePath .= rtrim($this->properties['themesSubdir'], '/') . '/' . trim($theme) . '/';
+            }
             foreach ($this->getFilesList($templatePath) as $fn) {
-                $results[$fn] = $this->handleFile($fn);
+                $results[$fn] = $isTheme ? $this->handleThemeFile($fn) : $this->handleFile($fn);
             }
         } else {
-            $results[$fileName] = $this->handleFile($fileName);
+            $results[$fileName] = $isTheme ? $this->handleThemeFile($fileName) : $this->handleFile($fileName);
         }
 
+        if ($isTheme) {
+            // Тема сменила вёрстку — старые parsed пересоберутся лениво под тему.
+            $this->render->clearCache();
+        }
         $this->refreshSiteCache();
 
         $ok = 0;
@@ -221,6 +239,19 @@ class Mpc
             $this->render->handle($result['data']['resource']->toArray());
         }
         return $result;
+    }
+
+    /**
+     * Нарезать один файл В ТЕМУ: только Cutter (вёрстка → подпапка темы), без
+     * Grabber/Render. Контент не трогается. Cutter::setTheme должен быть вызван
+     * заранее (Mpc::process). Возвращает результат cutter ['success','message'].
+     *
+     * @param string $fileName
+     * @return array
+     */
+    public function handleThemeFile($fileName): array
+    {
+        return $this->cutter->handle($fileName);
     }
 
     public function getParsedConfigPath(\modResource $resource): string
