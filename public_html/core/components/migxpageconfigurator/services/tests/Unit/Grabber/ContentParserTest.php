@@ -146,4 +146,31 @@ class ContentParserTest extends TestCase
 
         $this->assertMatchesSnapshot($actual, 'grabber/about_fields.json');
     }
+
+    // ---------------------------------------------------------------
+    // listbox: статический список нормализуется, @SELECT — нет
+    // ---------------------------------------------------------------
+
+    public function testNormalizesStaticListboxValue(): void
+    {
+        $parser = $this->makeParser();
+        // Статический список опций: выбранное значение приводится к ключ-форме
+        // (транслит + lowercase), чтобы совпасть с ключами опций.
+        $result = $parser->getFieldsValues(
+            '<div data-mpc-field="color" data-mpc-values="Красный||Синий">Синий</div>'
+        );
+        $this->assertSame('sinij', $result['color']);
+    }
+
+    public function testDoesNotNormalizeDynamicListboxValue(): void
+    {
+        $parser = $this->makeParser();
+        // @SELECT-опции: реальное значение — алиас ресурса из БД. Нормализация
+        // порезала бы дефисы/регистр/не-латиницу, поэтому значение должно
+        // сохраниться как есть.
+        $result = $parser->getFieldsValues(
+            '<div data-mpc-field="page" data-mpc-values="@SELECT pagetitle, id FROM modx_site_content">My-Page-Alias</div>'
+        );
+        $this->assertSame('My-Page-Alias', $result['page']);
+    }
 }

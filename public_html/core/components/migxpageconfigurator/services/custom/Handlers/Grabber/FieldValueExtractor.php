@@ -242,6 +242,13 @@ class FieldValueExtractor
         if ($rawValues !== '') {
             $result = trim($element->innerHtml());
             $multiple = OptionFieldHelper::isMultiOptionFtype((string)$element->getAttribute('data-mpc-ftype'));
+            // Динамические опции (@SELECT …): реальные значения приходят из БД
+            // (id / алиас ресурса / произвольная строка) — их НЕЛЬЗЯ нормализовать
+            // (нормализация порежет алиас: дефисы, регистр, не-латиницу) и нечего
+            // лексиконить (капшенов в data-mpc-values нет). Значение — как есть.
+            if (OptionFieldHelper::classifyListboxOptions($rawValues)['mode'] === 'dynamic') {
+                return $result;
+            }
             // Капшены опций → лексикон (и одиночный, и мультивыбор). Значение поля
             // остаётся сырым (для multiple ContentParser разобьёт его в массив ключей,
             // чтобы $field был iterable в Fenom).
