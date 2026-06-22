@@ -14,6 +14,14 @@ class LexiconManager
     private \modX  $modx;
     private array  $properties;
 
+    /**
+     * Кэш rid → идентификатор лексикона за запрос. Метод зовётся per-resource
+     * (каталог), а при lexiconFilenameField=alias делал бы запрос к modResource +
+     * invokeEvent на КАЖДЫЙ вызов. Эффективен благодаря request-scoped Mpc
+     * (один LexiconManager на запрос — см. Mpc::instance()).
+     */
+    private array  $identifierCache = [];
+
     public function __construct(\modX $modx, array $properties)
     {
         $this->modx       = $modx;
@@ -155,6 +163,10 @@ class LexiconManager
 
     public function getResourceIdentifierById(int $rid): string
     {
+        if (isset($this->identifierCache[$rid])) {
+            return $this->identifierCache[$rid];
+        }
+        $cacheKey = $rid; // ниже $rid переписывается значением поля (alias) — фиксируем ключ
         $field = self::normalizeFilenameField($this->properties['lexiconFilenameField'] ?? 'id');
         if ($field !== 'id') {
             $q = $this->modx->newQuery('modResource');
@@ -188,7 +200,7 @@ class LexiconManager
             ? $this->modx->event->returnedValues['rid'] : $rid;
         // идентификатор становится именем файла лексикона — запрещаем traversal
         // (mpcOnGetResourceIdentifier может вернуть '../../evil').
-        return preg_replace('/[^a-zA-Z0-9_\-]/', '', (string)$identifier);
+        return $this->identifierCache[$cacheKey] = preg_replace('/[^a-zA-Z0-9_\-]/', '', (string)$identifier);
     }
 
     public function getLexicons(string $rid, string $basePath): array

@@ -9,6 +9,6 @@ use MpcServices\Mpc;
 $corePath = $modx->getOption('core_path', '', MODX_CORE_PATH);
 require_once $corePath . 'components/migxpageconfigurator/services/vendor/autoload.php';
 
-$mpc = new Mpc($modx);
+$mpc = Mpc::instance($modx);
 $resource = $rid ? $modx->getObject('modResource', $rid) : $modx->resource;
 return $mpc->getParsedConfigPath($resource);

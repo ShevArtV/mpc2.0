@@ -64,16 +64,16 @@ class pdoToolsOnFenomInit extends PluginHandler
     {
         $id = $args[0];
         $template = $args[1];
-        $Mpc = new Mpc($this->modx);
-        $Mpc->loadLexicons($id, $template);
+        // Request-scoped singleton: модификатор зовётся per-resource (десятки раз
+        // на каталоге), а конструктор Mpc дорогой. См. Mpc::instance().
+        Mpc::instance($this->modx)->loadLexicons($id, $template);
     }
 
     private function lexiconsarr($args)
     {
         $id = $args[0];
         $template = $args[1];
-        $Mpc = new Mpc($this->modx);
-        return $Mpc->getResourceLexicons($id, $template);
+        return Mpc::instance($this->modx)->getResourceLexicons($id, $template);
     }
 
     private function version($args)

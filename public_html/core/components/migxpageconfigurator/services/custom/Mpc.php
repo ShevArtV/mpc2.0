@@ -42,12 +42,39 @@ class Mpc
     private array $parentResourceIdCache = [];
 
     /**
+     * Request-scoped singleton (см. instance()).
+     */
+    private static ?self $instance = null;
+
+    /**
      * @param \modX $modx
      */
     public function __construct(\modX $modx)
     {
         $this->modx = $modx;
         $this->initialize();
+    }
+
+    /**
+     * Request-scoped singleton для ФРОНТ-ЧТЕНИЯ: рендер, lexicon-модификаторы Fenom
+     * (reslexicons/lexiconsarr) и сниппеты (getstaticsection/mpccontacts/
+     * getparsedconfigpath). Конструктор дорогой (поднимает Grabber/Cutter/Render +
+     * пресеты/сэмплы), а на каталоге эти точки зовутся десятки раз — без шаринга это
+     * N× тяжёлой инициализации и постоянно пустой parentResourceIdCache.
+     *
+     * Шаринг между ресурсами/секциями ОДНОГО запроса безопасен: инстанс
+     * ресурс-нейтрален — ресурс везде передаётся аргументом (loadLexicons/
+     * getResourceLexicons/getParsedConfigPath), берётся per-call из $modx->resource
+     * (getstaticsection) или переустанавливается в начале Render::prepareResourceData
+     * (currentTheme/wrapperTpl/contacts); кэши ключуются по resourceId/templateId
+     * или инвариантны на запрос. В PHP-FPM статика живёт один HTTP-запрос.
+     *
+     * НЕ использовать для НАРЕЗКИ (process): Grabber/Cutter держат per-file
+     * состояние — для CLI и OnDocFormSave создавайте отдельный new Mpc().
+     */
+    public static function instance(\modX $modx): self
+    {
+        return self::$instance ??= new self($modx);
     }
 
     /**

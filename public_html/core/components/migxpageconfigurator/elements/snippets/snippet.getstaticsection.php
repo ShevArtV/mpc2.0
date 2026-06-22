@@ -10,7 +10,7 @@ use MpcServices\Mpc;
 $corePath = $modx->getOption('core_path', '', MODX_CORE_PATH);
 
 require_once $corePath . 'components/migxpageconfigurator/services/vendor/autoload.php';
-$Mpc = new Mpc($modx);
+$Mpc = Mpc::instance($modx);
 
 $config = '';
 if ($lang_key) {

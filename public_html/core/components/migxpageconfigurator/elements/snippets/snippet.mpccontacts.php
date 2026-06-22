@@ -32,7 +32,7 @@ $outputSeparator = (string)($scriptProperties['outputSeparator'] ?? '');
 $limit           = (int)($scriptProperties['limit'] ?? 0);
 $toPlaceholder   = trim((string)($scriptProperties['toPlaceholder'] ?? ''));
 
-$Mpc = new Mpc($modx);
+$Mpc = Mpc::instance($modx);
 // [placement][ckey] => {type,value,fvalue,caption,attributes,icon,placement}
 $all = $Mpc->render->getContacts();
 

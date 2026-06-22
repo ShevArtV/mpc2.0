@@ -1,3 +1,18 @@
+2.5.51-rc
+==============
+- ОПТИМИЗАЦИЯ: request-scoped singleton Mpc для фронт-чтения. Lexicon-модификаторы
+  Fenom (reslexicons/lexiconsarr) и сниппеты (getstaticsection/mpccontacts/
+  getparsedconfigpath) зовутся per-resource (десятки раз на каталоге) и каждый раз
+  создавали `new Mpc()` — а конструктор поднимает Grabber/Cutter/Render (пресеты,
+  сэмплы, чтение конфигов). Теперь общий инстанс на запрос (Mpc::instance()).
+  Инстанс ресурс-нейтрален (ресурс везде передаётся аргументом / берётся per-call
+  из $modx->resource / переустанавливается в Render::prepareResourceData), нарезка
+  по-прежнему через отдельный new Mpc(). + кэш LexiconManager: rid → идентификатор
+  лексикона за запрос (при lexicon_filename_field=alias убирает запрос+invokeEvent
+  на каждый per-resource вызов). Файлы: Mpc.php, Handlers/Grabber/LexiconManager.php,
+  Plugins/pdoToolsOnFenomInit.php, elements/snippets/snippet.{getstaticsection,
+  mpccontacts,getparsedconfigpath}.php.
+
 2.5.50-rc
 ==============
 - ИСПРАВЛЕНО: для listbox/option-поля с динамическими опциями (data-mpc-values
