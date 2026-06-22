@@ -21,6 +21,9 @@ class ContentParser
 
     public function getFieldsValues(string $html): array
     {
+        // Граница секции: решения listbox фиксируются по первому элементу поля
+        // в пределах одной секции (см. FieldValueExtractor::listboxDecision).
+        $this->fieldValueExtractor->resetListboxDecisions();
         $fields = $this->parseHTML($html);
         foreach ($fields as $k => $v) {
             if (is_array($v)) {
@@ -36,6 +39,9 @@ class ContentParser
         $fieldAttrName = $options['fieldAttrName'] ?? 'data-mpc-field';
         $itemAttrName = $options['itemAttrName'] ?? 'data-mpc-item';
         $idx = $options['idx'] ?? 0;
+        // Путь имён полей БЕЗ индексов строк — стабильный ключ поля списка
+        // (одинаков для всех items одного поля). По нему фиксируется решение listbox.
+        $schemaParent = $options['schemaParent'] ?? '';
 
         $entries = $this->parser->findByAttribute($html, '[' . $fieldAttrName . ']');
         if (!count($entries)) {
@@ -54,6 +60,7 @@ class ContentParser
                 'fieldName' => $options['fieldName'] ?? $fieldName,
                 'parentFieldName' => $options['parentFieldName'] ?? '',
                 'idx' => $idx,
+                'schemaKey' => ($schemaParent !== '' ? $schemaParent . '_' : '') . $fieldName,
             ];
 
             if ($row->tagName() === 'img' && !in_array($fieldName, ['list_images', 'list_pictures'])) {
@@ -81,6 +88,7 @@ class ContentParser
                         'idx' => $k,
                         'parentFieldName' => $parentFieldName,
                         'fieldName' => $options['fieldName'] ?? null,
+                        'schemaParent' => ($schemaParent !== '' ? $schemaParent . '_' . $fieldName : $fieldName),
                     ]);
                     $fields[$fieldName][$k] = array_merge($fields[$fieldName][$k], $value);
                 }
@@ -90,7 +98,9 @@ class ContentParser
                 // MODX/migx — admin-сетка корректно round-trip'ит; массив-объект
                 // она бы застрингифила). Нормализуем из шаблонного "tg,ph" / "tg||ph".
                 // Рендер итерирует через `| split:'||'` (см. PlaceholderProcessor).
-                if (OptionFieldHelper::isMultiOptionFtype((string)$row->getAttribute('data-mpc-ftype'))) {
+                // Множественность — по зафиксированному (первому) решению поля,
+                // а не по ftype текущего item: поле списка определяется один раз.
+                if ($this->fieldValueExtractor->isMultiOptionField($row, $lexiconOptions)) {
                     $keys = preg_split('/\s*(?:,|\|\|)\s*/', (string)$val, -1, PREG_SPLIT_NO_EMPTY);
                     $val = implode('||', $keys ?: []);
                 }

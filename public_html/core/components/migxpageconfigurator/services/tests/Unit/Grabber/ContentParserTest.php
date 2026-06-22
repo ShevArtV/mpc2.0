@@ -173,4 +173,30 @@ class ContentParserTest extends TestCase
         );
         $this->assertSame('My-Page-Alias', $result['page']);
     }
+
+    public function testListboxDecisionTakenFromFirstListItem(): void
+    {
+        $parser = $this->makeParser();
+        // Поле списка определяется ОДИН раз: тип/множественность listbox берутся
+        // по ПЕРВОМУ item. Тут item[0] — одиночный listbox, item[1] объявлен как
+        // listbox-multiple с другими опциями — но переопределять не должен.
+        $html = '
+            <div data-mpc-field="cards">
+                <div data-mpc-item="cards">
+                    <span data-mpc-field-1="opt" data-mpc-values="A||B" data-mpc-ftype="listbox">A</span>
+                </div>
+                <div data-mpc-item="cards">
+                    <span data-mpc-field-1="opt" data-mpc-values="X||Y" data-mpc-ftype="listbox-multiple">X,Y</span>
+                </div>
+            </div>
+        ';
+        $result = $parser->getFieldsValues($html);
+        $cards  = json_decode($result['cards'], true);
+        // Первый item — одиночный listbox: значение нормализуется как одно.
+        $this->assertSame('a', $cards[0]['opt']);
+        // Второй item: решение «одиночный» взято от первого, поэтому "X,Y" НЕ
+        // разбивается в набор ключей через "||" (что дал бы listbox-multiple),
+        // а нормализуется как одно значение → "xy" (не "x||y").
+        $this->assertSame('xy', $cards[1]['opt']);
+    }
 }

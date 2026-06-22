@@ -22,6 +22,14 @@ class FieldValueExtractor
     private LexiconManager $lexiconManager;
     private Parser $parser;
 
+    /**
+     * Решение о формате/лексиконизации listbox-поля, зафиксированное по ПЕРВОМУ
+     * его элементу. В списке (MIGX) поле определяется один раз — последующие items
+     * не должны переопределять опции/тип. Ключ — путь схемы без индексов строк
+     * (options['schemaKey']); сбрасывается на каждую секцию (resetListboxDecisions).
+     */
+    private array $listboxDecisions = [];
+
     public function __construct(
         array $properties,
         MediaDownloader $mediaDownloader,
@@ -233,20 +241,65 @@ class FieldValueExtractor
         return '';
     }
 
+    /**
+     * Сброс зафиксированных решений listbox. Зовётся на границе секции
+     * (ContentParser::getFieldsValues), чтобы одноимённые поля разных секций
+     * не делили решение.
+     */
+    public function resetListboxDecisions(): void
+    {
+        $this->listboxDecisions = [];
+    }
+
+    /**
+     * Решение о listbox-поле, зафиксированное по ПЕРВОМУ его элементу: тип опций
+     * (data-mpc-values), множественность (data-mpc-ftype) и динамика (@SELECT).
+     * В списке поле обрабатывается для каждого item, но определяется один раз —
+     * последующие items берут это же решение (их innerHtml-значение остаётся своим).
+     * Ключ — путь схемы без индексов строк (options['schemaKey']); вне списка
+     * совпадает с именем поля.
+     */
+    private function listboxDecision(Element $element, array $options): array
+    {
+        $key = (string)($options['schemaKey'] ?? ($options['fieldName'] ?? ''));
+        if (!isset($this->listboxDecisions[$key])) {
+            $rawValues = (string)$element->getAttribute('data-mpc-values');
+            $this->listboxDecisions[$key] = [
+                'isListbox' => $rawValues !== '',
+                'rawValues' => $rawValues,
+                'multiple'  => OptionFieldHelper::isMultiOptionFtype((string)$element->getAttribute('data-mpc-ftype')),
+                'dynamic'   => $rawValues !== '' && OptionFieldHelper::classifyListboxOptions($rawValues)['mode'] === 'dynamic',
+            ];
+        }
+        return $this->listboxDecisions[$key];
+    }
+
+    /**
+     * Множественность listbox-поля по зафиксированному (первому) решению —
+     * для ContentParser (нормализация значения в "||"-набор ключей).
+     */
+    public function isMultiOptionField(Element $element, array $options): bool
+    {
+        return $this->listboxDecision($element, $options)['multiple'];
+    }
+
     public function getValue(Element $element, ?array $options = []): string
     {
         // listbox (data-mpc-values): значение поля — СЫРОЙ ключ опции; капшены
         // опций уходят в лексикон ключами {prefix}_{field}_{optionKey}. Само
         // значение НЕ лексиконим как text-ключ (enum, не переводимый текст).
-        $rawValues = (string)$element->getAttribute('data-mpc-values');
-        if ($rawValues !== '') {
-            $result = trim($element->innerHtml());
-            $multiple = OptionFieldHelper::isMultiOptionFtype((string)$element->getAttribute('data-mpc-ftype'));
+        // Решение (тип/опции/динамика) — по ПЕРВОМУ элементу поля (см. listboxDecision),
+        // значение innerHtml берётся у текущего элемента.
+        $decision = $this->listboxDecision($element, (array)$options);
+        if ($decision['isListbox']) {
+            $result   = trim($element->innerHtml());
+            $rawValues = $decision['rawValues'];
+            $multiple  = $decision['multiple'];
             // Динамические опции (@SELECT …): реальные значения приходят из БД
             // (id / алиас ресурса / произвольная строка) — их НЕЛЬЗЯ нормализовать
             // (нормализация порежет алиас: дефисы, регистр, не-латиницу) и нечего
             // лексиконить (капшенов в data-mpc-values нет). Значение — как есть.
-            if (OptionFieldHelper::classifyListboxOptions($rawValues)['mode'] === 'dynamic') {
+            if ($decision['dynamic']) {
                 return $result;
             }
             // Капшены опций → лексикон (и одиночный, и мультивыбор). Значение поля
