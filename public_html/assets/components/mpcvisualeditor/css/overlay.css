@@ -365,11 +365,20 @@ body.mpcve-on .mpcve-editing:empty::before {
 }
 
 /* --- скрытые поля у блока: триггер + панель -------------------------- */
+/* Портал-слой поверх страницы: не зависит от overflow/позиции блоков. Сам слой
+   клики не перехватывает (pointer-events:none), а кнопки в нём — перехватывают. */
+.mpcve-hidden-layer {
+    position: fixed;
+    inset: 0;
+    z-index: 99990;
+    pointer-events: none;
+}
+
 .mpcve-hidden-trigger {
     position: absolute;
     top: 4px;
     right: 4px;
-    z-index: 99990;
+    pointer-events: auto;
     padding: 2px 9px;
     border: 0;
     border-radius: 999px;

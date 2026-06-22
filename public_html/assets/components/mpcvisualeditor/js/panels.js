@@ -260,13 +260,57 @@ function itemHidden(itemEl) {
 }
 
 // --- триггеры у блоков + панель ----------------------------------------
+// Кнопки-триггеры рендерятся не внутрь блока (там их обрезает overflow:hidden,
+// схлопывает нулевая высота строки и перекрывает оформление), а в отдельный
+// портал-слой position:fixed поверх страницы. Позиция каждой кнопки считается
+// от getBoundingClientRect её блока и пересчитывается на скролле/ресайзе.
+var _triggerLayer = null;
+var _triggerPairs = [];   // [{ el, btn }]
+var _reposScheduled = false;
+
+function ensureTriggerLayer() {
+    if (_triggerLayer) { return _triggerLayer; }
+    var layer = document.createElement('div');
+    layer.className = 'mpcve-hidden-layer';
+    document.body.appendChild(layer);
+    _triggerLayer = layer;
+    // capture: ловим скролл и вложенных контейнеров, а не только окна.
+    window.addEventListener('scroll', scheduleReposition, true);
+    window.addEventListener('resize', scheduleReposition);
+    return layer;
+}
+
+function scheduleReposition() {
+    if (_reposScheduled) { return; }
+    _reposScheduled = true;
+    window.requestAnimationFrame(function () {
+        _reposScheduled = false;
+        repositionTriggers();
+    });
+}
+
+function repositionTriggers() {
+    var vw = window.innerWidth;
+    var vh = window.innerHeight;
+    _triggerPairs.forEach(function (p) {
+        if (!p.el.isConnected) { p.btn.style.display = 'none'; return; }
+        var r = p.el.getBoundingClientRect();
+        // Блок не виден (нулевой размер или целиком за пределами экрана) — прячем.
+        if (r.width === 0 || r.height === 0 || r.bottom <= 0 || r.top >= vh || r.right <= 0 || r.left >= vw) {
+            p.btn.style.display = 'none';
+            return;
+        }
+        p.btn.style.display = '';
+        // Правый-верхний угол блока, с зажимом в пределах экрана.
+        var top = Math.max(4, Math.min(r.top + 4, vh - 4 - p.btn.offsetHeight));
+        var right = Math.max(4, vw - r.right + 4);
+        p.btn.style.top = top + 'px';
+        p.btn.style.right = right + 'px';
+    });
+}
+
 function attachTrigger(blockEl, title, descriptors, btnText) {
-    // Якорим кнопку абсолютно в углу блока; если блок position:static —
-    // временно делаем relative (откатываем в removeHiddenTriggers).
-    if (window.getComputedStyle(blockEl).position === 'static') {
-        blockEl.style.position = 'relative';
-        blockEl.setAttribute('data-mpcve-posfix', '1');
-    }
+    var layer = ensureTriggerLayer();
     var btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'mpcve-hidden-trigger';
@@ -277,7 +321,8 @@ function attachTrigger(blockEl, title, descriptors, btnText) {
         e.stopPropagation();
         openBlockPanel(title, descriptors);
     });
-    blockEl.appendChild(btn);
+    layer.appendChild(btn);
+    _triggerPairs.push({ el: blockEl, btn: btn });
 }
 
 export function buildHiddenTriggers() {
@@ -303,13 +348,21 @@ export function buildHiddenTriggers() {
             triggers++;
         }
     });
+    repositionTriggers();
     console.info('[mpcVE] скрытые поля: секций в DOM=' + sections.length +
         ', строк списков=' + items.length + ', кнопок навешено=' + triggers +
         (sections.length === 0 ? ' — нет data-mpc-section: проверь mpc_edit_mode (маркеры в рендере)' : ''));
 }
 
 export function removeHiddenTriggers() {
-    document.querySelectorAll('.mpcve-hidden-trigger').forEach(function (b) { b.remove(); });
+    _triggerPairs = [];
+    if (_triggerLayer) {
+        _triggerLayer.remove();
+        _triggerLayer = null;
+        window.removeEventListener('scroll', scheduleReposition, true);
+        window.removeEventListener('resize', scheduleReposition);
+    }
+    // Совместимость со старой версией: снять временный position у блоков.
     document.querySelectorAll('[data-mpcve-posfix]').forEach(function (el) {
         el.style.position = '';
         el.removeAttribute('data-mpcve-posfix');
