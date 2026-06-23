@@ -85,10 +85,18 @@ class SpecialTagProcessor
             return $properties;
         }
 
+        // Имя чанка ТЕКУЩЕГО файла: его корневой элемент сам несёт data-mpc-parse и
+        // попадает в выборку — заменять его нельзя (self-reference). Вложенные чанки
+        // (другое имя) обрабатываем.
+        $self = isset($properties['element']) ? trim((string)$properties['element']->getAttribute('data-mpc-chunk')) : '';
+
         foreach ($parses as $parse) {
             $chunk = trim((string)$parse->getAttribute('data-mpc-chunk'));
             if ($chunk === '' || $chunk[0] === '/' || strpos($chunk, '..') !== false || strpos($chunk, '"') !== false) {
                 continue; // пустой / абсолютный путь / path traversal / поломка @FILE-строки (V5)
+            }
+            if ($self !== '' && $chunk === $self) {
+                continue; // сам себя не парсим
             }
             $symbol     = trim((string)$parse->getAttribute('data-mpc-symbol')) ?: (!empty($properties['isStatic']) ? '##' : '{');
             $params     = trim((string)$parse->getAttribute('data-mpc-parse'));
@@ -120,10 +128,18 @@ class SpecialTagProcessor
             return $properties;
         }
 
+        // Имя чанка ТЕКУЩЕГО файла: его корневой элемент сам несёт data-mpc-include и
+        // попадает в выборку — заменять его нельзя (self-reference). Вложенные чанки
+        // (другое имя) обрабатываем.
+        $self = isset($properties['element']) ? trim((string)$properties['element']->getAttribute('data-mpc-chunk')) : '';
+
         foreach ($includes as $include) {
             $chunk = trim((string)$include->getAttribute('data-mpc-chunk'));
             if ($chunk === '' || $chunk[0] === '/' || strpos($chunk, '..') !== false || strpos($chunk, '"') !== false) {
                 continue; // пустой / абсолютный путь / path traversal / поломка file:-пути (V5)
+            }
+            if ($self !== '' && $chunk === $self) {
+                continue; // сам себя не инклюдим
             }
             $path        = $this->properties['pathToChunks'] . $chunk;
             $symbol      = trim((string)$include->getAttribute('data-mpc-symbol')) ?: '{';

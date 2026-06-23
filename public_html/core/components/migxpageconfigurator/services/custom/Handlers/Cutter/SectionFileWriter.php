@@ -226,12 +226,13 @@ class SectionFileWriter
         $properties = $this->placeholderProcessor->setPlaceholders($properties);
         $properties = $this->specialTagProcessor->setSnippetTags($properties);
 
-        if (!$properties['element']->hasAttribute('data-mpc-parse')) {
-            $properties = $this->specialTagProcessor->setParseChunks($properties);
-        }
-        if (!$properties['element']->hasAttribute('data-mpc-include')) {
-            $properties = $this->specialTagProcessor->setIncludeChunks($properties);
-        }
+        // ВСЕГДА обрабатываем parse/include — даже если сам элемент-чанк несёт
+        // data-mpc-parse/-include. Прежний гейт пропускал обработку целиком, из-за
+        // чего ВЛОЖЕННЫЕ в include/parse-чанк чанки не заменялись на {include}/{parse}
+        // в файле родителя (нарезались, но оставались сырой вёрсткой). От самоинклюда
+        // защищает self-skip по имени чанка внутри процессоров.
+        $properties = $this->specialTagProcessor->setParseChunks($properties);
+        $properties = $this->specialTagProcessor->setIncludeChunks($properties);
 
         $properties = $this->specialTagProcessor->removeHiddenPlaceholders($properties);
 

@@ -305,6 +305,13 @@ body.mpcve-on .mpcve-editing:empty::before {
     color: #2563eb;
 }
 
+/* Edit-mode: обёртки [data-mpc-unwrap] с маркером поля в режиме правки НЕ
+   снимаются (каттер оставляет их, чтобы редактор нашёл адрес поля). display:contents
+   убирает влияние такой обёртки на вёрстку — она ведёт себя как снятая. */
+[data-mpc-unwrap] {
+    display: contents !important;
+}
+
 /* Ряд действий «Выбрать существующий» + «По ссылке» (редактор картинки). */
 .mpcve-modal__picks {
     display: flex;

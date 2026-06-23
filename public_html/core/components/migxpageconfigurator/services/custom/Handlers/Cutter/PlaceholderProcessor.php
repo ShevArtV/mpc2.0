@@ -611,17 +611,40 @@ class PlaceholderProcessor
 
     /**
      * Удаляет обёртки [data-mpc-unwrap], оставляя только содержимое.
+     *
+     * EDIT-MODE (mpc_edit_mode): обёртку, несущую маркер поля
+     * (data-mpc-field / data-mpc-field-N) на своём открывающем теге, НЕ снимаем —
+     * иначе фронт-редактор mpcVE теряет адрес поля (элемент с маркером исчезает).
+     * Такая обёртка остаётся в DOM с data-mpc-unwrap, а CSS
+     * `[data-mpc-unwrap]{display:contents !important}` (overlay.css) убирает её
+     * влияние на вёрстку. В прод-режиме (editMode=0) снимаем как раньше — поведение
+     * нарезки не меняется.
      */
     public function unwrapBlock(string $html): string
     {
+        $editMode = !empty($this->properties['editMode']);
         if ($unwrap = $this->parser->findByAttribute($html, '[data-mpc-unwrap]')) {
             foreach ($unwrap as $attr) {
-                $attrValue = $this->parser->getHTMLString($attr, true);
                 $search = $this->parser->getHTMLString($attr);
+                if ($editMode && $this->wrapperHasFieldMarker($search)) {
+                    continue;
+                }
+                $attrValue = $this->parser->getHTMLString($attr, true);
                 $html = str_replace($search, $attrValue, $html);
             }
         }
         return $html;
+    }
+
+    /**
+     * Есть ли маркер поля (data-mpc-field / data-mpc-field-N) на ОТКРЫВАЮЩЕМ теге
+     * обёртки (а не на её детях — иначе поле внутри ошибочно удержало бы обёртку).
+     */
+    private function wrapperHasFieldMarker(string $elementHtml): bool
+    {
+        $gt = strpos($elementHtml, '>');
+        $openTag = $gt !== false ? substr($elementHtml, 0, $gt + 1) : $elementHtml;
+        return (bool)preg_match('/\sdata-mpc-field(-\d+)?[\s=>]/i', $openTag);
     }
 
     /**
