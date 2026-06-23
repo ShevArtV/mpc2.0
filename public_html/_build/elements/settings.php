@@ -204,6 +204,15 @@ return [
         'value' => 'components/migxpageconfigurator/elements/media/mime_to_ext.json',
         'area' => 'mpc_media',
     ],
+    // Дёргать нативные события файлового менеджера (OnFileManagerBeforeUpload/
+    // OnFileManagerUpload) при скачивании медиа по URL — и в вёрстке (грабер), и в
+    // редакторе. Включает проектные плагины-конвертеры (напр. migxresizeonupload:
+    // jpg→webp). Выключить, если конвертер в CLI-нарезке нежелателен.
+    'mpc_fire_upload_event' => [
+        'xtype' => 'combo-boolean',
+        'value' => '1',
+        'area' => 'mpc_media',
+    ],
     'mpc_lazyload_enabled' => [
         'xtype' => 'combo-boolean',
         'value' => '1',

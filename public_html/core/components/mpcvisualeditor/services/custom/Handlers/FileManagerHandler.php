@@ -249,6 +249,170 @@ class FileManagerHandler
     }
 
     /**
+     * Скачать файл по внешнему URL и положить в источник — «вставил ссылку →
+     * скачалось» в редакторе. Тот же механизм, что у грабера вёрстки
+     * (RemoteMediaIngestor: SSRF-гард, таймаут, лимит размера, нативные события
+     * → плагины-конвертеры). Валидация типа/контента — тем же ядром MediaLibrary,
+     * что и ручной upload(). Ответ идентичен upload(): {url, path}.
+     *
+     * Синхронно с жёсткими лимитами: таймаут скачивания (mpcve_url_download_timeout)
+     * заведомо меньше серверного, размер ≤ mpcve_max_upload. Тяжёлое/медленное —
+     * понятная ошибка «загрузите вручную», без зависания фронта.
+     */
+    public function downloadUrl(array $request): array
+    {
+        if (!(bool)$this->modx->getOption('mpcve_url_download_enabled', null, true)) {
+            return $this->err($this->modx->lexicon('mpcve_err_url_disabled'));
+        }
+        $source = $this->getSource();
+        if (!$source) {
+            return $this->err($this->modx->lexicon('mpcve_err_source'));
+        }
+
+        $url    = trim((string)($request['url'] ?? ''));
+        $accept = (string)($request['accept'] ?? 'any');
+        if ($url === '' || stripos($url, 'http') !== 0) {
+            return $this->err($this->modx->lexicon('mpcve_err_url_invalid'));
+        }
+
+        $maxBytes = (int)$this->modx->getOption('mpcve_max_upload', null, 10 * 1024 * 1024);
+        $timeout  = (int)$this->modx->getOption('mpcve_url_download_timeout', null, 20);
+        $ingestor = new \MpcServices\Handlers\Media\RemoteMediaIngestor($this->modx, [
+            'maxBytes'       => $maxBytes,
+            'timeout'        => $timeout,
+            'connectTimeout' => min(10, max(1, $timeout)),
+        ]);
+
+        // Расширение: из имени в URL; если нет/не подходит под accept — по Content-Type
+        // (HEAD), ограничив допустимыми для accept расширениями редактора.
+        $urlPath  = (string)(parse_url($url, PHP_URL_PATH) ?: $url);
+        $origBase = (string)pathinfo($urlPath, PATHINFO_FILENAME);
+        $ext      = MediaLibrary::extOf($urlPath);
+        if ($ext === '' || !$this->acceptExt($ext, $accept)) {
+            $detected = $ingestor->detectExtensionByContentType(
+                $url,
+                $this->acceptExtList($accept),
+                \MpcServices\Handlers\Media\RemoteMediaIngestor::loadMimeToExt($this->modx)
+            );
+            if ($detected !== '') {
+                $ext = $detected;
+            }
+        }
+        if ($ext === '' || !$this->acceptExt($ext, $accept) || $this->isBlockedName('x.' . $ext)) {
+            return $this->err($this->modx->lexicon('mpcve_err_upload_ext'));
+        }
+
+        $content = $ingestor->fetch($url);
+        if ($content === '') {
+            return $this->err($this->urlErrLexicon($ingestor->getLastError()));
+        }
+        if (!$ingestor->isAllowedContent($content)) {
+            return $this->err($this->modx->lexicon('mpcve_err_upload_ext'));
+        }
+
+        // Валидация содержимого ТЕМ ЖЕ ядром, что у ручной загрузки: пишем во tmp,
+        // прогоняем mime/getimagesize, санитайзим SVG. tmp удаляем в finally.
+        $tmp = (string)tempnam(sys_get_temp_dir(), 'mpcve_dl_');
+        try {
+            file_put_contents($tmp, $content);
+
+            if (!MediaLibrary::mimeNotExecutable($tmp)) {
+                return $this->err($this->modx->lexicon('mpcve_err_upload_ext'));
+            }
+            $typeKey = MediaLibrary::typeKeyOfExt($ext);
+            if ($typeKey === 'images' && !MediaLibrary::isImageContent($tmp, $ext)) {
+                return $this->err($this->modx->lexicon('mpcve_err_upload_ext'));
+            }
+            if (($typeKey === 'videos' || $typeKey === 'audios')
+                && !MediaLibrary::isMediaContent($tmp, $typeKey === 'videos' ? 'video' : 'audio')) {
+                return $this->err($this->modx->lexicon('mpcve_err_upload_ext'));
+            }
+            if ($ext === 'svg') {
+                $content = MediaLibrary::sanitizeSvg($content);
+            }
+
+            // Папка: явный path (менеджер) или каноническая по accept (редактор) —
+            // та же логика, что в upload().
+            if (array_key_exists('path', $request)) {
+                $cleanDir = $this->cleanPath((string)$request['path']);
+            } else {
+                $cleanDir = $this->cleanPath($this->lib->canonicalDir(MediaLibrary::typeKeyOfAccept($accept)));
+            }
+            if (!$this->lib->typeFitsDir($ext, $cleanDir)) {
+                return $this->err($this->modx->lexicon('mpcve_fm_err_type_dir'));
+            }
+
+            $dir     = $cleanDir === '' ? '' : rtrim($cleanDir, '/') . '/';
+            $base    = MediaLibrary::sanitizeBase($origBase) ?: 'file';
+            $desired = $this->uniqueName($source, $dir, $base, $ext);
+
+            // Запись + нативные события (конвертеры) + резолв финального URL.
+            $res = $ingestor->store($source, $dir, $desired, $content);
+            if ($res === null) {
+                return $this->err($this->sourceErr($source) ?: $this->modx->lexicon('mpcve_err_upload'));
+            }
+
+            return [
+                'success' => true,
+                'message' => $this->modx->lexicon('mpcve_uploaded'),
+                'data'    => ['url' => $res['url'], 'path' => $res['path']],
+            ];
+        } finally {
+            @unlink($tmp);
+        }
+    }
+
+    /** Допустимые расширения редактора для accept (для детекта по Content-Type). */
+    private function acceptExtList(string $accept): array
+    {
+        switch ($accept) {
+            case 'image': return MediaLibrary::IMAGE_EXT;
+            case 'video': return MediaLibrary::VIDEO_EXT;
+            case 'audio': return MediaLibrary::AUDIO_EXT;
+            case 'media': return array_merge(MediaLibrary::IMAGE_EXT, MediaLibrary::VIDEO_EXT, MediaLibrary::AUDIO_EXT);
+            default:      return array_merge(MediaLibrary::IMAGE_EXT, MediaLibrary::VIDEO_EXT, MediaLibrary::AUDIO_EXT);
+        }
+    }
+
+    /**
+     * Имя без молчаливой перезаписи: при коллизии на диске добавляем -2, -3…
+     * (createObject перетёр бы одноимённый файл — в отличие от нативного upload
+     * с upload_check_exists). Проверка по basePath источника.
+     */
+    private function uniqueName($source, string $dir, string $base, string $ext): string
+    {
+        $absDir = method_exists($source, 'getBasePath')
+            ? rtrim((string)$source->getBasePath(), '/') . '/' . ltrim($dir, '/')
+            : '';
+        $name = $base . '.' . $ext;
+        if ($absDir === '' || !is_file($absDir . $name)) {
+            return $name;
+        }
+        for ($i = 2; $i <= 999; $i++) {
+            $candidate = $base . '-' . $i . '.' . $ext;
+            if (!is_file($absDir . $candidate)) {
+                return $candidate;
+            }
+        }
+        return $base . '-' . uniqid() . '.' . $ext;
+    }
+
+    /** Код ошибки скачивания RemoteMediaIngestor → лексикон для тоста. */
+    private function urlErrLexicon(string $code): string
+    {
+        switch ($code) {
+            case \MpcServices\Handlers\Media\RemoteMediaIngestor::ERR_SSRF:
+                return $this->modx->lexicon('mpcve_err_url_unsafe');
+            case \MpcServices\Handlers\Media\RemoteMediaIngestor::ERR_TOOLARGE:
+                return $this->modx->lexicon('mpcve_err_url_toolarge');
+            case \MpcServices\Handlers\Media\RemoteMediaIngestor::ERR_HTTP:
+                return $this->modx->lexicon('mpcve_err_url_http');
+            default:
+                return $this->modx->lexicon('mpcve_err_url_failed');
+        }
+    }
+
+    /**
      * Папка внутри источника, где лежит файл по его URL (обратное к getObjectUrl).
      * Фронт зовёт перед открытием менеджера/загрузкой, чтобы стартовать в папке
      * текущего значения поля. Не резолвится → '' (корень).

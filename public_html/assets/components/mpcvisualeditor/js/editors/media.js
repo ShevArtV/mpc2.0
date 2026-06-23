@@ -18,6 +18,7 @@ import { api, uploadMedia, folderOf } from '../api.js';
 import { toast, esc } from '../dom.js';
 import { fieldAddress, fieldConfigRecord } from '../address.js';
 import { openFileManager } from '../filemanager.js';
+import { makeUrlButton } from './urlrow.js';
 
 function boolOf(v) { return v === true || v === 1 || v === '1' || v === 'true'; }
 function fileName(path) { return (String(path || '').split('?')[0].split('/').pop()) || ''; }
@@ -126,6 +127,12 @@ export function openMediaEditor(el, override) {
                 if (file) { model.file = null; model.src = file.url; model.preview = file.url; name.textContent = label(); }
             });
         });
+        // По ссылке: скачиваем и работаем как с выбранным существующим файлом.
+        container.appendChild(makeUrlButton({
+            accept: fmAccept,
+            getCurrentUrl: function () { return model.src; },
+            onResolved: function (localUrl) { model.file = null; model.src = localUrl; model.preview = localUrl; name.textContent = label(); }
+        }));
     }
 
     // Постер — картинка: превью-thumb + замена + выбор существующего.
@@ -155,6 +162,11 @@ export function openMediaEditor(el, override) {
                 if (file) { poster.file = null; poster.src = file.url; poster.preview = file.url; draw(); }
             });
         });
+        container.appendChild(makeUrlButton({
+            accept: 'image',
+            getCurrentUrl: function () { return poster.src; },
+            onResolved: function (localUrl) { poster.file = null; poster.src = localUrl; poster.preview = localUrl; draw(); }
+        }));
     }
 
     fileSlot(overlay.querySelector('.mpcve-media__main'), main, accept);

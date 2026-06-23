@@ -44,6 +44,20 @@ return [
         'value' => 10485760,
         'area'  => 'mpcve_editor',
     ],
+    // «Вставил ссылку → скачалось»: загрузка медиа по внешнему URL из редактора.
+    'mpcve_url_download_enabled' => [
+        'xtype' => 'combo-boolean',
+        'value' => true,
+        'area'  => 'mpcve_editor',
+    ],
+    // Таймаут скачивания по ссылке (сек). Держать ЗАВЕДОМО меньше серверного
+    // max_execution_time / fastcgi_read_timeout — иначе фронт упрётся в обрыв
+    // соединения вместо понятной ошибки «загрузите вручную». Размер ≤ mpcve_max_upload.
+    'mpcve_url_download_timeout' => [
+        'xtype' => 'numberfield',
+        'value' => 20,
+        'area'  => 'mpcve_editor',
+    ],
     // Блокировка ресурса: TTL лока (сек) = idle-таймаут. Heartbeat продлевает,
     // пока идёт правка; без активности лок протухает и режим авто-завершается.
     'mpcve_lock_ttl' => [

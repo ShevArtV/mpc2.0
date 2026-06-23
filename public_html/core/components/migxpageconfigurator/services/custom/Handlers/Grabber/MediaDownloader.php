@@ -2,8 +2,15 @@
 
 namespace MpcServices\Handlers\Grabber;
 
+use MpcServices\Handlers\Media\RemoteMediaIngestor;
+
 /**
- * Скачивание медиафайлов по URL на сервер.
+ * Скачивание медиафайлов по URL на сервер (вёрстка → нарезка). Оркестрация:
+ * выбор источника, каталог по типу/секции/языку, дедуп, событие
+ * mpcOnBeforeDownloadFile. САМО скачивание и запись в источник делегированы
+ * RemoteMediaIngestor — единому механизму, общему с редактором mpcVE (вставил
+ * ссылку → скачалось). Через него же дёргаются нативные события файлового
+ * менеджера, поэтому проектные плагины-конвертеры срабатывают и при нарезке.
  * Полностью независим от DOM и парсинга.
  */
 class MediaDownloader
@@ -13,6 +20,7 @@ class MediaDownloader
     private string $currentSectionName = '';
     private \modX  $modx;
     private array  $properties;
+    private RemoteMediaIngestor $ingestor;
 
     /** @var \modMediaSource|null|false кэш источника (false — пробовали, нет) */
     private $source = null;
@@ -21,6 +29,12 @@ class MediaDownloader
     {
         $this->modx       = $modx;
         $this->properties = $properties;
+        // Грабер исторически без лимита размера (нарезка серверная, не фронт) —
+        // maxBytes=0. Сеть/запись/события — через единый сервис (общий с редактором).
+        $this->ingestor   = new RemoteMediaIngestor($modx, [
+            'timeout'        => 30,
+            'connectTimeout' => 10,
+        ]);
     }
 
     public function setCurrentSectionName(string $name): void
@@ -35,129 +49,19 @@ class MediaDownloader
         return in_array($extension, $this->properties['downloadExtensions']) ? $extension : '';
     }
 
+    /** Расширение по Content-Type (HTTP HEAD). Делегирует единому сервису. */
     public function detectExtensionByContentType(string $url): string
     {
-        if (!$this->isSafeUrl($url)) {
-            return '';
-        }
-        $ch = curl_init($url);
-        curl_setopt($ch, CURLOPT_NOBODY, true);
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt_array($ch, $this->curlSecurityOpts());
-        curl_setopt_array($ch, $this->curlResolveOpt($url)); // пин IP (anti-rebinding, V4)
-        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
-        curl_setopt($ch, CURLOPT_MAXREDIRS, 5);
-        curl_setopt($ch, CURLOPT_TIMEOUT, 10);
-        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
-        curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (compatible; MPC/2.0)');
-        curl_exec($ch);
-        $contentType = curl_getinfo($ch, CURLINFO_CONTENT_TYPE);
-        curl_close($ch);
-
-        if (!$contentType) {
-            return '';
-        }
-
-        $mime = strtolower(explode(';', $contentType)[0]);
-        $mimeToExt = $this->properties['mimeToExt'] ?? [];
-        $extension = $mimeToExt[$mime] ?? '';
-
-        return in_array($extension, $this->properties['downloadExtensions']) ? $extension : '';
+        return $this->ingestor->detectExtensionByContentType(
+            $url,
+            array_values((array)($this->properties['downloadExtensions'] ?? [])),
+            (array)($this->properties['mimeToExt'] ?? [])
+        );
     }
 
     protected function getBaseDir(): string
     {
         return dirname(__FILE__, 8);
-    }
-
-    /**
-     * Защита от SSRF: разрешаем только http/https и публичные адреса. Блокируем
-     * file://, gopher://, dict://, loopback, RFC-1918, link-local (включая
-     * 169.254.169.254 — cloud-metadata). Хост резолвится — проверяются ВСЕ IP.
-     */
-    protected function isSafeUrl(string $url): bool
-    {
-        $parts = parse_url($url);
-        if (!$parts || empty($parts['scheme']) || empty($parts['host'])) {
-            return false;
-        }
-        if (!in_array(strtolower($parts['scheme']), ['http', 'https'], true)) {
-            return false;
-        }
-        $host = $parts['host'];
-        $ips = [];
-        if (filter_var($host, FILTER_VALIDATE_IP)) {
-            $ips[] = $host;
-        } else {
-            foreach (@dns_get_record($host, DNS_A | DNS_AAAA) ?: [] as $r) {
-                if (!empty($r['ip'])) { $ips[] = $r['ip']; }
-                if (!empty($r['ipv6'])) { $ips[] = $r['ipv6']; }
-            }
-            if (!$ips) {
-                $ip = gethostbyname($host);
-                if ($ip && $ip !== $host) { $ips[] = $ip; }
-            }
-        }
-        if (!$ips) {
-            return false; // не резолвится — не качаем
-        }
-        foreach ($ips as $ip) {
-            if ($this->isBlockedIp($ip)) {
-                return false; // приватный/зарезервированный/loopback/link-local
-            }
-        }
-        // Пиним проверенный IP — чтобы curl не резолвил DNS заново (anti DNS-rebinding
-        // TOCTOU, V4). Берём первый прошедший проверку адрес.
-        $this->safeIp[strtolower($host)] = $ips[0];
-        return true;
-    }
-
-    /** host(lower) => проверенный IP для CURLOPT_RESOLVE (anti-rebinding). */
-    protected array $safeIp = [];
-
-    /** CURLOPT_RESOLVE-пин проверенного IP для хоста URL (порты 80/443). */
-    protected function curlResolveOpt(string $url): array
-    {
-        $host = strtolower((string)(parse_url($url, PHP_URL_HOST) ?? ''));
-        if ($host === '' || empty($this->safeIp[$host])) {
-            return [];
-        }
-        $ip = $this->safeIp[$host];
-        return [CURLOPT_RESOLVE => [$host . ':80:' . $ip, $host . ':443:' . $ip]];
-    }
-
-    /**
-     * Внутренний/опасный IP. FILTER_FLAG_NO_RES_RANGE до PHP 8.1 НЕ ловит
-     * IPv6 ::1/ULA/link-local — на целевом php-7.4 это обход SSRF (V4).
-     * Дополнительно нормализуем IPv4-mapped IPv6 (::ffff:127.0.0.1).
-     */
-    protected function isBlockedIp(string $ip): bool
-    {
-        $lc = strtolower(trim($ip, '[]'));
-        if (strpos($lc, '::ffff:') === 0 && filter_var(substr($lc, 7), FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)) {
-            $lc = substr($lc, 7);
-        }
-        if (!filter_var($lc, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
-            return true;
-        }
-        if ($lc === '::1' || $lc === '::' || preg_match('/^(fe80|fc|fd)/', $lc)) {
-            return true; // IPv6 loopback/unspecified/link-local/ULA (не ловится на 7.4)
-        }
-        return false;
-    }
-
-    /** Базовые curl-опции с защитой: SSL-верификация + только http/https. */
-    protected function curlSecurityOpts(): array
-    {
-        $opts = [
-            CURLOPT_SSL_VERIFYPEER => true,
-            CURLOPT_SSL_VERIFYHOST => 2,
-        ];
-        if (defined('CURLPROTO_HTTP')) {
-            $opts[CURLOPT_PROTOCOLS]       = CURLPROTO_HTTP | CURLPROTO_HTTPS;
-            $opts[CURLOPT_REDIR_PROTOCOLS] = CURLPROTO_HTTP | CURLPROTO_HTTPS;
-        }
-        return $opts;
     }
 
     public function sanitizeFileName(string $name): string
@@ -171,15 +75,15 @@ class MediaDownloader
         return trim($name, '-');
     }
 
+    /**
+     * Легаси: скачивание во временный путь под baseDir (НЕ в источник). Оставлено
+     * для обратной совместимости. SSRF-проверка и сеть — в RemoteMediaIngestor::fetch.
+     */
     public function download(string $url, string $path): string
     {
         if (!$path || strpos($path, '..') !== false) {
             return ''; // пустой путь или path traversal
         }
-        if (!$this->isSafeUrl($url)) {
-            return '';
-        }
-
         $baseDir  = $this->getBaseDir();
         $fullPath = $baseDir . $path;
         // итоговый каталог должен оставаться внутри baseDir
@@ -190,26 +94,10 @@ class MediaDownloader
         if (file_exists($fullPath)) {
             return $path;
         }
-
-        $ch = curl_init($url);
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt_array($ch, $this->curlSecurityOpts());
-        curl_setopt_array($ch, $this->curlResolveOpt($url)); // пин IP (anti-rebinding, V4)
-        curl_setopt($ch, CURLOPT_HEADER, false);
-        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
-        curl_setopt($ch, CURLOPT_MAXREDIRS, 5);
-        curl_setopt($ch, CURLOPT_TIMEOUT, 30);
-        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
-        curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (compatible; MPC/2.0)');
-        $content = curl_exec($ch);
-        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
-
-        if (!$content || $httpCode >= 400) {
-            $this->modx->log(\modX::LOG_LEVEL_ERROR, "[MPC MediaDownloader] Failed to download: $url (HTTP $httpCode)");
+        $content = $this->fetch($url); // fetch внутри проверяет isSafeUrl
+        if ($content === '') {
             return '';
         }
-
         return file_put_contents($fullPath, $content) ? $path : '';
     }
 
@@ -230,16 +118,14 @@ class MediaDownloader
 
     /**
      * Скачивает медиа по URL в ЕДИНЫЙ источник файлов (modMediaSource),
-     * каждый тип — в свою папку: <mediaPath><type>/[<section>/]. Возвращает
-     * публичный URL объекта (getObjectUrl) — он и пишется в поле/лексикон.
-     * Работа с источником — через его методы (createContainer/createObject).
+     * каждый тип — в свою папку: <type>/[<section>/]. Возвращает публичный URL
+     * объекта (с учётом возможной конвертации плагином) — он и пишется в
+     * поле/лексикон. Запись и нативные события — через RemoteMediaIngestor.
      */
     public function downloadFile(string $attrValue, string $type = 'others', string $language = ''): string
     {
-        // Расширение из URL (без сети). HTTP-HEAD (detectExtensionByContentType)
-        // НЕ дёргаем сразу: для внешних URL без расширения (loremflickr и т.п.)
-        // это сетевой запрос на КАЖДОЕ медиа при КАЖДОМ грабе, даже если файл уже
-        // скачан. Сначала пробуем найти уже скачанный файл локально.
+        // Расширение из URL (без сети). HTTP-HEAD НЕ дёргаем сразу: сначала пробуем
+        // найти уже скачанный файл локально.
         $extension = $this->checkDownloadExtension($attrValue);
 
         $source = $this->getMediaSource();
@@ -248,10 +134,7 @@ class MediaDownloader
             return $attrValue;
         }
 
-        // Каталог ВНУТРИ источника файлов: <download_paths[type]|type>/[<section>/].
-        // Источник mpcMedia заскоуплен на медиа-папку (его basePath), поэтому путь
-        // относителен ему — без отдельного префикса. Подпапка типа из
-        // mpc_download_paths; пусто → имя типа (images/videos/audios/others).
+        // Каталог ВНУТРИ источника: <download_paths[type]|type>/[<section>/].
         $typeDir = trim((string)($this->properties['downloadPaths'][$type] ?? ''), '/');
         if ($typeDir === '') {
             $typeDir = $type;
@@ -281,19 +164,25 @@ class MediaDownloader
         $base    = $this->sanitizeFileName($fileName);
         $baseAbs = rtrim((string)$source->getBasePath(), '/') . '/' . ltrim($dir, '/');
 
-        // Уже скачан? Проверяем по basename — с известным расширением (из URL) или
-        // перебирая разрешённые (для URL без расширения), БЕЗ сетевого HEAD.
+        // Уже скачан? Проверяем по basename БЕЗ сетевого HEAD: с известным
+        // расширением (из URL) ИЛИ перебирая разрешённые. Доп. учитываем целевой
+        // формат конвертера (thumbnailType источника) — иначе после конвертации
+        // jpg→webp дедуп бы не нашёл файл и качал заново при каждой нарезке.
         $exts = $extension !== ''
             ? [$extension]
             : array_filter(array_map('trim', (array)($this->properties['downloadExtensions'] ?? [])));
+        $tt = $this->sourceThumbnailType($source);
+        if ($tt !== '' && !in_array($tt, $exts, true)) {
+            $exts[] = $tt;
+        }
         foreach ($exts as $ext) {
             if ($ext !== '' && is_file($baseAbs . $base . '.' . $ext)) {
                 return $source->getObjectUrl($dir . $base . '.' . $ext) ?: $attrValue;
             }
         }
 
-        // Локально нет → теперь (и только теперь) определяем расширение по типу
-        // содержимого (HTTP-HEAD), если в URL его не было, и скачиваем.
+        // Локально нет → теперь определяем расширение по типу содержимого
+        // (HTTP-HEAD), если в URL его не было, и скачиваем.
         if ($extension === '') {
             $extension = $this->detectExtensionByContentType($attrValue);
         }
@@ -301,8 +190,7 @@ class MediaDownloader
             return $attrValue;
         }
 
-        $fileName   = $base . '.' . $extension;
-        $objectPath = $dir . $fileName;
+        $fileName = $base . '.' . $extension;
 
         $content = $this->fetch($attrValue);
         if ($content === '') {
@@ -313,13 +201,20 @@ class MediaDownloader
             return $attrValue;
         }
 
-        $this->ensureContainer($source, $dir);
-        if ($source->createObject($dir, $fileName, $content) === false) {
-            $this->modx->log(\modX::LOG_LEVEL_ERROR, '[MPC MediaDownloader] createObject failed: ' . $objectPath . ' errors=' . json_encode($source->getErrors()));
+        // Запись в источник + нативные события (плагины-конвертеры) + резолв
+        // финального имени/URL после возможной конвертации.
+        $res = $this->ingestor->store($source, $dir, $fileName, $content);
+        if ($res === null) {
             return $attrValue;
         }
+        return $res['url'] ?: $attrValue;
+    }
 
-        return $source->getObjectUrl($objectPath) ?: $attrValue;
+    /** Целевой формат конвертера — свойство источника thumbnailType (lowercase). */
+    private function sourceThumbnailType($source): string
+    {
+        $props = method_exists($source, 'getPropertyList') ? (array)$source->getPropertyList() : [];
+        return strtolower((string)($props['thumbnailType'] ?? ''));
     }
 
     /**
@@ -344,78 +239,18 @@ class MediaDownloader
         return $source ?: null;
     }
 
-    /**
-     * Гарантирует существование каталога в источнике (createObject родительские
-     * папки не создаёт). Создаём по уровням через createContainer; «уже есть» —
-     * игнорируем.
-     */
-    private function ensureContainer($source, string $dir): void
-    {
-        $dir = trim($dir, '/');
-        if ($dir === '') {
-            return;
-        }
-        $parent = '/';
-        foreach (explode('/', $dir) as $seg) {
-            if ($seg === '') {
-                continue;
-            }
-            $source->createContainer($seg . '/', $parent);
-            $parent = ($parent === '/') ? $seg . '/' : $parent . $seg . '/';
-        }
-    }
-
-    /**
-     * Content sniffing: отклоняем исполняемый/скриптовый контент под видом медиа
-     * (webshell `image.jpg` с PHP внутри). Расширение уже ограничено whitelist'ом
-     * (downloadExtensions) — это доп. защита по содержимому.
-     */
+    /** Content sniffing медиа. Делегирует единому сервису. */
     protected function isAllowedMediaContent(string $content): bool
     {
-        $head = strtolower(substr($content, 0, 512));
-        foreach (['<?php', '<?=', '<script', '<html', '<!doctype'] as $marker) {
-            if (strpos($head, $marker) !== false) {
-                return false;
-            }
-        }
-        if (function_exists('finfo_open') && ($finfo = finfo_open(FILEINFO_MIME_TYPE))) {
-            $mime = strtolower((string)finfo_buffer($finfo, $content));
-            finfo_close($finfo);
-            if ($mime !== '' && (strpos($mime, 'php') !== false || strpos($mime, 'html') !== false || strpos($mime, 'javascript') !== false)) {
-                return false;
-            }
-        }
-        return true;
+        return $this->ingestor->isAllowedContent($content);
     }
 
     /**
-     * Качает содержимое URL (curl). '' при ошибке.
+     * Качает содержимое URL. '' при ошибке/отказе. Делегирует единому сервису
+     * (SSRF-гард, таймауты, лимит размера — внутри). Метод-seam для тестов.
      */
     protected function fetch(string $url): string
     {
-        if (!$this->isSafeUrl($url)) {
-            $this->modx->log(\modX::LOG_LEVEL_ERROR, "[MPC MediaDownloader] небезопасный URL отклонён: $url");
-            return '';
-        }
-        $ch = curl_init($url);
-        curl_setopt_array($ch, $this->curlSecurityOpts() + [
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_HEADER         => false,
-            CURLOPT_FOLLOWLOCATION => true,
-            CURLOPT_MAXREDIRS      => 5,
-            CURLOPT_TIMEOUT        => 30,
-            CURLOPT_CONNECTTIMEOUT => 10,
-            CURLOPT_USERAGENT      => 'Mozilla/5.0 (compatible; MPC/2.0)',
-        ]);
-        curl_setopt_array($ch, $this->curlResolveOpt($url)); // пин IP (anti-rebinding, V4)
-        $content  = curl_exec($ch);
-        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
-
-        if ($content === false || $content === '' || $httpCode >= 400) {
-            $this->modx->log(\modX::LOG_LEVEL_ERROR, "[MPC MediaDownloader] Failed to download: $url (HTTP $httpCode)");
-            return '';
-        }
-        return (string)$content;
+        return $this->ingestor->fetch($url);
     }
 }

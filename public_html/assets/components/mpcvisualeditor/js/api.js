@@ -24,6 +24,35 @@ function rawPost(action, payload) {
     });
 }
 
+// Запрос с клиентским таймаутом (AbortController). Серверный таймаут скачивания
+// по ссылке жёсткий (mpcve_url_download_timeout), но если соединение залипнет
+// до серверного обрыва — UI не должен висеть. ms — запас поверх серверного.
+function rawPostAbortable(action, payload, ms) {
+    var body = new FormData();
+    body.append('action', action);
+    body.append('nonce', (S.cfg && S.cfg.nonce) || ''); // CSRF-токен
+    Object.keys(payload || {}).forEach(function (k) {
+        var v = payload[k];
+        body.append(k, typeof v === 'object' ? JSON.stringify(v) : v);
+    });
+    var ctrl  = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+    var timer = ctrl ? setTimeout(function () { ctrl.abort(); }, ms || 60000) : null;
+    return fetch(S.cfg.connectorUrl, {
+        method: 'POST',
+        credentials: 'same-origin',
+        body: body,
+        signal: ctrl ? ctrl.signal : undefined
+    }).then(function (r) {
+        if (timer) { clearTimeout(timer); }
+        if (!r.ok) { throw new Error('HTTP ' + r.status); }
+        return r.json();
+    }, function (err) {
+        if (timer) { clearTimeout(timer); }
+        if (err && err.name === 'AbortError') { throw new Error('Таймаут — источник не отвечает'); }
+        throw err;
+    });
+}
+
 // Наследование уровней при field/save. Бэк отвечает code=inherit_choice, если
 // секция отсутствует в конфиге ресурса (наследуется от типа) → спрашиваем юзера:
 //   • «Скопировать в эту страницу» — сидируем секцию в ресурс, правка локальна
@@ -119,6 +148,12 @@ export var files = {
     // Загрузка в текущую папку (multipart) → ответ {success,data:{url,path}}.
     upload: function (path, accept, file) {
         return api.upload('files/upload', file, { path: path || '', accept: accept || 'any' });
+    },
+    // Скачивание по внешнему URL в текущую папку → {success,data:{url,path}}.
+    downloadUrl: function (path, accept, url) {
+        var payload = { accept: accept || 'any', url: url };
+        if (path != null) { payload.path = path; }
+        return rawPostAbortable('files/download-url', payload, 60000);
     }
 };
 
@@ -154,6 +189,26 @@ export function uploadMedia(file, kind, currentUrl) {
     return folderOf(currentUrl).then(function (folder) {
         return api.upload('files/upload', file, uploadExtra(kind, folder));
     }).then(uploadResultUrl);
+}
+
+// Скачивание медиа по URL (image|video|audio|media) → Promise<url>. Кладём в папку
+// текущего значения (currentUrl) или canonicalDir. Зеркало uploadMedia для ссылок.
+export function downloadMedia(url, kind, currentUrl) {
+    return folderOf(currentUrl).then(function (folder) {
+        return files.downloadUrl(folder, kind, url);
+    }).then(uploadResultUrl);
+}
+
+// Скачивание по URL + замер размеров → Promise<{url,width,height}>. Зеркало uploadAndProbe.
+export function downloadAndProbe(url, currentUrl) {
+    return downloadMedia(url, 'image', currentUrl).then(function (u) {
+        return new Promise(function (resolve) {
+            var probe = new Image();
+            probe.onload = function () { resolve({ url: u, width: String(probe.naturalWidth || ''), height: String(probe.naturalHeight || '') }); };
+            probe.onerror = function () { resolve({ url: u, width: '', height: '' }); };
+            probe.src = u;
+        });
+    });
 }
 
 // Загрузка файла + замер размеров → Promise<{url,width,height}>. currentUrl — как выше.

@@ -6,6 +6,7 @@ import { api, uploadAndProbe, folderOf } from '../api.js';
 import { toast, parseRecord } from '../dom.js';
 import { fieldAddress, fieldConfigRecord } from '../address.js';
 import { openFileManager } from '../filemanager.js';
+import { makeUrlButton } from './urlrow.js';
 
 // override = {addr} → value-based режим (панель скрытых полей: el=null, адрес и
 // запись из конфига; превью пустые — DOM нет). Иначе обычный режим (адрес/превью
@@ -99,6 +100,12 @@ export function openPictureEditor(el, override) {
                 if (file) { onPickExisting(file.url, draw); }
             });
         });
+        // По ссылке: скачанный файл — готовый url, обрабатываем как выбор существующего.
+        container.appendChild(makeUrlButton({
+            accept: 'image',
+            getCurrentUrl: function () { return getCurrentUrl ? getCurrentUrl() : ''; },
+            onResolved: function (localUrl) { onPickExisting(localUrl, draw); }
+        }));
     }
 
     // основная картинка

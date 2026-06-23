@@ -305,6 +305,19 @@ body.mpcve-on .mpcve-editing:empty::before {
     color: #2563eb;
 }
 
+/* Ряд действий «Выбрать существующий» + «По ссылке» (редактор картинки). */
+.mpcve-modal__picks {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 16px;
+    margin-top: 10px;
+}
+
+.mpcve-modal__picks .mpcve-pick-existing {
+    margin-top: 0;
+}
+
 .mpcve-modal__drop--over {
     border-color: #2563eb;
     background: #eff6ff;
@@ -723,7 +736,8 @@ body:not(.mpcve-on) .mpcve-rows-badge {
 .mpcve-pic__slot {
     display: flex;
     align-items: center;
-    gap: 10px;
+    flex-wrap: wrap;
+    gap: 6px 10px;
 }
 
 .mpcve-pic__thumb {
@@ -755,14 +769,23 @@ body:not(.mpcve-on) .mpcve-rows-badge {
 .mpcve-pic__src {
     display: flex;
     align-items: center;
-    gap: 8px;
+    flex-wrap: wrap;
+    gap: 8px 10px;
     margin-top: 8px;
     padding-top: 8px;
     border-top: 1px solid #e2e8f0;
 }
 
+/* Слот с превью+кнопками занимает всю первую строку; type/media-инпуты и ✕
+   переносятся на вторую строку, а не «отплывают» вправо. */
 .mpcve-pic__slot {
-    flex: 1 1 auto;
+    flex: 1 1 100%;
+}
+
+/* Отступ кнопки «+ Добавить источник» от списка источников. */
+.mpcve-pic__sources + .mpcve-btn,
+.mpcve-media__sources + .mpcve-btn {
+    margin-top: 12px;
 }
 
 .mpcve-pic__media {
@@ -780,19 +803,21 @@ body:not(.mpcve-on) .mpcve-rows-badge {
 .mpcve-media__poster {
     display: flex;
     align-items: center;
-    gap: 10px;
+    flex-wrap: wrap;
+    gap: 6px 10px;
 }
 
 .mpcve-media__slot {
     display: flex;
     align-items: center;
-    gap: 10px;
+    flex-wrap: wrap;
+    gap: 6px 10px;
     flex: 1 1 auto;
     min-width: 0;
 }
 
 .mpcve-media__srcfile {
-    flex: 1 1 40%;
+    flex: 1 1 100%;
     min-width: 0;
 }
 

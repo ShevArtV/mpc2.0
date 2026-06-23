@@ -24,6 +24,16 @@ $_lang['mpcve_err_upload_ext'] = 'Недопустимый тип файла.';
 $_lang['mpcve_err_upload_size'] = 'Файл слишком большой.';
 $_lang['mpcve_err_source'] = 'Источник медиа не найден (mpc_media_source / default_media_source).';
 
+$_lang['mpcve_url_download'] = 'Загрузить по ссылке';
+$_lang['mpcve_url_placeholder'] = 'Вставьте ссылку на файл (http/https)';
+$_lang['mpcve_url_downloading'] = 'Скачиваем…';
+$_lang['mpcve_err_url_disabled'] = 'Загрузка по ссылке отключена.';
+$_lang['mpcve_err_url_invalid'] = 'Укажите корректную http(s)-ссылку.';
+$_lang['mpcve_err_url_unsafe'] = 'Ссылка отклонена по соображениям безопасности.';
+$_lang['mpcve_err_url_toolarge'] = 'Файл по ссылке слишком большой — скачайте и загрузите вручную.';
+$_lang['mpcve_err_url_http'] = 'Источник недоступен (ошибка ответа сервера).';
+$_lang['mpcve_err_url_failed'] = 'Не удалось скачать файл по ссылке. Попробуйте загрузить вручную.';
+
 $_lang['mpcve_fm_created'] = 'Папка создана';
 $_lang['mpcve_fm_renamed'] = 'Переименовано';
 $_lang['mpcve_fm_removed'] = 'Удалено';

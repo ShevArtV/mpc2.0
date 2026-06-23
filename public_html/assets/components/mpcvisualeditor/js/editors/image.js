@@ -6,6 +6,7 @@ import { api, folderOf } from '../api.js';
 import { toast, bgUrl, hasBg } from '../dom.js';
 import { fieldAddress } from '../address.js';
 import { openFileManager } from '../filemanager.js';
+import { makeUrlButton } from './urlrow.js';
 
 function currentImageSrc(el) {
     if (el.tagName.toLowerCase() === 'img') {
@@ -75,7 +76,9 @@ export function openImageEditor(el, forcedAddr) {
                 '<span>Перетащите файл сюда или <b>выберите</b></span>' +
                 '<input type="file" accept="image/*" hidden>' +
             '</label>' +
-            '<button type="button" class="mpcve-pick-existing" data-act="browse">📁 Выбрать существующий</button>' +
+            '<div class="mpcve-modal__picks">' +
+                '<button type="button" class="mpcve-pick-existing" data-act="browse">📁 Выбрать существующий</button>' +
+            '</div>' +
             attrFields +
             '<div class="mpcve-modal__actions">' +
                 '<button type="button" class="mpcve-btn" data-act="cancel">Отмена</button>' +
@@ -159,6 +162,23 @@ export function openImageEditor(el, forcedAddr) {
             saveBtn.disabled = false;
         });
     });
+
+    // «Вставил ссылку → скачалось»: качаем по URL и работаем как с выбранным
+    // существующим файлом (picked). Папка-цель — папка текущей картинки.
+    overlay.querySelector('.mpcve-modal__picks').appendChild(makeUrlButton({
+        accept: 'image',
+        getCurrentUrl: function () { return cur; },
+        onResolved: function (localUrl) {
+            chosen = null;
+            picked = localUrl;
+            renderPreview(localUrl, true);
+            var probe = new Image();
+            probe.onload = function () { newW = String(probe.naturalWidth || ''); newH = String(probe.naturalHeight || ''); };
+            probe.src = localUrl;
+            saveBtn.disabled = false;
+        }
+    }));
+
     ['dragover', 'dragenter'].forEach(function (ev) {
         drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.add('mpcve-modal__drop--over'); });
     });

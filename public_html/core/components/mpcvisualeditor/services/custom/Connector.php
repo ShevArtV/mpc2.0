@@ -38,6 +38,7 @@ class Connector
         'files/rename'   => [Handlers\FileManagerHandler::class,  'rename'],
         'files/remove'   => [Handlers\FileManagerHandler::class,  'remove'],
         'files/upload'   => [Handlers\FileManagerHandler::class,  'upload'],
+        'files/download-url' => [Handlers\FileManagerHandler::class, 'downloadUrl'],
         'files/locate'   => [Handlers\FileManagerHandler::class,  'locate'],
     ];
 

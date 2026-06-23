@@ -24,6 +24,16 @@ $_lang['mpcve_err_upload_ext'] = 'Invalid file type.';
 $_lang['mpcve_err_upload_size'] = 'File is too large.';
 $_lang['mpcve_err_source'] = 'Media source not found (mpc_media_source / default_media_source).';
 
+$_lang['mpcve_url_download'] = 'Upload by URL';
+$_lang['mpcve_url_placeholder'] = 'Paste a file link (http/https)';
+$_lang['mpcve_url_downloading'] = 'Downloading…';
+$_lang['mpcve_err_url_disabled'] = 'Upload by URL is disabled.';
+$_lang['mpcve_err_url_invalid'] = 'Provide a valid http(s) link.';
+$_lang['mpcve_err_url_unsafe'] = 'The link was rejected for security reasons.';
+$_lang['mpcve_err_url_toolarge'] = 'The linked file is too large — download and upload it manually.';
+$_lang['mpcve_err_url_http'] = 'Source unavailable (server response error).';
+$_lang['mpcve_err_url_failed'] = 'Could not download the file by URL. Try uploading manually.';
+
 $_lang['mpcve_fm_created'] = 'Folder created';
 $_lang['mpcve_fm_renamed'] = 'Renamed';
 $_lang['mpcve_fm_removed'] = 'Removed';

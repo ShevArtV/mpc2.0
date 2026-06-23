@@ -35,6 +35,7 @@ export function openFileManager(opts) {
                     '<button type="button" class="mpcve-btn mpcve-fm__mkdir">📁 Папка</button>' +
                     '<label class="mpcve-btn mpcve-fm__uploadlbl">⬆ Загрузить' +
                         '<input type="file" class="mpcve-fm__upload" hidden></label>' +
+                    '<button type="button" class="mpcve-btn mpcve-fm__urldl">🔗 По ссылке</button>' +
                 '</div>' +
                 '<div class="mpcve-fm__grid"><div class="mpcve-fm__loading">Загрузка…</div></div>' +
                 '<div class="mpcve-modal__actions">' +
@@ -196,6 +197,19 @@ export function openFileManager(opts) {
                 if (r && r.success) { toast('Загружено'); navigate(state.path); }
                 else { toast((r && r.message) || 'Ошибка загрузки', true); }
             }).catch(function () { uploadEl.value = ''; toast('Сетевая ошибка', true); });
+        });
+        // Скачать в текущую папку по внешней ссылке (тот же механизм, что грабер).
+        ov.querySelector('.mpcve-fm__urldl').addEventListener('click', function () {
+            promptDialog('Ссылка на файл (http/https):', { title: 'Загрузить по ссылке', okLabel: 'Скачать', placeholder: 'https://…' }).then(function (url) {
+                url = (url || '').trim();
+                if (!url) { return; }
+                if (!/^https?:\/\//i.test(url)) { toast('Укажите корректную http(s)-ссылку', true); return; }
+                toast('Скачиваем…');
+                files.downloadUrl(state.path, accept, url).then(function (r) {
+                    if (r && r.success) { toast('Скачано'); navigate(state.path); }
+                    else { toast((r && r.message) || 'Не удалось скачать', true); }
+                }).catch(function (e) { toast((e && e.message) || 'Сетевая ошибка', true); });
+            });
         });
 
         navigate(opts.startPath ? String(opts.startPath) : '');
