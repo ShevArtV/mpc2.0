@@ -221,7 +221,7 @@
         <!-- картинки в один ряд, по 50% ширины -->
         <div class="media-grid">
             <!-- одиночная картинка: грабятся src/width/height/alt, создаётся превью -->
-            <img data-mpc-field="photo" src="https://loremflickr.com/720/440/workspace" width="720" height="440" alt="Рабочее место">
+            <img data-mpc-field="photo" src="https://loremflickr.com/720/440/workspace" data-mpc-nothumb="1" width="720" height="440" alt="Рабочее место">
 
             <!-- адаптивная картинка <picture> + <source> под десктоп -->
             <picture data-mpc-field="cover" data-mpc-if="$cover">

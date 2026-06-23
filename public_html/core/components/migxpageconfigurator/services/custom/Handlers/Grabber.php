@@ -171,13 +171,15 @@ class Grabber extends Base
             $this->sectionProcessor->properties['fromPlugin']  = $this->fromPlugin;
             $this->sectionProcessor->properties['fileName']    = $this->fileName;
             $this->sectionProcessor->handleSections($html);
+        }
 
-            // Произвольные лексиконные ключи (data-mpc-lexicon="topic:key"):
-            // вырезаем innerHtml в указанный топик. Только на нарезке (не на
-            // сохранении ресурса плагином — fromPlugin), как и секции.
-            if (!$this->fromPlugin) {
-                $this->handleArbitraryLexicons($html);
-            }
+        // Произвольные лексиконные ключи (data-mpc-lexicon="topic:key"): вырезаем
+        // innerHtml в указанный топик. От ресурса НЕ зависят (топик задан в самом
+        // маркере), поэтому граббим для ЛЮБОГО файла, включая wrapper.tpl —
+        // глобальная обёртка тоже может нести data-mpc-lexicon (шапка/подвал).
+        // Только на нарезке (не на сохранении ресурса плагином — fromPlugin).
+        if (!$this->fromPlugin) {
+            $this->handleArbitraryLexicons($html);
         }
 
         return $this->response->success(

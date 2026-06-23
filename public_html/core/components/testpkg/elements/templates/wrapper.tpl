@@ -414,6 +414,20 @@
             </div>
         </div>
     </footer>
+
+    <div data-mpc-chunk="common/modals.tpl" data-mpc-include="1">
+        <div style="display:none;">
+            <div data-mpc-chunk="common/product/product_options_modal.tpl" data-mpc-include="1" id="product-options-modal" class="popup popup_product-options">
+                <button data-fancybox-close="" class="f-button is-close-btn 45645" title="{'site_close_btn' | lexicon}">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewbox="0 0 24 24" fill="none">
+                        <path d="M2 2.25574L21.7494 22.0051" stroke="#221D1E"></path>
+                        <path d="M2.25073 21.7494L22.0001 2.00003" stroke="#221D1E"></path>
+                    </svg>
+                </button>
+                <div data-site-product-options></div>
+            </div>
+        </div>
+    </div>
 </div>
 
 </body>
