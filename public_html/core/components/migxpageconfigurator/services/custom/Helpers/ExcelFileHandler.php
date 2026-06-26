@@ -81,6 +81,17 @@ class ExcelFileHandler
         $writer = WriterEntityFactory::createXLSXWriter();
         $writer->openToFile($filePath);
 
+        // Лист доступен только после открытия файла и обязательно ДО первой
+        // строки: openspout пишет <sheetViews> лениво при первом addRow. Отдаём
+        // слушателям объект листа — например, заморозить шапку/колонки через
+        // SheetView (плагин mpcOnBeforeSaveExcel). Путь уже зафиксирован выше
+        // (override отрабатывает в первом invokeEvent до открытия файла).
+        $this->modx->invokeEvent('mpcOnBeforeSaveExcel', [
+            'filePath' => $filePath,
+            'ExcelFileHandler' => $this,
+            'sheet' => $writer->getCurrentSheet(),
+        ]);
+
         // Header row
         $writer->addRow($this->createRow($headerLabels));
 
