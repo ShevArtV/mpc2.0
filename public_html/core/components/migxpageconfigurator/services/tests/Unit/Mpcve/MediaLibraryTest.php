@@ -48,10 +48,22 @@ class MediaLibraryTest extends TestCase
 
     public function testSanitizeBase(): void
     {
-        // транслит + lowercase + спецсимволы→дефис (URL-безопасное имя файла)
-        $this->assertSame('my-photo_2', MediaLibrary::sanitizeBase('My Photo_2'));
+        // Фасад дефолтной политики единой точки: транслит + lowercase + kebab.
+        // '_' тоже уходит в дефис (kebab-case по naming convention), а пустой
+        // результат больше не возвращается — вместо него fallback-имя, иначе
+        // вызывающему пришлось бы страховаться '?: file' в каждом потоке.
+        $this->assertSame('my-photo-2', MediaLibrary::sanitizeBase('My Photo_2'));
         $this->assertSame('a-b', MediaLibrary::sanitizeBase('A!!!B'));
-        $this->assertSame('', MediaLibrary::sanitizeBase('---'));
+        $this->assertSame('file', MediaLibrary::sanitizeBase('---'));
+    }
+
+    public function testBlockedListSharedWithMpc(): void
+    {
+        // Список исполняемых расширений — один на оба пакета: копия в mpcVE
+        // разъехалась бы с mpc ровно так же, как когда-то пакет с копией сайта.
+        $this->assertSame(\MpcServices\Handlers\Support\FileName::BLOCKED_EXT, MediaLibrary::BLOCKED_EXT);
+        $this->assertTrue(MediaLibrary::isBlockedName('shell.php.jpg'));
+        $this->assertFalse(MediaLibrary::isBlockedName('photo.jpg'));
     }
 
     public function testTypeKeyOfAccept(): void

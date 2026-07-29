@@ -179,6 +179,54 @@ class RemoteMediaIngestorTest extends TestCase
         $this->assertSame([], $modx->eventNames());
     }
 
+    public function testStoreHonoursNameChangedByPluginOnBeforeUpload(): void
+    {
+        // Раньше событие здесь было бутафорией: плагин менял имя в дескрипторе, а
+        // store() всё равно писал свою переменную и от неё резолвил URL — плагин
+        // не работал, а ссылка могла указывать не на тот файл.
+        $modx = new class extends CountingModxStub {
+            public function invokeEvent(string $name, array $params = []): void
+            {
+                $this->events[] = ['name' => $name, 'params' => $params];
+                $this->event->returnedValues = [];
+                if ($name === 'OnFileManagerBeforeUpload') {
+                    $params['file']['name'] = 'Переименовано Плагином.JPG';
+                }
+            }
+        };
+        $i   = new RemoteMediaIngestor($modx);
+        $src = fakeSource($this->tmpDir);
+        $res = $i->store($src, 'images/', 'a.jpg', 'data', true);
+
+        // Имя от плагина принято, но пропущено через единую точку нормализации.
+        $this->assertSame('pereimenovano-plaginom.jpg', $res['name']);
+        $this->assertSame('images/pereimenovano-plaginom.jpg', $res['path']);
+        $this->assertFileExists($this->tmpDir . '/images/pereimenovano-plaginom.jpg');
+        $this->assertFileDoesNotExist($this->tmpDir . '/images/a.jpg');
+    }
+
+    public function testStoreHardensHostileNameFromPlugin(): void
+    {
+        // Плагин на нативном событии не должен уметь увести запись из каталога.
+        $modx = new class extends CountingModxStub {
+            public function invokeEvent(string $name, array $params = []): void
+            {
+                $this->events[] = ['name' => $name, 'params' => $params];
+                $this->event->returnedValues = [];
+                if ($name === 'OnFileManagerBeforeUpload') {
+                    $params['file']['name'] = '../../shell.php';
+                }
+            }
+        };
+        $i   = new RemoteMediaIngestor($modx);
+        $src = fakeSource($this->tmpDir);
+        $res = $i->store($src, 'images/', 'a.jpg', 'data', true);
+
+        $this->assertStringStartsWith('images/', $res['path']);
+        $this->assertStringNotContainsString('..', $res['path']);
+        $this->assertStringNotContainsString('.php', $res['name']);
+    }
+
     public function testStoreReturnsNullOnWriteFailure(): void
     {
         $i = $this->ingestor();

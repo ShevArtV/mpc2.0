@@ -2,6 +2,8 @@
 
 namespace MpcServices\Handlers\Media;
 
+use MpcServices\Handlers\Support\FileName;
+
 /**
  * ЕДИНЫЙ механизм скачивания медиа по URL для обоих сценариев:
  *  - вёрстка (грабер MediaDownloader, CLI mgr_tpl) — авто-скачивание src/srcset/poster
@@ -297,10 +299,12 @@ class RemoteMediaIngestor
      * конвертации (resolveFinal). null при ошибке записи.
      *
      * $fireEvent === null → берём настройку mpc_fire_upload_event (default true).
+     * $context — поток записи для mpcOnSanitizeFileName (кто вызвал: грабер или
+     * редактор), нужен, только если имя переопределит плагин на BeforeUpload.
      *
      * @return array{url:string,path:string,name:string}|null
      */
-    public function store($source, string $dir, string $fileName, string $content, ?bool $fireEvent = null): ?array
+    public function store($source, string $dir, string $fileName, string $content, ?bool $fireEvent = null, string $context = ''): ?array
     {
         $fire = $fireEvent ?? $this->fireUploadEvent;
         if ($fire === null) {
@@ -327,6 +331,20 @@ class RemoteMediaIngestor
                 'directory' => $dir,
                 'source'    => &$source,
             ]);
+            // Плагин на этом событии переименовывает файл, меняя дескриптор —
+            // раньше правку выбрасывали и писали свою $fileName, из-за чего
+            // нативное событие здесь было бутафорией, а resolveFinal() искал не
+            // тот файл. Берём имя из дескриптора и прогоняем через ЕДИНУЮ точку
+            // (политика пакета + mpcOnSanitizeFileName + security-постфильтр):
+            // имя из плагина не должно уводить запись из каталога.
+            $afterEvent = trim((string)($files['file']['name'] ?? ''));
+            if ($afterEvent !== '' && $afterEvent !== $fileName) {
+                $fileName = FileName::forFileName($this->modx, $afterEvent, [
+                    'directory' => $dir,
+                    'context'   => $context !== '' ? $context : FileName::CTX_EDITOR_URL,
+                ]);
+                $files['file']['name'] = $fileName;
+            }
         }
 
         if ($source->createObject($dir, $fileName, $content) === false) {

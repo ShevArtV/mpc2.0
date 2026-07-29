@@ -44,4 +44,10 @@ return [
     'mpcOnBeforeSaveExcel' => [
         'groupname' => 'MigxPageConfigurator',
     ],
+    // Точка расширения правил именования файлов/папок. Одна на оба пакета: mpcVE
+    // жёстко зависит от mpc и зовёт ту же MpcServices\Handlers\Support\FileName,
+    // поэтому проекту хватает одного плагина на все потоки записи.
+    'mpcOnSanitizeFileName' => [
+        'groupname' => 'MigxPageConfigurator',
+    ],
 ];

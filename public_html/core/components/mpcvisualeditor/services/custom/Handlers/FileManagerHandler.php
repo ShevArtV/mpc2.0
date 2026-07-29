@@ -4,6 +4,7 @@ namespace MpcVEServices\Handlers;
 
 use MpcVEServices\Mpcve;
 use MpcVEServices\Handlers\Support\MediaLibrary;
+use MpcServices\Handlers\Support\FileName;
 
 /**
  * Мини-файловый менеджер редактора поверх modMediaSource: навигация по папкам,
@@ -103,10 +104,17 @@ class FileManagerHandler
             return $this->err($this->modx->lexicon('mpcve_err_source'));
         }
         $parent = $this->cleanPath((string)($request['path'] ?? ''));
-        $name   = $this->sanitizeFileName(trim((string)($request['name'] ?? '')));
-        if ($name === '') {
+        $raw    = trim((string)($request['name'] ?? ''));
+        if ($raw === '') {
             return $this->err($this->modx->lexicon('mpcve_fm_err_name'));
         }
+        // Папка — через единую точку (kind=dir → snake_case): раньше здесь стоял
+        // локальный sanitize, сохранявший Unicode и регистр, и кириллица с
+        // пробелами доезжала до диска в обход naming convention проекта.
+        $name = FileName::forFolder($this->modx, $raw, [
+            'directory' => $parent,
+            'context'   => FileName::CTX_FM_MKDIR,
+        ]);
         $ok = $source->createContainer($name, $parent === '' ? '/' : $parent);
         return $ok
             ? $this->ok($this->modx->lexicon('mpcve_fm_created'))
@@ -121,15 +129,28 @@ class FileManagerHandler
             return $this->err($this->modx->lexicon('mpcve_err_source'));
         }
         $path = $this->cleanPath((string)($request['path'] ?? ''));
-        $name = $this->sanitizeFileName(trim((string)($request['name'] ?? '')));
+        $raw  = trim((string)($request['name'] ?? ''));
         $kind = (string)($request['kind'] ?? 'file');
-        if ($path === '' || $name === '') {
+        if ($path === '' || $raw === '') {
             return $this->err($this->modx->lexicon('mpcve_fm_err_name'));
         }
         // Файл нельзя переименовать в исполняемое расширение (image.jpg → shell.php).
-        if ($kind !== 'dir' && $this->isBlockedName($name)) {
+        // Проверяем ДО нормализации: она схлопнула бы точки и превратила отказ в
+        // молчаливое переименование в 'shell-php.jpg'.
+        if ($kind !== 'dir' && MediaLibrary::isBlockedName($raw)) {
             return $this->err($this->modx->lexicon('mpcve_err_upload_ext'));
         }
+        // Та же единая точка, что у загрузки: переименование не должно быть щелью,
+        // через которую в источник попадает имя вне naming convention.
+        $name = $kind === 'dir'
+            ? FileName::forFolder($this->modx, $raw, [
+                'directory' => $path,
+                'context'   => FileName::CTX_FM_RENAME,
+            ])
+            : FileName::forFileName($this->modx, $raw, [
+                'directory' => $path,
+                'context'   => FileName::CTX_FM_RENAME,
+            ]);
         $ok = $kind === 'dir'
             ? $source->renameContainer($path, $name)
             : $source->renameObject($path, $name);
@@ -192,7 +213,7 @@ class FileManagerHandler
         $ext    = MediaLibrary::extOf((string)$file['name']);
         // accept=any пропускал любое расширение → блок-лист исполняемых ОБЯЗАТЕЛЕН
         // независимо от accept; MIME содержимого тоже не должен быть скриптом.
-        if (!$this->acceptExt($ext, $accept) || $this->isBlockedName((string)$file['name'])
+        if (!$this->acceptExt($ext, $accept) || MediaLibrary::isBlockedName((string)$file['name'])
             || !MediaLibrary::mimeNotExecutable($tmp)) {
             return $this->err($this->modx->lexicon('mpcve_err_upload_ext'));
         }
@@ -228,9 +249,17 @@ class FileManagerHandler
             file_put_contents($tmp, MediaLibrary::sanitizeSvg((string)file_get_contents($tmp)));
         }
 
-        $dir     = $cleanDir === '' ? '' : rtrim($cleanDir, '/') . '/';
-        $base    = MediaLibrary::sanitizeBase((string)pathinfo((string)$file['name'], PATHINFO_FILENAME)) ?: 'file';
-        $desired = $base . '.' . $ext;
+        $dir  = $cleanDir === '' ? '' : rtrim($cleanDir, '/') . '/';
+        $base = FileName::forFile($this->modx, (string)pathinfo((string)$file['name'], PATHINFO_FILENAME), [
+            'extension' => $ext,
+            'directory' => $dir,
+            'context'   => FileName::CTX_EDITOR_UPLOAD,
+        ]);
+        // Дедуп ПОСЛЕ нормализации и события: имя, назначенное проектом, тоже не
+        // должно затирать чужой файл. Раньше ручная загрузка полагалась на
+        // upload_check_exists ядра и при коллизии отдавала ошибку, тогда как
+        // загрузка по URL молча давала -2/-3 — теперь поведение одно.
+        $desired = $this->uniqueName($source, $dir, $base, $ext);
 
         // Имя задаёт mpc; финальное имя/URL после возможной конвертации резолвим от
         // источника (resolveUploaded: pred + base.<thumbnailType>).
@@ -298,7 +327,7 @@ class FileManagerHandler
                 $ext = $detected;
             }
         }
-        if ($ext === '' || !$this->acceptExt($ext, $accept) || $this->isBlockedName('x.' . $ext)) {
+        if ($ext === '' || !$this->acceptExt($ext, $accept) || MediaLibrary::isBlockedName('x.' . $ext)) {
             return $this->err($this->modx->lexicon('mpcve_err_upload_ext'));
         }
 
@@ -343,11 +372,15 @@ class FileManagerHandler
             }
 
             $dir     = $cleanDir === '' ? '' : rtrim($cleanDir, '/') . '/';
-            $base    = MediaLibrary::sanitizeBase($origBase) ?: 'file';
+            $base    = FileName::forFile($this->modx, $origBase, [
+                'extension' => $ext,
+                'directory' => $dir,
+                'context'   => FileName::CTX_EDITOR_URL,
+            ]);
             $desired = $this->uniqueName($source, $dir, $base, $ext);
 
             // Запись + нативные события (конвертеры) + резолв финального URL.
-            $res = $ingestor->store($source, $dir, $desired, $content);
+            $res = $ingestor->store($source, $dir, $desired, $content, null, FileName::CTX_EDITOR_URL);
             if ($res === null) {
                 return $this->err($this->sourceErr($source) ?: $this->modx->lexicon('mpcve_err_upload'));
             }
@@ -459,79 +492,20 @@ class FileManagerHandler
         return $source;
     }
 
+    // Политика имён, блок-лист и чистка путей НЕ дублируются здесь: они живут в
+    // MediaLibrary (а через неё — в единой точке mpc FileName), иначе копии
+    // расходятся при правке одной из них. Обёртки оставлены ради читаемости
+    // вызовов внутри хендлера.
+
     private function acceptExt(string $ext, string $accept): bool
     {
-        if ($accept === 'image') {
-            return in_array($ext, MediaLibrary::IMAGE_EXT, true);
-        }
-        if ($accept === 'video') {
-            return in_array($ext, MediaLibrary::VIDEO_EXT, true);
-        }
-        if ($accept === 'audio') {
-            return in_array($ext, MediaLibrary::AUDIO_EXT, true);
-        }
-        if ($accept === 'media') {
-            return in_array($ext, MediaLibrary::IMAGE_EXT, true)
-                || in_array($ext, MediaLibrary::VIDEO_EXT, true)
-                || in_array($ext, MediaLibrary::AUDIO_EXT, true);
-        }
-        return true; // any
+        return MediaLibrary::acceptExt($ext, $accept);
     }
 
     /** Защита от обхода каталога вверх + нормализация слэшей. */
     private function cleanPath(string $path): string
     {
-        $path = str_replace(['\\', "\0"], ['/', ''], $path);
-        // Отсекаем traversal посегментно: '..' и '.' выкидываем целиком (regex
-        // \.{2,} не ловил './' и мог оставить точки в середине сегмента).
-        $segments = [];
-        foreach (explode('/', $path) as $seg) {
-            $seg = trim($seg);
-            if ($seg === '' || $seg === '.' || $seg === '..' || strpos($seg, '..') !== false) {
-                continue;
-            }
-            $segments[] = $seg;
-        }
-        return implode('/', $segments);
-    }
-
-    /** Исполняемое/опасное расширение (любой вариант php-тега тоже). */
-    private function isBlockedExt(string $ext): bool
-    {
-        $ext = strtolower($ext);
-        return in_array($ext, MediaLibrary::BLOCKED_EXT, true) || strpos($ext, 'php') !== false;
-    }
-
-    /**
-     * Блок по ВСЕМУ имени (V2): pathinfo берёт лишь последний сегмент, поэтому
-     * shell.php.jpg прошёл бы блок-лист, а Apache с `AddHandler .php` исполнил бы
-     * его. Проверяем каждый dot-сегмент + любую `.php` в имени.
-     */
-    private function isBlockedName(string $name): bool
-    {
-        $name = strtolower($name);
-        if (strpos($name, '.php') !== false) {
-            return true;
-        }
-        foreach (explode('.', $name) as $seg) {
-            if ($this->isBlockedExt($seg)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    /**
-     * Имя файла/папки: срезаем путь и управляющие, схлопываем '..', убираем
-     * ведущую точку (скрытый/.htaccess). Юникод (кириллицу) сохраняем.
-     */
-    private function sanitizeFileName(string $name): string
-    {
-        $name = basename(str_replace('\\', '/', $name));
-        $name = preg_replace('#[/\x00-\x1f]+#', '', $name);
-        $name = preg_replace('#\.{2,}#', '.', (string)$name);
-        $name = ltrim((string)$name, '.');
-        return (string)$name;
+        return MediaLibrary::cleanPath($path);
     }
 
     private function sourceErr($source): string

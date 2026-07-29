@@ -3,6 +3,7 @@
 namespace MpcServices\Handlers\Grabber;
 
 use MpcServices\Handlers\Media\RemoteMediaIngestor;
+use MpcServices\Handlers\Support\FileName;
 
 /**
  * Скачивание медиафайлов по URL на сервер (вёрстка → нарезка). Оркестрация:
@@ -64,15 +65,16 @@ class MediaDownloader
         return dirname(__FILE__, 8);
     }
 
-    public function sanitizeFileName(string $name): string
+    /**
+     * Публичный метод API грабера (зовут из проектных плагинов на mpcOn*-событиях),
+     * поэтому сохранён. Своей политики больше не держит: имена во всех потоках
+     * записи считает единая точка FileName, там же живёт mpcOnSanitizeFileName.
+     *
+     * $kind/$ctx позволяют вызвать её и для имени папки (snake_case).
+     */
+    public function sanitizeFileName(string $name, string $kind = FileName::KIND_FILE, array $ctx = []): string
     {
-        if (function_exists('transliterator_transliterate')) {
-            $name = transliterator_transliterate('Any-Latin; Latin-ASCII', $name);
-        }
-        $name = strtolower(trim($name));
-        $name = preg_replace('/[^a-z0-9_\-]/', '-', $name);
-        $name = preg_replace('/-+/', '-', $name);
-        return trim($name, '-');
+        return FileName::normalize($this->modx, $name, ['kind' => $kind] + $ctx);
     }
 
     /**
@@ -141,7 +143,13 @@ class MediaDownloader
         }
         $dir = $typeDir . '/';
         if ($this->currentSectionName) {
-            $dir .= $this->sanitizeFileName($this->currentSectionName) . '/';
+            // Имя папки секции — тоже через единую точку (kind=dir → snake_case),
+            // иначе проект, переопределивший правила именования, получил бы свои
+            // имена файлов внутри папок, названных по старой политике.
+            $dir .= FileName::forFolder($this->modx, $this->currentSectionName, [
+                'directory' => $typeDir . '/',
+                'context'   => FileName::CTX_GRABBER_SECTION,
+            ]) . '/';
         }
         $this->downloadPath = $dir;
 
@@ -161,7 +169,14 @@ class MediaDownloader
         $fileName = isset($this->modx->event->returnedValues) && !empty($this->modx->event->returnedValues['fileName'])
             ? $this->modx->event->returnedValues['fileName'] : $fileName;
 
-        $base    = $this->sanitizeFileName($fileName);
+        // mpcOnBeforeDownloadFile выше даёт проекту ОСНОВУ имени (что взять из URL),
+        // FileName ниже — политику (как это имя выглядит). События разные и не
+        // взаимозаменяемы, поэтому оставлены оба.
+        $base    = FileName::forFile($this->modx, (string)$fileName, [
+            'extension' => $extension,
+            'directory' => $dir,
+            'context'   => FileName::CTX_GRABBER,
+        ]);
         $baseAbs = rtrim((string)$source->getBasePath(), '/') . '/' . ltrim($dir, '/');
 
         // Уже скачан? Проверяем по basename БЕЗ сетевого HEAD: с известным
@@ -203,7 +218,7 @@ class MediaDownloader
 
         // Запись в источник + нативные события (плагины-конвертеры) + резолв
         // финального имени/URL после возможной конвертации.
-        $res = $this->ingestor->store($source, $dir, $fileName, $content);
+        $res = $this->ingestor->store($source, $dir, $fileName, $content, null, FileName::CTX_GRABBER);
         if ($res === null) {
             return $attrValue;
         }

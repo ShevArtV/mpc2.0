@@ -8,10 +8,12 @@ require_once dirname(__DIR__, 5)
     . '/mpcvisualeditor/services/custom/Handlers/FileManagerHandler.php';
 
 /**
- * Юнит «чистой» логики безопасности FileManagerHandler без modX/source:
- * блок-лист исполняемых расширений (вкл. двойное расширение — V2/S2),
- * санитайз имени и cleanPath (anti-traversal — S11). Приватные методы через
- * рефлексию; конструктор обходим анонимным сабклассом.
+ * Юнит «чистой» логики безопасности FileManagerHandler без modX/source.
+ *
+ * Блок-лист и политика имён здесь больше НЕ живут: они переехали в единую точку
+ * mpc (FileName) и покрыты FileNameTest/MediaLibraryTest. Тут остаётся только
+ * то, что принадлежит самому хендлеру, — cleanPath (anti-traversal, S11) и
+ * accept. Приватные методы через рефлексию; конструктор обходим сабклассом.
  */
 class FileManagerHandlerTest extends TestCase
 {
@@ -29,41 +31,6 @@ class FileManagerHandlerTest extends TestCase
         $m = new \ReflectionMethod(\MpcVEServices\Handlers\FileManagerHandler::class, $method);
         $m->setAccessible(true);
         return $m->invoke($this->h, ...$args);
-    }
-
-    /** @dataProvider blockedExtCases */
-    public function testIsBlockedExt(string $ext, bool $blocked): void
-    {
-        $this->assertSame($blocked, $this->call('isBlockedExt', $ext), "ext=$ext");
-    }
-
-    public function blockedExtCases(): array
-    {
-        return [
-            ['php', true], ['php5', true], ['phtml', true], ['phar', true],
-            ['PHP', true], ['htaccess', true], ['sh', true], ['cgi', true],
-            ['jpg', false], ['png', false], ['webp', false], ['mp4', false], ['', false],
-        ];
-    }
-
-    /** @dataProvider blockedNameCases */
-    public function testIsBlockedName(string $name, bool $blocked): void
-    {
-        $this->assertSame($blocked, $this->call('isBlockedName', $name), "name=$name");
-    }
-
-    public function blockedNameCases(): array
-    {
-        return [
-            'plain php'        => ['shell.php', true],
-            'double ext'       => ['shell.php.jpg', true],   // V2: pathinfo видит только jpg
-            'double ext upper' => ['SHELL.PHP.JPG', true],
-            'zip then php'     => ['arch.zip.php', true],
-            'htaccess'         => ['.htaccess', true],
-            'normal image'    => ['photo.jpg', false],
-            'cyrillic image'  => ['картинка.png', false],
-            'dotted normal'   => ['my.photo.2024.jpeg', false],
-        ];
     }
 
     /** @dataProvider cleanPathCases */
@@ -88,20 +55,20 @@ class FileManagerHandlerTest extends TestCase
         ];
     }
 
-    /** @dataProvider sanitizeCases */
-    public function testSanitizeFileName(string $in, string $out): void
+    /** @dataProvider acceptCases */
+    public function testAcceptExt(string $ext, string $accept, bool $ok): void
     {
-        $this->assertSame($out, $this->call('sanitizeFileName', $in), "in=$in");
+        $this->assertSame($ok, $this->call('acceptExt', $ext, $accept), "$ext/$accept");
     }
 
-    public function sanitizeCases(): array
+    public function acceptCases(): array
     {
         return [
-            'strip path'     => ['../../shell.jpg', 'shell.jpg'],
-            'leading dot'    => ['.htaccess', 'htaccess'],
-            'collapse dots'  => ['a..b.jpg', 'a.b.jpg'],
-            'keep cyrillic'  => ['Фото 2024.png', 'Фото 2024.png'],
-            'backslash path' => ['c:\\win\\x.jpg', 'x.jpg'],
+            'image ok'    => ['jpg', 'image', true],
+            'image no'    => ['mp4', 'image', false],
+            'media video' => ['mp4', 'media', true],
+            'media pdf'   => ['pdf', 'media', false],
+            'any pdf'     => ['pdf', 'any', true],
         ];
     }
 }

@@ -343,6 +343,21 @@ MPC 2.0
     <li><em>Grabber</em> — экземпляр загрузчика</li>
 </ul>
 
+<em>mpcOnSanitizeFileName</em> — правила именования файлов и папок проекта. Единая точка расширения: срабатывает во ВСЕХ потоках записи обоих пакетов — грабер вёрстки, папка секции грабера, загрузка в редакторе mpcVisualEditor, загрузка по внешней ссылке, создание и переименование папки/файла в файловом менеджере редактора. Проекту, которому нужны свои правила имён, больше не нужно патчить код пакета. Параметры:
+<ul>
+    <li><em>name</em> — исходное имя, как его получил пакет</li>
+    <li><em>sanitized</em> — результат дефолтной политики пакета (ASCII, lowercase, kebab-case для файлов, snake_case для папок, лимит длины); вернуть своё имя через <code>returnedValues['name']</code>, пустой ответ — «дефолт устраивает»</li>
+    <li><em>kind</em> — <code>file</code> (имя без расширения) или <code>dir</code></li>
+    <li><em>extension</em> — расширение файла; менять его через это событие нельзя — тип уже проверен по accept и содержимому</li>
+    <li><em>directory</em> — папка назначения внутри источника файлов</li>
+    <li><em>context</em> — поток записи: <code>grabber</code>, <code>grabber-section</code>, <code>editor-upload</code>, <code>editor-url</code>, <code>filemanager-mkdir</code>, <code>filemanager-rename</code></li>
+</ul>
+Имя, возвращённое плагином, ВСЕГДА проходит обязательную зачистку пакета: срез пути и <code>../</code>, удаление управляющих символов, схлопывание точек (защита от <code>shell.php.jpg</code>), лимит длины, блок-лист исполняемых расширений; при коллизии в папке добавляется суффикс <code>-2</code>, <code>-3</code>. То есть событие задаёт стиль имени, но не позволяет обойти защиту и не даёт затереть чужой файл. Пример плагина:
+<pre><code>if ($modx->event->name === 'mpcOnSanitizeFileName') {
+    if ($kind === 'dir') { return; } // папки оставляем пакету
+    $modx->event->returnedValues['name'] = 'sg-' . $sanitized;
+}</code></pre>
+
 <em>mpcOnBeforeRender</em> — перед рендером ресурса. Параметры: <em>resourceData</em> (можно подменить через <code>returnedValues['resourceData']</code>), <em>Render</em>.
 
 <em>mpcOnBeforeParseConfig</em> — перед разбором конфига секций. Параметры: <em>sections</em> (подмена через <code>returnedValues['sections']</code>), <em>Render</em>.

@@ -2,6 +2,8 @@
 
 namespace MpcVEServices\Handlers\Support;
 
+use MpcServices\Handlers\Support\FileName;
+
 /**
  * Общее ядро загрузки/валидации медиа для всех загрузок редактора (drag-drop в
  * редакторе картинки/медиа и загрузка из файлового менеджера — единый экшен
@@ -27,12 +29,10 @@ class MediaLibrary
     /**
      * Исполняемые/опасные расширения — блок при upload/rename НЕЗАВИСИМО от accept
      * (иначе accept=any пропустил бы .php → webshell, если источник в webroot).
+     * Список — ОДИН на оба пакета (первоисточник в mpc), иначе копии разъезжаются:
+     * ровно так пакет и разошёлся со своей копией на сайте.
      */
-    public const BLOCKED_EXT = [
-        'php', 'php3', 'php4', 'php5', 'php7', 'php8', 'phtml', 'pht', 'phps', 'phar',
-        'shtml', 'cgi', 'pl', 'py', 'sh', 'bash', 'htaccess', 'htpasswd', 'user.ini',
-        'asp', 'aspx', 'jsp', 'jspx', 'exe', 'com', 'bat', 'cmd', 'msi', 'dll', 'so',
-    ];
+    public const BLOCKED_EXT = FileName::BLOCKED_EXT;
 
     /**
      * Ключи типов в порядке проверки. Совпадают с ключами mpc_download_paths и
@@ -106,8 +106,7 @@ class MediaLibrary
     /** Исполняемое/опасное расширение (любой вариант php-тега тоже). */
     public static function isBlockedExt(string $ext): bool
     {
-        $ext = strtolower($ext);
-        return in_array($ext, self::BLOCKED_EXT, true) || strpos($ext, 'php') !== false;
+        return FileName::isBlockedExt($ext);
     }
 
     /**
@@ -117,16 +116,7 @@ class MediaLibrary
      */
     public static function isBlockedName(string $name): bool
     {
-        $name = strtolower($name);
-        if (strpos($name, '.php') !== false) {
-            return true;
-        }
-        foreach (explode('.', $name) as $seg) {
-            if (self::isBlockedExt($seg)) {
-                return true;
-            }
-        }
-        return false;
+        return FileName::isBlockedName($name);
     }
 
     /** Защита от обхода каталога вверх + нормализация слэшей. */
@@ -145,19 +135,14 @@ class MediaLibrary
     }
 
     /**
-     * Базовое имя файла (без расширения) для записи: транслитерация в ASCII +
-     * lowercase + спецсимволы→дефис (как грабер mpc). Единая политика для всех
-     * загрузок редактора — предсказуемые URL-безопасные имена.
+     * Базовое имя файла (без расширения) — ДЕФОЛТНАЯ политика пакета, без события
+     * проекта. Оставлено как публичный хелпер (зовут тесты и код, которому modX
+     * не нужен); потоки записи ходят через FileName::forFile(), где к политике
+     * добавляются mpcOnSanitizeFileName и security-постфильтр.
      */
     public static function sanitizeBase(string $name): string
     {
-        if (function_exists('transliterator_transliterate')) {
-            $name = (string)transliterator_transliterate('Any-Latin; Latin-ASCII', $name);
-        }
-        $name = strtolower(trim($name));
-        $name = preg_replace('/[^a-z0-9_\-]/', '-', $name);
-        $name = preg_replace('/-+/', '-', (string)$name);
-        return trim((string)$name, '-');
+        return FileName::defaultPolicy($name, FileName::KIND_FILE);
     }
 
     /**
