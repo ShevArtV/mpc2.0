@@ -294,12 +294,31 @@ class Mpc
         return file_exists($parsedPath . $path) ? 'file:' . $path : '';
     }
 
+    /**
+     * Настройки пакета в новый контекст — только те, которых там ещё нет.
+     *
+     * Контекст создают и копированием существующего (ядровой `context/duplicate`), и тогда
+     * часть mpc-настроек в нём уже есть — от донора, со своими значениями. Прежний код
+     * всегда делал `newObject()->save()`, то есть INSERT: MySQL отвечал `Duplicate entry
+     * '<ctx>-mpc_default_language' for key 'PRIMARY'`, и на каждый новый контекст в
+     * `core/cache/logs/error.log` падало по три ошибки (замечено 2026-07-31 на проекте,
+     * где контексты заводятся копированием).
+     *
+     * Существующие записи не трогаем: значение донора осмысленно (язык, список языков), а
+     * задача метода — донести недостающие настройки, а не переписать настроенное.
+     */
     public function copySystemSettingsToNewContext(\modContext $context)
     {
+        $contextKey = $context->get('key');
         $settings = $this->modx->getIterator('modSystemSetting', array('namespace' => 'migxpageconfigurator'));
         foreach ($settings as $setting) {
             $setting = $setting->toArray();
-            $setting['context_key'] = $context->get('key');
+            $setting['context_key'] = $contextKey;
+
+            if ($this->modx->getCount('modContextSetting', array('context_key' => $contextKey, 'key' => $setting['key']))) {
+                continue;
+            }
+
             $ctxSetting = $this->modx->newObject('modContextSetting');
             $ctxSetting->fromArray($setting, '', true);
             $ctxSetting->save();
