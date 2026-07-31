@@ -1,8 +1,10 @@
 <?php
 /**
  * Импорт лексиконов из XLSX/ZIP — двухфазный (preview → apply), НЕ зависит от
- * имени загружаемого файла: целевой ресурс определяется по имени ВКЛАДКИ
- * (LexiconImport::resolveTarget). Понимает формат all-in-one (колонка «Контекст»
+ * имени загружаемого файла: целевой ресурс определяется по скрытому листу-
+ * манифесту `__mpc` (точная карта «вкладка → файл лексикона»), а при его
+ * отсутствии — по имени ВКЛАДКИ (LexiconImport::resolveTarget: имя длиннее 31
+ * символа Excel не хранит). Понимает формат all-in-one (колонка «Контекст»
  * + lexicon_key + языки) и старый (lexicon_key первой колонкой, листы
  * Resource/Static). Колонка ключа/языков ищется по заголовкам, а не по позиции.
  *
@@ -83,13 +85,19 @@ class MigxpageconfiguratorLexiconsImportProcessor extends modProcessor
         }
 
         $existingRids = $this->existingRids();
+        $manifests    = $this->collectManifests($sheets);
         $plan = [];
         foreach ($sheets as $i => $s) {
+            if ($s['sheet'] === \MpcServices\Handlers\LexiconImport::MANIFEST_SHEET) {
+                continue; // служебный лист карты, не данные
+            }
             $parsed = \MpcServices\Handlers\LexiconImport::sheetToData($s['headers'], $s['rows']);
             if (empty($parsed['data'])) {
                 continue; // лист без колонки ключа / без строк
             }
-            $target     = \MpcServices\Handlers\LexiconImport::resolveTarget($s['sheet'], $existingRids, $this->staticFile);
+            // манифест ищем в пределах СВОЕЙ книги: в ZIP их несколько
+            $manifestRid = $manifests[$s['book']][mb_strtolower($s['sheet'], 'UTF-8')] ?? null;
+            $target     = \MpcServices\Handlers\LexiconImport::resolveTarget($s['sheet'], $existingRids, $this->staticFile, $manifestRid);
             $recognized = $target !== null;
             $diff = $recognized
                 ? \MpcServices\Handlers\LexiconImport::computeDiff($parsed['data'], $this->loadExisting((string)$target, $parsed['langs']))
@@ -179,6 +187,9 @@ class MigxpageconfiguratorLexiconsImportProcessor extends modProcessor
         $importedSheets = 0;
         $importedKeys   = 0;
         foreach ($sheets as $i => $s) {
+            if ($s['sheet'] === \MpcServices\Handlers\LexiconImport::MANIFEST_SHEET) {
+                continue; // служебный лист карты — не импортируем даже по выбору
+            }
             if (!isset($byId[$i])) {
                 continue; // вкладка не выбрана
             }
@@ -206,6 +217,28 @@ class MigxpageconfiguratorLexiconsImportProcessor extends modProcessor
     }
 
     // ---------------------------------------------------------------- helpers
+
+    /**
+     * Карты «вкладка → rid» из скрытых листов `__mpc`, по книгам.
+     * Ключ — $s['book'] (уникален даже при совпадении basename внутри ZIP):
+     * манифест одной книги не должен применяться к вкладкам другой.
+     *
+     * @return array<string,array<string,string>> book => (sheetLower => rid)
+     */
+    private function collectManifests(array $sheets): array
+    {
+        $out = [];
+        foreach ($sheets as $s) {
+            if ($s['sheet'] !== \MpcServices\Handlers\LexiconImport::MANIFEST_SHEET) {
+                continue;
+            }
+            $map = \MpcServices\Handlers\LexiconImport::parseManifest($s['headers'], $s['rows']);
+            if (!empty($map)) {
+                $out[$s['book']] = $map;
+            }
+        }
+        return $out;
+    }
 
     /** Пишет данные листа (key=>lang=>value) в файлы лексиконов целевого ресурса. */
     private function writeSheetData(string $rid, array $data): void
@@ -328,14 +361,17 @@ class MigxpageconfiguratorLexiconsImportProcessor extends modProcessor
                 if ($out !== false) {
                     stream_copy_to_stream($stream, $out);
                     fclose($out);
-                    $written[] = ['path' => $dest, 'label' => $name];
+                    // label — для показа, book — уникальный ключ книги: basename
+                    // в ZIP может повторяться (файлы из разных папок), а по book
+                    // группируются манифесты
+                    $written[] = ['path' => $dest, 'label' => $name, 'book' => $i . '_' . $name];
                 }
                 fclose($stream);
             }
             $zip->close();
 
             foreach ($written as $w) {
-                foreach ($this->readXlsx($w['path'], $w['label']) as $s) {
+                foreach ($this->readXlsx($w['path'], $w['label'], $w['book']) as $s) {
                     $sheets[] = $s;
                 }
             }
@@ -343,11 +379,11 @@ class MigxpageconfiguratorLexiconsImportProcessor extends modProcessor
             @rmdir($exDir);
             return $sheets;
         }
-        return $this->readXlsx($path, basename($path));
+        return $this->readXlsx($path, basename($path), basename($path));
     }
 
-    /** @return array<int,array{file:string,sheet:string,headers:array,rows:array}> */
-    private function readXlsx(string $path, string $fileLabel): array
+    /** @return array<int,array{file:string,book:string,sheet:string,headers:array,rows:array}> */
+    private function readXlsx(string $path, string $fileLabel, string $book): array
     {
         $reader = \OpenSpout\Reader\Common\Creator\ReaderFactory::createFromType('xlsx');
         $reader->open($path);
@@ -365,7 +401,13 @@ class MigxpageconfiguratorLexiconsImportProcessor extends modProcessor
                 }
                 $idx++;
             }
-            $sheets[] = ['file' => $fileLabel, 'sheet' => $sheet->getName(), 'headers' => $headers, 'rows' => $rows];
+            $sheets[] = [
+                'file'    => $fileLabel,
+                'book'    => $book,
+                'sheet'   => $sheet->getName(),
+                'headers' => $headers,
+                'rows'    => $rows,
+            ];
         }
         $reader->close();
         return $sheets;

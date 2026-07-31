@@ -3,7 +3,8 @@
  * Экспорт ВСЕХ лексиконов в ОДИН XLSX: вкладка-на-ресурс, колонки
  * `Контекст | key | <язык1> | <язык2> | …`. «Контекст» = «Секция: Поле»
  * (резолвится через LexiconContext: манифест mpc_tracked_fields + migx-конфиги),
- * справочная колонка — на импорт не влияет.
+ * справочная колонка — на импорт не влияет. Последним листом пишется скрытый
+ * `__mpc` — карта «вкладка → файл лексикона» для точного обратного импорта.
  *
  * Старые режимы (per-resource XLSX / ZIP) остаются отдельными процессорами.
  */
@@ -72,6 +73,7 @@ class MigxpageconfiguratorLexiconsExportallinoneProcessor extends modProcessor
             }
             $sheets[] = [
                 'name' => $this->uniqueSheetName($rid, $usedSheetNames),
+                'rid'  => $rid,
                 'rows' => $rows,
             ];
         }
@@ -106,6 +108,7 @@ class MigxpageconfiguratorLexiconsExportallinoneProcessor extends modProcessor
                 $first = false;
                 $this->writeSheet($writer, $s['rows'], $languages);
             }
+            $this->writeManifest($writer, $sheets);
         } catch (\Throwable $e) {
             $writer->close(); // уберёт temp-папку writer'а при обрыве
             throw $e;
@@ -237,17 +240,30 @@ class MigxpageconfiguratorLexiconsExportallinoneProcessor extends modProcessor
     }
 
     /**
-     * Имя вкладки Excel: запрещены : \ / ? * [ ], длина ≤ 31, уникальность.
-     * При коллизии/обрезке добавляем числовой суффикс.
+     * Скрытый служебный лист `__mpc`: точная карта «вкладка → файл лексикона».
+     * Имя вкладки лимитировано 31 символом и потому не всегда равно rid —
+     * импорт берёт соответствие отсюда, не гадая по имени.
+     */
+    private function writeManifest(\OpenSpout\Writer\XLSX\Writer $writer, array $sheets): void
+    {
+        $sheet = $writer->addNewSheetAndMakeItCurrent();
+        $sheet->setName(\MpcServices\Handlers\LexiconImport::MANIFEST_SHEET);
+        $sheet->setIsVisible(false);
+
+        $writer->addRow($this->createRow(['sheet', 'rid'], $this->headerStyle()));
+        foreach ($sheets as $s) {
+            $writer->addRow($this->createRow([$s['name'], $s['rid']]));
+        }
+    }
+
+    /**
+     * Имя вкладки Excel: правило одно на экспорт и импорт (LexiconImport::
+     * sheetNameFor — запрещённые символы, лимит 31, хеш-хвост для длинных rid).
+     * Числовой суффикс остаётся страховкой на невероятную коллизию хешей.
      */
     private function uniqueSheetName(string $rid, array &$used): string
     {
-        $name = preg_replace('#[:\\\\/?*\[\]]+#', '_', $rid);
-        $name = trim((string)$name);
-        if ($name === '') {
-            $name = 'sheet';
-        }
-        $name = mb_substr($name, 0, 31);
+        $name = \MpcServices\Handlers\LexiconImport::sheetNameFor($rid);
 
         $base = $name;
         $i    = 1;
