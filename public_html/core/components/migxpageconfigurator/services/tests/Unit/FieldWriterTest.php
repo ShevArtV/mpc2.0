@@ -203,6 +203,19 @@ class FieldWriterTest extends TestCase
         $lw = $ref->getProperty('lexWriterInstance'); $lw->setAccessible(true); $lw->setValue($writer, $lex);
     }
 
+    /**
+     * Задаёт список exclude_lexicons для писателя (свойство lmProps читается при
+     * ленивом создании LexiconManager, поэтому достаточно подменить его до write).
+     */
+    private function injectExclude(FieldWriter $writer, array $patterns): void
+    {
+        $ref = new \ReflectionObject($writer);
+        $lp = $ref->getProperty('lmProps'); $lp->setAccessible(true);
+        $props = $lp->getValue($writer);
+        $props['excludeLexiconFields'] = $patterns;
+        $lp->setValue($writer, $props);
+    }
+
     private function listConfig(): string
     {
         return json_encode([
@@ -374,6 +387,70 @@ class FieldWriterTest extends TestCase
         $cover2 = json_decode(json_decode($resource->getTVValue('mpc_config'), true)['1']['cover'], true);
         $this->assertSame('media_cover_source', $cover2[0]['sources'][0]['srcset']);
         $this->assertSame('media_cover_source_1', $cover2[0]['sources'][1]['srcset']);
+    }
+
+    /**
+     * 2.5.59-rc: поле, чей лексикон-ключ УЖЕ существует, но попал под
+     * exclude_lexicons, перестаёт наполнять лексикон — значение ложится в конфиг
+     * литералом. Раньше эта ветка exclude не спрашивала, и ключ, заведённый до
+     * появления паттерна, принимал значения вечно.
+     */
+    public function testExistingLexiconKeyUnderExcludeStaysLiteral(): void
+    {
+        $config = json_encode([
+            '1' => ['section_name' => 'hero', 'MIGX_formname' => 'mpc_hero', 'lexicon_prefix' => 'hero', 'title' => 'hero_title'],
+        ], JSON_UNESCAPED_UNICODE);
+        $resource = new ModxObjectStub('modResource', ['id' => 5, 'context_key' => 'web', 'tv_mpc_config' => $config]);
+        $writer = new FieldWriter($this->makeModx($resource));
+        $log = [];
+        $this->injectLex($writer, ['hero_title'], $log);   // ключ в лексиконе ЕСТЬ
+        $this->injectExclude($writer, ['hero_title']);
+
+        $res = $writer->write(
+            ['type' => 'field', 'level' => 'resource', 'resourceId' => 5, 'section' => 'hero', 'fieldName' => 'title'],
+            'Новое значение'
+        );
+
+        $this->assertTrue($res['success'], $res['message']);
+        $this->assertSame([], $log);                       // в лексикон не писали
+        $stored = json_decode($resource->getTVValue('mpc_config'), true);
+        $this->assertSame('Новое значение', $stored['1']['title']); // литерал в конфиге
+    }
+
+    /**
+     * 2.5.59-rc: exclude действует и в медиа-ветке — новая img-запись под
+     * паттерном не получает ключей вовсе, путь остаётся в конфиге литералом.
+     */
+    public function testNewMediaRecordUnderExcludeStaysLiteral(): void
+    {
+        $config = json_encode([
+            '1' => [
+                'section_name'   => 'gallery',
+                'MIGX_formname'  => 'mpc_gallery',
+                'lexicon_prefix' => 'gallery',
+                'list_images'    => json_encode([['MIGX_id' => 1, 'img' => '']], JSON_UNESCAPED_UNICODE),
+            ],
+        ], JSON_UNESCAPED_UNICODE);
+        $resource = new ModxObjectStub('modResource', ['id' => 5, 'context_key' => 'web', 'tv_mpc_config' => $config]);
+        $writer = new FieldWriter($this->makeModx($resource));
+        $log = [];
+        $this->injectLex($writer, [], $log);
+        $this->injectExclude($writer, ['gallery_list_images*']); // glob покрывает src и _alt
+
+        $record = json_encode([
+            ['MIGX_id' => 1, 'src' => '/new.jpg', 'alt' => 'Картинка', 'width' => '500'],
+        ], JSON_UNESCAPED_UNICODE);
+        $res = $writer->write(
+            ['type' => 'field', 'level' => 'resource', 'resourceId' => 5, 'section' => 'gallery', 'parentField' => 'list_images', 'idx' => 0, 'fieldName' => 'img'],
+            $record
+        );
+
+        $this->assertTrue($res['success'], $res['message']);
+        $this->assertSame([], $log);                              // ни одного ключа не завели
+        $img = json_decode(json_decode(json_decode($resource->getTVValue('mpc_config'), true)['1']['list_images'], true)[0]['img'], true);
+        $this->assertSame('/new.jpg', $img[0]['src']);            // путь литералом
+        $this->assertSame('Картинка', $img[0]['alt']);
+        $this->assertSame('500', $img[0]['width']);
     }
 
     public function testConfigFieldEmptyConfigRejected(): void

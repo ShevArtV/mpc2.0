@@ -15,6 +15,15 @@ use MpcServices\Handlers\Grabber\LexiconKeyHelper;
  * Контекст записи (writer + identifier ресурса) — в конструкторе; FieldWriter
  * создаёт мерджер на одну запись. prefix секции вычисляет вызывающий.
  *
+ * ⚠️ excludeLexiconFields действует и здесь. До 2.5.59-rc медиа-ветка заводила
+ * ключи безусловно: exclude читался только в `FieldWriter::shouldLexiconizeField`,
+ * то есть на простых строковых полях. Из-за этого настройка
+ * `mpc_exclude_lexicons_filename` не защищала ровно то, ради чего заведена, —
+ * картинки и видео (их нельзя локализовать). Один раз заведённый ключ жил вечно:
+ * `resolveLeafKey` возвращал существующий, и правка из редактора снова уходила в
+ * лексикон. Теперь исключённый ключ не создаётся и не переиспользуется — путь
+ * остаётся в конфиге литералом, а старые ключи вытесняются по мере правок.
+ *
  * @author Arthur Shevchenko (https://t.me/ShevArtV)
  */
 class MediaLexiconMerger
@@ -23,11 +32,34 @@ class MediaLexiconMerger
     private $writer;
     private string $ident;
 
-    /** @param LexiconWriter $writer LexiconWriter-совместимый (has/set). */
-    public function __construct($writer, string $ident)
+    /** @var callable|null Предикат «ключ исключён из лексиконизации». */
+    private $isExcluded;
+
+    /**
+     * @param LexiconWriter $writer LexiconWriter-совместимый (has/set).
+     * @param string $ident идентификатор лексикона ресурса
+     * @param callable|null $isExcluded fn(string $lexiconKey): bool — обычно
+     *        `LexiconManager::isExcluded`. Не передан → поведение как раньше
+     *        (все листья лексиконизируются), чтобы внешние вызовы не сломались.
+     */
+    public function __construct($writer, string $ident, ?callable $isExcluded = null)
     {
         $this->writer = $writer;
         $this->ident = $ident;
+        $this->isExcluded = $isExcluded;
+    }
+
+    /**
+     * Ключ разрешён к записи в лексикон? Пустой ключ — всегда нет: вызывающие
+     * трактуют '' как «оставить литерал».
+     */
+    private function keyAllowed(string $key): bool
+    {
+        if ($key === '') {
+            return false;
+        }
+
+        return $this->isExcluded === null || !($this->isExcluded)($key);
     }
 
     /** Запись — media с вложенным img/sources (picture/video/audio)? */
@@ -58,6 +90,7 @@ class MediaLexiconMerger
      * Плоский мерж media-записи с лексиконом: под-поле, чьё ТЕКУЩЕЕ значение —
      * ключ лексикона, → пишем туда новое значение и сохраняем ключ; иначе литерал
      * (так width/height обновляются прямо, а src/alt/title — в лексикон).
+     * Исключённый ключ трактуется как «не лексикон» → значение литералом.
      */
     public function mergeRecordWithLexicon($current, $value): string
     {
@@ -72,6 +105,12 @@ class MediaLexiconMerger
             foreach ($newRow as $sub => $newSub) {
                 $curSub = $curRow[$sub] ?? null;
                 if (is_string($curSub) && $curSub !== '' && $this->writer->has($this->ident, $curSub)) {
+                    // Исключённый ключ не переиспользуем: иначе запись, заведённая
+                    // до появления паттерна, принимала бы значения вечно. Ключ в
+                    // записи не сохраняем — новое значение остаётся литералом.
+                    if (!$this->keyAllowed($curSub)) {
+                        continue;
+                    }
                     $this->writer->set($this->ident, $curSub, is_scalar($newSub) ? (string)$newSub : '');
                     $newRows[$i][$sub] = $curSub; // сохраняем ключ в записи
                 }
@@ -108,7 +147,8 @@ class MediaLexiconMerger
                     $key = LexiconKeyHelper::getLexiconKey([
                         'prefix' => $prefix, 'fieldName' => $base . $suffix, 'idx' => $idx,
                     ]);
-                    if ($key !== '' && $this->writer->set($this->ident, $key, $row[$sub])) {
+                    // Исключённый ключ не заводим — значение остаётся литералом.
+                    if ($this->keyAllowed($key) && $this->writer->set($this->ident, $key, $row[$sub])) {
                         $rows[$i][$sub] = $key;
                     }
                 }
@@ -200,17 +240,25 @@ class MediaLexiconMerger
         return json_encode($new, JSON_UNESCAPED_UNICODE);
     }
 
-    /** Ключ листа: существующий (если он лексикон-ключ) либо новый через getLexiconKey ('' если нет prefix). */
+    /**
+     * Ключ листа: существующий (если он лексикон-ключ) либо новый через
+     * getLexiconKey ('' если нет prefix или ключ исключён).
+     *
+     * Существующий ключ проверяется наравне с новым: иначе запись, заведённая до
+     * появления паттерна, продолжала бы принимать значения вечно.
+     */
     private function resolveLeafKey($currentLeaf, string $prefix, string $fieldName, $idx): string
     {
         if (is_string($currentLeaf) && $currentLeaf !== '' && $this->writer->has($this->ident, $currentLeaf)) {
-            return $currentLeaf;
+            return $this->keyAllowed($currentLeaf) ? $currentLeaf : '';
         }
         if ($prefix === '') {
             return '';
         }
-        return LexiconKeyHelper::getLexiconKey([
+        $key = LexiconKeyHelper::getLexiconKey([
             'prefix' => $prefix, 'fieldName' => $fieldName, 'idx' => $idx,
         ]);
+
+        return $this->keyAllowed($key) ? $key : '';
     }
 }

@@ -499,7 +499,14 @@ class FieldWriter
         $ident   = $writer->identifier((int)$resource->get('id'));
         $current = $cfw->getValue($configJson, $address)['data']['value'] ?? null;
 
-        $merger = new MediaLexiconMerger($writer, $ident);
+        // Предикат exclude обязателен: медиа-ветка сама решает, заводить ли ключ,
+        // и без него `mpc_exclude_lexicons_filename` на картинки не действует
+        // (до 2.5.59-rc exclude читался только в shouldLexiconizeField ниже).
+        $merger = new MediaLexiconMerger(
+            $writer,
+            $ident,
+            fn(string $key): bool => $this->lexiconManager()->isExcluded($key)
+        );
         if (RecordUtil::isRecordValue($value)) {
             $prefix = $this->sectionPrefix($configJson, (string)($address['section'] ?? ''));
             if ($merger->isMediaWithSources($value)) {
@@ -513,7 +520,11 @@ class FieldWriter
                 $value = $merger->newRecordWithLexiconKeys($address, $value, $prefix);
             }
         } elseif (is_string($current) && $current !== '' && !RecordUtil::isRecordValue($current)
-            && $writer->has($ident, $current)) {
+            && $writer->has($ident, $current)
+            // Ключ, попавший под exclude, больше не принимает значения: иначе
+            // запись, заведённая до появления паттерна, жила бы вечно. Значение
+            // уходит дальше по веткам и ложится в конфиг литералом.
+            && !$this->lexiconManager()->isExcluded($current)) {
             if (!$writer->set($ident, $current, is_scalar($value) ? (string)$value : '')) {
                 return ['result' => $this->result(false, 'failed to write lexicon entry')];
             }
