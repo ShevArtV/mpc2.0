@@ -141,6 +141,47 @@ class MigxConfigMergerTest extends TestCase
         $this->assertContains('u2', array_column($tabs[1]['fields'], 'field'));
     }
 
+    public function testDoubledEmptyCaptionTabsCollapsed(): void
+    {
+        // Состояние серверов, прошедших апгрейды до позиционного сопоставления:
+        // безымянный tab задвоился, и в окне MIGX появилось несколько полей с
+        // одним `name` — правка верхнего терялась. Хвост, не несущий своих полей,
+        // должен схлопнуться.
+        $bundle = [
+            'formtabs' => json_encode([$this->tab('', [$this->field('poster'), $this->field('src', [], 2)])]),
+        ];
+        $existing = [
+            'formtabs' => json_encode([
+                $this->tab('', [$this->field('poster'), $this->field('src', [], 2)]),
+                $this->tab('', [$this->field('poster'), $this->field('src', [], 2)], 2),
+                $this->tab('', [$this->field('poster'), $this->field('src', [], 2)], 3),
+            ]),
+        ];
+        $merged = (new MigxConfigMerger())->merge($bundle, $existing);
+        $tabs = json_decode($merged['formtabs'], true);
+        $this->assertCount(1, $tabs);
+        $this->assertSame(['poster', 'src'], array_column($tabs[0]['fields'], 'field'));
+    }
+
+    public function testEmptyCaptionTailWithOwnFieldsKept(): void
+    {
+        // Безымянный tab с собственными полями — уже пользовательский, а не
+        // наследие задвоения: его схлопывать нельзя.
+        $bundle = [
+            'formtabs' => json_encode([$this->tab('', [$this->field('mpc_a')])]),
+        ];
+        $existing = [
+            'formtabs' => json_encode([
+                $this->tab('', [$this->field('mpc_a')]),
+                $this->tab('', [$this->field('mpc_a'), $this->field('user_only', [], 2)], 2),
+            ]),
+        ];
+        $merged = (new MigxConfigMerger())->merge($bundle, $existing);
+        $tabs = json_decode($merged['formtabs'], true);
+        $this->assertCount(2, $tabs);
+        $this->assertContains('user_only', array_column($tabs[1]['fields'], 'field'));
+    }
+
     public function testColumnsMergedByDataIndex(): void
     {
         $bundle = [

@@ -102,7 +102,33 @@ class MigxConfigMerger
                 $merged[] = $eTab;
             }
         }
+        /*
+         * Хвост безымянных tab'ов из БД. Позиционное сопоставление выше новых
+         * задвоений не создаёт, но НАКОПЛЕННЫЕ им уже не разобрать: до фикса
+         * каждый апгрейд добавлял по безымянному tab'у, и на серверах, прошедших
+         * через те версии, их лежит по два-три. Для редактора это не косметика:
+         * безымянные tab'ы рисуются подряд, в окне появляется несколько полей с
+         * одним `name`, правится верхнее, а сохраняется значение другого
+         * (sleepandglow 07.08.2026 — постер видео в TV не сохранялся, 44 конфига).
+         *
+         * Поэтому хвост, который не несёт НИ ОДНОГО поля сверх уже собранных,
+         * отбрасываем — терять в нём нечего. Безымянный tab с собственными
+         * полями остаётся: это уже пользовательский, а не наследие задвоения.
+         */
+        $knownFields = [];
+        foreach ($merged as $mTab) {
+            foreach ($this->fieldNames($mTab) as $name) {
+                $knownFields[$name] = true;
+            }
+        }
         foreach ($existingByPos as $eTab) {
+            $names = $this->fieldNames($eTab);
+            if ($merged && !array_diff($names, array_keys($knownFields))) {
+                continue;
+            }
+            foreach ($names as $name) {
+                $knownFields[$name] = true;
+            }
             $merged[] = $eTab;
         }
 
@@ -114,6 +140,24 @@ class MigxConfigMerger
         unset($tab);
 
         return $merged;
+    }
+
+    /**
+     * Имена полей tab'а — по ним сверяется, несёт ли безымянный хвост что-то своё.
+     *
+     * @return string[]
+     */
+    private function fieldNames(array $tab): array
+    {
+        $names = [];
+        foreach ($tab['fields'] ?? [] as $field) {
+            $name = is_array($field) ? ($field['field'] ?? '') : '';
+            if ($name !== '') {
+                $names[] = (string)$name;
+            }
+        }
+
+        return $names;
     }
 
     private function mergeFlatList(array $bundle, array $existing, string $key): array
