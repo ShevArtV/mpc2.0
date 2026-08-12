@@ -70,6 +70,10 @@ class Mpcve
             'assetsUrl'    => $this->config['assetsUrl'],
             'editParam'    => $this->config['editParam'],
             'resourceId'   => $resource ? (int)$resource->get('id') : 0,
+            // Коннектор стартует в web ради общей manager-сессии, а затем
+            // переключается в фактический контекст открытой страницы. Только
+            // так context setting mpc_static_block_page_id участвует и в записи.
+            'contextKey'   => (string)($this->modx->context ? $this->modx->context->get('key') : 'web'),
             'allowedTags'  => $allowedTags,
             'allowedAttrs' => $allowedAttrs,
             // Право на правку ГЛОБАЛЬНЫХ данных (настройки data-mpc-info, контакты):

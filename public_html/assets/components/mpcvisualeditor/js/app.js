@@ -15,6 +15,7 @@ import { toggleSidebar } from './sidebar.js';
 import { toggleChangelog } from './changelog.js';
 import { toggleSettings } from './settings.js';
 import { acquireLock, startLockLifecycle, showLockBanner, releaseOnExit, markActivity } from './lock.js';
+import { openForElement } from './scope.js';
 
 // --- разметка / снятие разметки полей ----------------------------------
 function markEditable() {
@@ -94,7 +95,9 @@ function attachAudioBadges() {
         badge.addEventListener('click', function (e) {
             e.preventDefault();
             e.stopPropagation();
-            if (editors.media && editors.media.open) { editors.media.open(el); }
+            if (editors.media && editors.media.open) {
+                openForElement(el, function () { editors.media.open(el); });
+            }
         });
         wrap.appendChild(badge);
     });
@@ -128,7 +131,9 @@ function attachRowsBadges() {
             e.preventDefault();
             e.stopPropagation();
             markActivity();
-            if (editors.rows && editors.rows.open) { editors.rows.open(el); }
+            if (editors.rows && editors.rows.open) {
+                openForElement(el, function () { editors.rows.open(el); });
+            }
         });
         el.appendChild(badge);
     });
@@ -273,7 +278,7 @@ function bindClicks() {
             var ed = editors[type];
             if (ed && ed.open) {
                 markActivity(); // открытие редактора = активность (для idle-лока)
-                ed.open(el);
+                openForElement(el, function () { ed.open(el); });
             } else {
                 toast('Редактор «' + type + '» ещё в разработке', true);
             }

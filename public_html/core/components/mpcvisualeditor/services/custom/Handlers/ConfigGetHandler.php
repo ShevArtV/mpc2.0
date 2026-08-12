@@ -49,6 +49,7 @@ class ConfigGetHandler extends BaseHandler
                 // Карты лексикона по уровням — панель показывает значения, не ключи.
                 'lexicons'   => [
                     'resource' => $this->mpcve->readLexicons('resource', $resourceId),
+                    'type'     => $isType ? [] : $this->mpcve->readLexicons('type', $resourceId),
                     'global'   => $this->mpcve->readLexicons('global', $resourceId),
                 ],
             ],

@@ -4,10 +4,15 @@
 import { S } from './state.js';
 import { toast, choiceDialog } from './dom.js';
 
+function appendPageContext(body) {
+    body.append('contextKey', (S.cfg && S.cfg.contextKey) || 'web');
+}
+
 function rawPost(action, payload) {
     var body = new FormData();
     body.append('action', action);
     body.append('nonce', (S.cfg && S.cfg.nonce) || ''); // CSRF-токен
+    appendPageContext(body);
     Object.keys(payload || {}).forEach(function (k) {
         var v = payload[k];
         body.append(k, typeof v === 'object' ? JSON.stringify(v) : v);
@@ -31,6 +36,7 @@ function rawPostAbortable(action, payload, ms) {
     var body = new FormData();
     body.append('action', action);
     body.append('nonce', (S.cfg && S.cfg.nonce) || ''); // CSRF-токен
+    appendPageContext(body);
     Object.keys(payload || {}).forEach(function (k) {
         var v = payload[k];
         body.append(k, typeof v === 'object' ? JSON.stringify(v) : v);
@@ -53,43 +59,30 @@ function rawPostAbortable(action, payload, ms) {
     });
 }
 
-// Наследование уровней при field/save. Бэк отвечает code=inherit_choice, если
-// секция отсутствует в конфиге ресурса (наследуется от типа) → спрашиваем юзера:
-//   • «Скопировать в эту страницу» — сидируем секцию в ресурс, правка локальна
-//     (повтор запроса с address.inherit='copy');
-//   • «Открыть страницу-источник» — редирект на ресурс-тип (data.typeUrl), где
-//     секция реально лежит, и правка идёт там обычным resource-путём.
-// Для статичной секции (level=global) диалога нет — предупреждаем, что глобально.
-// Централизовано здесь, чтобы все редакторы работали единообразно. Применяется и
-// к field/save (правка поля), и к row/op (добавление/удаление строки списка) —
-// повтор идёт через ТОТ ЖЕ action.
+// Защитный fallback на случай устаревшего config/get: штатно address.js заранее
+// ставит level=type и предупреждение уже показано перед открытием редактора.
 function handleInheritChoice(action, payload, res) {
     var addr = (payload && payload.address) || {};
     if (res && res.data && res.data.code === 'inherit_choice' && !addr.inherit) {
-        var name = (res.data.section || addr.section || '');
-        var typeUrl = res.data.typeUrl || '';
-        var choices = [{ key: 'copy', label: 'Скопировать в эту страницу', primary: true }];
-        if (typeUrl) { choices.push({ key: 'goto', label: 'Открыть страницу-источник и править там' }); }
         return choiceDialog(
-            'Секция «' + name + '» наследуется от типа страницы. Скопировать её в эту страницу (править локально) или открыть страницу-источник?',
-            { title: 'Наследуемая секция', choices: choices, cancelLabel: 'Отмена' }
-        ).then(function (choice) {
-            if (!choice) { return res; } // отмена — отдаём исходный ответ
-            if (choice === 'goto') {
-                // Редирект на источник. Возвращаем «вечный» промис: страница всё
-                // равно уходит, а редактор не успеет мигнуть тостом 'section
-                // inherited...' (иначе .then показывал бы сообщение до навигации).
-                window.location.href = typeUrl;
-                return new Promise(function () {});
+            'Изменения затронут все страницы этого типа',
+            {
+                title: 'Область изменений',
+                choices: [
+                    { key: 'type', label: 'Продолжить', primary: true },
+                    { key: 'copy', label: 'Локализовать секцию' }
+                ],
+                cancelLabel: 'Отмена'
             }
-            // copy: повтор запроса с inherit='copy'
+        ).then(function (choice) {
+            if (!choice) { return res; }
             var p2 = {};
             Object.keys(payload).forEach(function (k) { p2[k] = payload[k]; });
             p2.address = {};
             Object.keys(addr).forEach(function (k) { p2.address[k] = addr[k]; });
-            p2.address.inherit = 'copy';
+            p2.address.inherit = choice;
             return rawPost(action, p2).then(function (r2) {
-                if (r2 && r2.success) { toast('Скопировано в эту страницу'); }
+                if (r2 && r2.success && choice === 'copy') { toast('Секция локализована для этой страницы'); }
                 return r2;
             });
         });
@@ -112,6 +105,7 @@ export var api = {
         var body = new FormData();
         body.append('action', action);
         body.append('nonce', (S.cfg && S.cfg.nonce) || ''); // CSRF-токен
+        appendPageContext(body);
         body.append('file', file);
         Object.keys(extra || {}).forEach(function (k) {
             var v = extra[k];
@@ -233,6 +227,7 @@ export function loadConfig() {
         var lx = S.configData && S.configData.lexicons;
         S.lexicons = {
             resource: (lx && lx.resource) || {},
+            type: (lx && lx.type) || {},
             global: (lx && lx.global) || {}
         };
     }).catch(function (e) {

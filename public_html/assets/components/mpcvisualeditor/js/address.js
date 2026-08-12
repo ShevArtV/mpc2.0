@@ -69,6 +69,7 @@ export function fieldAddress(el) {
     addr.section = sectionEl ? sectionEl.getAttribute('data-mpc-section') : '';
     addr.level = (sectionEl && sectionEl.hasAttribute('data-mpc-static')) ? 'global' : 'resource';
     addr.resourceId = S.cfg.resourceId || 0;
+    applySectionScope(addr, !!(sectionEl && sectionEl.hasAttribute('data-mpc-static')));
 
     // Кросс-ресурс: обёртка data-mpc-res="<id>" (поле другого ресурса,
     // выведенного сниппетом) → пишем в ТОТ ресурс, а не в текущую страницу.
@@ -253,6 +254,7 @@ export function listAddress(listEl) {
         level: (sectionEl && sectionEl.hasAttribute('data-mpc-static')) ? 'global' : 'resource',
         resourceId: rid
     };
+    applySectionScope(addr, !!(sectionEl && sectionEl.hasAttribute('data-mpc-static')));
     if (fa && fa.lvl > 0) {
         var path = buildRowPath(listEl, fa.lvl); // спуск к родительской строке
         if (path && path.length) { addr.path = path; }
@@ -319,10 +321,32 @@ export function findSectionInLevel(name, level) {
     return null;
 }
 
+// Область изменения секции в текущем экране редактора.
+// type-resource — открыт сам ресурс-типа; inherited — обычная страница без
+// локальной секции; local/global говорят сами за себя.
+export function sectionScope(name, isStatic) {
+    if (isStatic) { return 'global'; }
+    if (!S.configData) { return 'local'; }
+    if (S.configData.isType) { return 'type-resource'; }
+    if (findSectionInLevel(name, 'resource')) { return 'local'; }
+    if (findSectionInLevel(name, 'type')) { return 'inherited'; }
+    return 'local';
+}
+
+function applySectionScope(addr, isStatic) {
+    var scope = sectionScope(addr.section || '', isStatic);
+    addr.scope = scope;
+    // MPC уже умеет писать уровень type. resourceId остаётся id открытой
+    // страницы: LevelResolver найдёт тип через эффективный staticBlocksPageId.
+    if (scope === 'inherited') { addr.level = 'type'; }
+    return addr;
+}
+
 // Конфиг-объект секции для КОНТЕНТА/строк: static→global, иначе resource.
 export function sectionConfig(sectionEl) {
     var name = sectionEl.getAttribute('data-mpc-section') || '';
-    var level = sectionEl.hasAttribute('data-mpc-static') ? 'global' : 'resource';
+    var scope = sectionScope(name, sectionEl.hasAttribute('data-mpc-static'));
+    var level = scope === 'global' ? 'global' : (scope === 'inherited' ? 'type' : 'resource');
     return findSectionInLevel(name, level);
 }
 

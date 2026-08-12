@@ -61,6 +61,7 @@ function fieldKind(fname, rec) {
 function sectionContent(name, isStatic) {
     var level = isStatic ? 'global' : 'resource';
     return findSectionInLevel(name, level)
+        || findSectionInLevel(name, 'type')
         || findSectionInLevel(name, 'resource')
         || findSectionInLevel(name, 'global');
 }
@@ -194,6 +195,7 @@ export function openRowsPanel(listAddr, label) {
             type: 'row', section: listAddr.section, parentField: listAddr.parentField,
             level: listAddr.level, resourceId: listAddr.resourceId
         };
+        if (listAddr.scope) { a.scope = listAddr.scope; }
         if (listAddr.path && listAddr.path.length) { a.path = listAddr.path; }
         Object.keys(extra).forEach(function (k) { a[k] = extra[k]; });
         if (btn) { btn.disabled = true; }

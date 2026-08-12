@@ -8,6 +8,7 @@
 namespace MpcVEServices;
 
 use MpcVEServices\Handlers\PermissionChecker;
+use MpcVEServices\Handlers\Support\RequestContext;
 
 /**
  * @author Arthur Shevchenko (https://t.me/ShevArtV)
@@ -43,12 +44,11 @@ class Connector
     ];
 
     private \modX $modx;
-    private Mpcve $mpcve;
+    private ?Mpcve $mpcve = null;
 
     public function __construct(\modX $modx)
     {
         $this->modx = $modx;
-        $this->mpcve = new Mpcve($modx);
     }
 
     /**
@@ -56,15 +56,18 @@ class Connector
      */
     public function handle(array $request): array
     {
-        $checker = new PermissionChecker($this->modx, (string)$this->mpcve->getConfig('permission'));
-        if (!$checker->userCanEdit()) {
+        // Сначала CSRF по уже поднятой web-сессии, затем фактический контекст
+        // страницы. После switchContext() getOption() видит его context settings.
+        if (!$this->nonceValid($request)) {
             return $this->error($this->modx->lexicon('mpcve_err_permission'));
         }
+        if (!(new RequestContext($this->modx))->switchTo((string)($request['contextKey'] ?? ''))) {
+            return $this->error('Invalid page context');
+        }
+        $this->mpcve = new Mpcve($this->modx);
 
-        // CSRF: только cookie-сессии недостаточно — сверяем nonce из тела запроса
-        // с сессионным (фронт берёт его из window.mpcVEConfig). Внешний сайт
-        // токена не знает → fetch с credentials:'include' отбивается.
-        if (!$this->nonceValid($request)) {
+        $checker = new PermissionChecker($this->modx, (string)$this->mpcve->getConfig('permission'));
+        if (!$checker->userCanEdit()) {
             return $this->error($this->modx->lexicon('mpcve_err_permission'));
         }
 

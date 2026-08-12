@@ -12,6 +12,7 @@ import { S } from './state.js';
 import { api, loadConfig } from './api.js';
 import { esc, toast, confirmDialog } from './dom.js';
 import { openSectionFields } from './editors/sectionfields.js';
+import { openForSection } from './scope.js';
 
 function boolOf(v) { return v === true || v === 1 || v === '1' || v === 'true'; }
 function byPos(a, b) { return (parseInt(a.position, 10) || 0) - (parseInt(b.position, 10) || 0); }
@@ -199,16 +200,17 @@ function ownRow(s, i) {
 }
 
 function lockedRow(s, i) {
-    return '<div class="mpcve-sec mpcve-sec--locked" data-i="' + i + '" title="Секция из типа — клик, чтобы скопировать в эту страницу">' +
+    return '<div class="mpcve-sec mpcve-sec--locked" data-i="' + i + '" title="Секция наследуется от типа страницы">' +
         '<span class="mpcve-sec__grip mpcve-sec__grip--lock">🔒</span>' +
         '<span class="mpcve-sec__name mpcve-sec__name--inherit">' + esc(s.section_name) + '</span>' +
-        '<button type="button" class="mpcve-sec__btn" data-op="copy" title="Скопировать в эту страницу">⬇</button>' +
+        '<button type="button" class="mpcve-sec__btn" data-op="fields" title="Редактировать поля типа">✎</button>' +
+        '<button type="button" class="mpcve-sec__btn" data-op="copy" title="Локализовать секцию для этой страницы">⬇</button>' +
     '</div>';
 }
 
 function copyFromType(s) {
     sectionOp({ op: 'copy_one', section: s.section_name }).then(function (r) {
-        if (r && r.success) { refresh(); toast('Секция скопирована — «Обновить» для рендера'); }
+        if (r && r.success) { refresh(); toast('Секция локализована — «Обновить» для рендера'); }
         else { toast((r && r.message) || 'Ошибка', true); }
     }).catch(netErr);
 }
@@ -232,6 +234,14 @@ function wire(items) {
             if (copyBtn) {
                 copyBtn.addEventListener('click', function (e) { e.stopPropagation(); copyFromType(s); });
             }
+            var inheritedFields = row.querySelector('[data-op=fields]');
+            if (inheritedFields) {
+                inheritedFields.addEventListener('click', function (e) {
+                    e.stopPropagation();
+                    closeSidebar();
+                    openForSection(domKeyOf(s), false, function () { openSectionFields(s); });
+                });
+            }
             return;
         }
         wireDrag(row, i, items);
@@ -243,7 +253,7 @@ function wire(items) {
             fieldsBtn.addEventListener('click', function (e) {
                 e.stopPropagation();
                 closeSidebar();
-                openSectionFields(s);
+                openForSection(domKeyOf(s), boolOf(s.is_static), function () { openSectionFields(s); });
             });
         }
         row.querySelector('[data-op=vis]').addEventListener('click', function () {

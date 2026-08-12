@@ -21,6 +21,6 @@ export var S = {
     tvTypes: {},         // имя TV → тип редактора (modTemplateVar.type) — своя карта
     labelsMap: {},       // имя поля → caption из конфигуратора
     settingsFields: [],  // имена полей таба «Настройки секции» (исключаем из панели)
-    configData: null,    // { resourceId, resource:{}, global:{}, lexicons:{} } из config/get
-    lexicons: { resource: {}, global: {} } // карты key→value лексикона по уровням
+    configData: null,    // { resourceId, isType, resource:{}, type:{}, global:{}, lexicons:{} }
+    lexicons: { resource: {}, type: {}, global: {} } // карты key→value по уровням
 };
