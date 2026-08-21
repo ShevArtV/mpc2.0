@@ -28,6 +28,12 @@ class PlaceholderProcessor
     private const BOOL_ATTRS = ['controls', 'autoplay', 'loop', 'muted'];
     private const BOOL_SENTINEL = '@@MPCBOOL@@';
 
+    /**
+     * Атрибуты <source>, которые сводятся по ВСЕМ <source> одного media-элемента
+     * ({@see unifySourceAttrs}). Булевых среди них нет: у <source> их не бывает.
+     */
+    private const SOURCE_UNION_ATTRS = ['src', 'srcset', 'media', 'type', 'sizes', 'width', 'height'];
+
     private \modX $modx;
     private array $properties;
     private Parser $parser;
@@ -357,6 +363,13 @@ class PlaceholderProcessor
         $sources = $row->find('source');
         if (count($sources) > 0) {
             $k = count($sources) - 1;
+            // Образец для {foreach} — ПОСЛЕДНИЙ <source>, но набор его атрибутов
+            // дополняем атрибутами остальных: setAttributes ставит плейсхолдер
+            // только на то, что есть на образце, а размножается он на ВСЕ строки
+            // цикла. Иначе `<source media="…"><source>` (мобильный + десктопный
+            // fallback у video) терял media у всех строк, хотя в данных он есть.
+            $sample = $sources[$k];
+            $optionalAttrs = $this->unifySourceAttrs($sources, $sample);
             // <source> внутри picture → атрибут srcset, content-type 'image';
             // <source> внутри video/audio → атрибут src, content-type как у тега-родителя.
             $sourceAttr = $tag === 'picture' ? 'srcset' : 'src';
@@ -371,7 +384,7 @@ class PlaceholderProcessor
             //   (как наш $accumulatedParent).
             $sourceParent = $tag === 'picture' ? $fieldName : $accumulatedParent;
             $useSourceLexicon = $this->shouldLexiconize($sourceContentType, 'source', $sourceParent);
-            $source = $this->setAttributes($sources[$k], $firstSymbol, '$source', [$sourceAttr => $useSourceLexicon], $deferVar);
+            $source = $this->setAttributes($sample, $firstSymbol, '$source', [$sourceAttr => $useSourceLexicon], $deferVar);
 
             if ($this->properties['lazyloadAttr'] && !$row->hasAttribute('data-mpc-nolazy')) {
                 if ($tag === 'picture' && !$source->hasAttribute('data-mpc-nothumb') && !empty($this->properties['thumbSnippet'])) {
@@ -393,6 +406,19 @@ class PlaceholderProcessor
             }
 
             $sourceHtml = $this->parser->getHTMLString($source);
+            // Условный рендер необязательных атрибутов строки цикла. `media` —
+            // всегда: пустой `media=""` это пустой media-query list, то есть
+            // «подходит всегда», и такой <source> перехватывает выбор у
+            // следующих (у второй строки данных media обычно null).
+            $sourceHtml = $this->renderOptionalAttrs(
+                $sourceHtml,
+                array_diff(
+                    array_unique(array_merge($optionalAttrs, $sample->hasAttribute('media') ? ['media'] : [])),
+                    [$sourceAttr, (string)$this->properties['lazyloadAttr']]
+                ),
+                $firstSymbol,
+                '$source'
+            );
             // strtr (один проход), не каскадный str_replace: '##'/'complexName'/
             // 'html' не должны заменяться повторно внутри уже подставленных
             // значений (V11, как в setSampleFields).
@@ -684,6 +710,68 @@ class PlaceholderProcessor
         }
 
         return $row;
+    }
+
+    /**
+     * Дополняет образец <source> атрибутами остальных <source> того же
+     * media-элемента и возвращает имена дописанных.
+     *
+     * Зачем: шаблон строки {foreach} строится по ОДНОМУ образцу, а применяется ко
+     * всем строкам данных. Атрибут, которого на образце нет, выпадает из вывода
+     * целиком — даже если в данных он заполнен (грабер пишет media/type всем
+     * source независимо от вёрстки). Значение здесь неважно: setAttributes всё
+     * равно заменит его плейсхолдером — важен сам факт наличия атрибута.
+     *
+     * Дописанный атрибут заведомо есть НЕ у всех строк, поэтому его имя уходит в
+     * условный рендер ({@see renderOptionalAttrs}).
+     *
+     * @param Element[] $sources
+     * @return string[] имена дописанных атрибутов
+     */
+    private function unifySourceAttrs(array $sources, Element $sample): array
+    {
+        $added = [];
+        foreach (self::SOURCE_UNION_ATTRS as $attr) {
+            if ($sample->hasAttribute($attr)) {
+                continue;
+            }
+            foreach ($sources as $other) {
+                if ($other->hasAttribute($attr)) {
+                    $sample->setAttribute($attr, (string)$other->getAttribute($attr));
+                    $added[] = $attr;
+                    break;
+                }
+            }
+        }
+        return $added;
+    }
+
+    /**
+     * Оборачивает необязательные атрибуты в условный Fenom-рендер:
+     * `media="{$source.media}"` → `{if $source.media} media="{$source.media}"{/if}`
+     * (firstSymbol `##` для static — резолвится в `{` на final-пассе).
+     *
+     * Без этого строка данных с пустым значением даёт пустой атрибут в HTML, а
+     * для `media` это не то же самое, что его отсутствие: пустой media-query list
+     * подходит под любое устройство. PURE.
+     *
+     * @param string[] $attrs
+     */
+    private function renderOptionalAttrs(string $html, array $attrs, string $firstSymbol, string $complexName): string
+    {
+        foreach ($attrs as $attr) {
+            if ($attr === '') {
+                continue;
+            }
+            $pattern = '/\s+' . preg_quote($attr, '/') . '="[^"]*"/';
+            $out = preg_replace_callback($pattern, function (array $m) use ($firstSymbol, $complexName, $attr) {
+                return $firstSymbol . 'if ' . $complexName . '.' . $attr . '}'
+                    . $m[0]
+                    . $firstSymbol . '/if}';
+            }, $html, 1);
+            $html = $out ?? $html;
+        }
+        return $html;
     }
 
     /**

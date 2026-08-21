@@ -1200,4 +1200,110 @@ class PlaceholderProcessorTest extends TestCase
         $this->assertStringStartsWith('<li', $out);
         $this->assertStringContainsString('data-mpc-attr="{$attr}"', $out, 'data-mpc-attr внутри сохранён для последующей замены');
     }
+
+    // ---------------------------------------------------------------
+    // <source> внутри media-элемента: набор атрибутов сводится по всем строкам
+    // ---------------------------------------------------------------
+
+    /**
+     * Прогон одной секции через setPlaceholders с рабочим sample'ом media.
+     */
+    private function mediaHtml(string $sectionHtml, bool $isStatic = false, string $lazyloadAttr = 'data-lazy'): string
+    {
+        $proc = $this->makeProcessor([
+            'lazyloadAttr' => $lazyloadAttr,
+            'samples'      => [
+                'if'                   => $this->ifSample,
+                'foreach'              => $this->foreachSample,
+                'foreach_limit'        => $this->foreachSample,
+                'foreach_offset'       => $this->foreachSample,
+                'foreach_limit_offset' => $this->foreachSample,
+                'media'                => '##foreach complexName.sources as $source index=$index last=$last}html##/foreach}',
+            ],
+        ]);
+        $properties = [
+            'html'          => $sectionHtml,
+            'element'       => (new Document($sectionHtml))->find('[data-mpc-section]')[0],
+            'fieldAttrName' => 'data-mpc-field',
+            'itemAttrName'  => 'data-mpc-item',
+            'level'         => 0,
+            'isStatic'      => $isStatic,
+        ];
+        return $proc->setPlaceholders($properties)['html'];
+    }
+
+    public function testSetPlaceholdersVideoSourceKeepsMediaFromFirstSource(): void
+    {
+        // Регрессионный кейс (#2608-221): шаблон строки {foreach} строится по
+        // ПОСЛЕДНЕМУ <source>. У video последний source — десктопный fallback без
+        // media, поэтому media выпадал из вывода для ВСЕХ строк, хотя грабер
+        // пишет его в данные каждой строки.
+        $html = $this->mediaHtml(
+            '<section data-mpc-section="t">'
+            . '<video data-mpc-field="clip" muted loop>'
+            .   '<source media="(max-width: 576px)" type="video/mp4" src="/mob.mp4">'
+            .   '<source type="video/mp4" src="/pc.mp4">'
+            . '</video>'
+            . '</section>'
+        );
+
+        $this->assertStringContainsString('$source.media', $html, 'media должен попасть в шаблон строки');
+        // Атрибут есть не у всех строк данных (у второй media = null) → условный
+        // рендер: пустой media="" подходит под любое устройство и перехватывает
+        // выбор у следующего source.
+        $this->assertStringContainsString('{if $source.media} media="{$source.media}"{/if}', $html);
+        $this->assertStringNotContainsString('media=""', $html);
+    }
+
+    public function testSetPlaceholdersVideoSourceMediaConditionalInStaticSection(): void
+    {
+        // В static-секции символ плейсхолдера `##` — условие обязано идти тем же
+        // символом, иначе final-пасс не соберёт Fenom-тег.
+        $html = $this->mediaHtml(
+            '<section data-mpc-section="t">'
+            . '<video data-mpc-field="clip" muted>'
+            .   '<source media="(max-width: 576px)" type="video/mp4" src="/mob.mp4">'
+            .   '<source type="video/mp4" src="/pc.mp4">'
+            . '</video>'
+            . '</section>',
+            true
+        );
+
+        $this->assertStringContainsString('##if $source.media} media="##$source.media}"##/if}', $html);
+    }
+
+    public function testSetPlaceholdersVideoSourceWithoutMediaAnywhereStaysClean(): void
+    {
+        // Обратная сторона: media нет ни у одного source в вёрстке — не выдумываем
+        // его и не добавляем пустой {if}.
+        $html = $this->mediaHtml(
+            '<section data-mpc-section="t">'
+            . '<video data-mpc-field="clip" muted>'
+            .   '<source type="video/mp4" src="/pc.mp4">'
+            . '</video>'
+            . '</section>'
+        );
+
+        $this->assertStringNotContainsString('$source.media', $html);
+        $this->assertStringContainsString('$source.src', $html);
+    }
+
+    public function testSetPlaceholdersPictureSourceMediaRenderedConditionally(): void
+    {
+        // picture: media есть у всех source, поведение сохраняется — атрибут в
+        // шаблоне остаётся, но выводится условно (в данных строки он может быть
+        // очищен через админку).
+        $html = $this->mediaHtml(
+            '<section data-mpc-section="t">'
+            . '<picture data-mpc-field="pic">'
+            .   '<source media="(max-width: 576px)" srcset="/mob.webp">'
+            .   '<source media="(max-width: 1200px)" srcset="/tab.webp">'
+            .   '<img src="/pc.webp" alt="x">'
+            . '</picture>'
+            . '</section>'
+        );
+
+        $this->assertStringContainsString('{if $source.media} media="{$source.media}"{/if}', $html);
+        $this->assertStringContainsString('$source.srcset', $html);
+    }
 }
