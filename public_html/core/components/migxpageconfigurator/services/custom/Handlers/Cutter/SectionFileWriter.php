@@ -221,6 +221,10 @@ class SectionFileWriter
             'level' => 0,
             'sectionLexiconPrefix' => $sectionLexiconPrefix,
             'isStatic' => $isStatic,
+            // Пишем файл чанка: своего eager-пасса у него нет, поэтому
+            // лексиконные выражения эмитятся в отложенной форме (см.
+            // PlaceholderProcessor::deferLexiconVar).
+            'isChunk' => $isChunk,
         ];
 
         $properties = $this->placeholderProcessor->setPlaceholders($properties);

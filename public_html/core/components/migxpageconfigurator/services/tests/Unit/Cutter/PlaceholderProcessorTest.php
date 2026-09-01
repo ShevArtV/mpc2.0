@@ -936,6 +936,91 @@ class PlaceholderProcessorTest extends TestCase
         $this->assertStringNotContainsString("##'{\$item1.content}' | lexicon}", $result);
     }
 
+    public function testSetPlaceholdersChunkDefersLexiconVarInsideForeach(): void
+    {
+        // Файл чанка (isChunk) пишется без своего eager-пасса: тело чанка —
+        // отдельный Fenom-шаблон, который компилируется целиком при
+        // parse/include. Одинарные кавычки Fenom не интерполирует, поэтому
+        // `'{$item1.content}'` осталось бы литералом `{$item1.content}` и
+        // `| lexicon` вернул бы пусто. Нужна отложенная форма.
+        $proc = $this->makeProcessor([
+            'useLexicons'              => true,
+            'translatableContentTypes' => ['text'],
+        ]);
+        $html = '<div data-mpc-chunk="common/gallery.tpl" data-mpc-field="list_simple">'
+            . '<div data-mpc-item>'
+            .   '<p data-mpc-field-1="content">y</p>'
+            . '</div>'
+            . '</div>';
+        $properties = [
+            'html'          => $html,
+            'element'       => (new Document($html))->find('[data-mpc-chunk]')[0],
+            'fieldAttrName' => 'data-mpc-field',
+            'itemAttrName'  => 'data-mpc-item',
+            'level'         => 0,
+            'isStatic'      => false,
+            'isChunk'       => true,
+        ];
+        $result = $proc->setPlaceholders($properties)['html'];
+
+        $this->assertStringContainsString('##$item1.content | lexicon}', $result);
+        $this->assertStringNotContainsString("##'{\$item1.content}' | lexicon}", $result);
+    }
+
+    public function testSetPlaceholdersChunkDefersLexiconVarAtTopLevel(): void
+    {
+        // В чанке отложенная форма нужна на любом уровне: переменная верхнего
+        // уровня приходит параметром parseChunk и резолвится в рантайме.
+        $proc = $this->makeProcessor([
+            'useLexicons'              => true,
+            'translatableContentTypes' => ['text'],
+        ]);
+        $html = '<div data-mpc-chunk="common/gallery.tpl">'
+            . '<h2 data-mpc-field="title">y</h2>'
+            . '</div>';
+        $properties = [
+            'html'          => $html,
+            'element'       => (new Document($html))->find('[data-mpc-chunk]')[0],
+            'fieldAttrName' => 'data-mpc-field',
+            'itemAttrName'  => 'data-mpc-item',
+            'level'         => 0,
+            'isStatic'      => false,
+            'isChunk'       => true,
+        ];
+        $result = $proc->setPlaceholders($properties)['html'];
+
+        $this->assertStringContainsString('##$title | lexicon}', $result);
+        $this->assertStringNotContainsString("##'{\$title}' | lexicon}", $result);
+    }
+
+    public function testSetPlaceholdersSectionKeepsEagerInterpolationOutsideChunk(): void
+    {
+        // Контроль: вне чанка (обычная нестатичная секция) форма прежняя —
+        // eager-интерполяция ключа, лексикон отложен через `##`.
+        $proc = $this->makeProcessor([
+            'useLexicons'              => true,
+            'translatableContentTypes' => ['text'],
+        ]);
+        $html = '<section data-mpc-section="t">'
+            . '<div data-mpc-field="list_simple">'
+            .   '<div data-mpc-item>'
+            .     '<p data-mpc-field-1="content">y</p>'
+            .   '</div>'
+            . '</div>'
+            . '</section>';
+        $properties = [
+            'html'          => $html,
+            'element'       => (new Document($html))->find('[data-mpc-section]')[0],
+            'fieldAttrName' => 'data-mpc-field',
+            'itemAttrName'  => 'data-mpc-item',
+            'level'         => 0,
+            'isStatic'      => false,
+        ];
+        $result = $proc->setPlaceholders($properties)['html'];
+
+        $this->assertStringContainsString("##'{\$item1.content}' | lexicon}", $result);
+    }
+
     public function testSetPlaceholdersStaticTopLevelKeepsEagerInterpolation(): void
     {
         // Для top-level поля статичной секции (вне foreach) eager-интерполяция

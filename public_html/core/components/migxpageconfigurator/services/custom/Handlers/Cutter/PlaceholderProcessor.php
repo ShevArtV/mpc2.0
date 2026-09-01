@@ -839,10 +839,23 @@ class PlaceholderProcessor
      * Для нестатичных секций foreach исполняется на eager-пассе ({foreach}),
      * `$itemN` в скоупе, и eager-интерполяция нужна (значение запекается, пока
      * loop-переменная жива) — поэтому возвращаем false.
+     *
+     * Истинно и для **файлов чанков** (`isChunk`), на любом уровне: у чанка
+     * нет своего eager-пасса, его тело — отдельный Fenom-шаблон, который
+     * компилируется целиком в момент parse/include. Одинарные кавычки Fenom не
+     * интерполирует, поэтому `'{$expr}'` там остался бы литералом `{$expr}` —
+     * `| lexicon` получил бы несуществующий ключ и вернул пусто. Отложенная
+     * форма `##$expr | lexicon}` после плоского `##`→`{` (SectionFileWriter)
+     * даёт `{$expr | lexicon}`: переменная приходит параметром parseChunk (или
+     * из foreach самого чанка) и резолвится в рантайме, лексикон к этому
+     * моменту уже загружен.
      * PURE: не меняет состояние.
      */
     private function deferLexiconVar(array $properties): bool
     {
+        if (!empty($properties['isChunk'])) {
+            return true;
+        }
         return !empty($properties['isStatic']) && ($properties['level'] ?? 0) > 0;
     }
 
