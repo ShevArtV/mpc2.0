@@ -72,17 +72,11 @@ class FieldWriter
 
         $this->useLexicons = (bool)($properties['useLexicons']
             ?? $this->modx->getOption('mpc_use_lexicons', null, false));
-        $culture = !empty($_COOKIE['mpc_lang'])
-            ? (string)$_COOKIE['mpc_lang']
-            : (string)$this->modx->getOption('cultureKey', null, 'en');
-        // culture идёт в путь к файлу лексикона как компонент каталога
-        // ({lexiconPath}/{culture}/...) — cookie mpc_lang под контролем клиента,
-        // поэтому отсекаем traversal через basename() (срезает ../ и разделители),
-        // не ломая нестандартные форматы cultureKey (ru-RU, zh_CN, custom).
-        $culture = basename($culture);
-        if ($culture === '' || $culture === '.' || $culture === '..') {
-            $culture = (string)$this->modx->getOption('cultureKey', null, 'en');
-        }
+        // Язык записи — по правилу «пишем туда, откуда читает витрина»:
+        // cultureKey текущего контекста, а cookie mpc_lang учитывается, только
+        // если mpc её реально применяет и значение разрешено в контексте.
+        // См. {@see \MpcServices\Handlers\Support\Culture}.
+        $culture = Support\Culture::resolve($this->modx);
         $this->lexProps = [
             'culture'              => $culture,
             'corePath'             => (string)$this->modx->getOption('core_path', null, ''),
@@ -133,17 +127,22 @@ class FieldWriter
     {
         if ($this->lexSyncInstance === null) {
             $base    = $this->lexProps['corePath'] . $this->lexProps['lexiconPath'];
-            $default = (string)$this->modx->getOption('mpc_default_language', null, 'ru');
-            $langs   = explode(',', (string)$this->modx->getOption('mpc_available_languages', null, ''));
+            $default = $this->defaultLanguage();
+            $langs   = explode(',', (string)Support\Culture::contextSetting($this->modx, 'mpc_available_languages', ''));
             $this->lexSyncInstance = new \MpcServices\Handlers\LexiconSync($base, $default, $langs);
         }
         return $this->lexSyncInstance;
     }
 
-    /** Культура языка по умолчанию (источник оригиналов для лексиконов). */
+    /**
+     * Культура языка по умолчанию (источник оригиналов для лексиконов).
+     * С контекстным переопределением: на мультиконтекстном сайте у каждого
+     * поддомена свой mpc_default_language, и сравнение culture===default должно
+     * идти по языку ТЕКУЩЕГО контекста, а не по глобальной настройке.
+     */
     private function defaultLanguage(): string
     {
-        return (string)$this->modx->getOption('mpc_default_language', null, 'ru');
+        return Support\Culture::defaultLanguage($this->modx);
     }
 
     /**

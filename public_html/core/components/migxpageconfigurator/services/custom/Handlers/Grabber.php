@@ -256,16 +256,18 @@ class Grabber extends Base
      */
     public function handleContactsHtml(string $html): void
     {
-        // Пер-полевая правка контакта пишет перевод в ТЕКУЩИЙ язык (cookie
-        // mpc_lang), а НЕ в дефолтный, как полная нарезка. Без этого правка на en
-        // уходила в ru-файл, а syncOtherLanguages раскидывала её по всем языкам
-        // («меняю en — меняется ru; меняю ru — оба»). Эталон выбора culture —
-        // FieldWriter (rfield/tv). Для не-дефолтного языка: пишем в его lexicon-файл
-        // и НЕ синкаем (skipLexiconSync) — перевод не должен течь в другие языки.
+        // Пер-полевая правка контакта пишет перевод в ТЕКУЩИЙ язык, а НЕ в
+        // дефолтный, как полная нарезка. Без этого правка на en уходила в
+        // ru-файл, а syncOtherLanguages раскидывала её по всем языкам («меняю en —
+        // меняется ru; меняю ru — оба»). Язык берём тем же резолвером, что и
+        // FieldWriter ({@see Support\Culture}): cultureKey контекста, cookie —
+        // только если mpc её применяет и значение разрешено в контексте.
+        // Для не-дефолтного языка: пишем в его lexicon-файл и НЕ синкаем
+        // (skipLexiconSync) — перевод не должен течь в другие языки.
         if (!empty($this->properties['useLexicons'])) {
-            $culture = basename((string)($_COOKIE['mpc_lang'] ?? ''));
+            $culture = Support\Culture::resolve($this->modx);
             $default = (string)$this->properties['defaultLanguageKey'];
-            if ($culture !== '' && $culture !== '.' && $culture !== '..' && $culture !== $default) {
+            if ($culture !== '' && $culture !== $default) {
                 $culturePath = $this->properties['corePath'] . $this->properties['lexiconPath'] . $culture . '/';
                 if (!is_dir($culturePath)) {
                     mkdir($culturePath, 0755, true);
