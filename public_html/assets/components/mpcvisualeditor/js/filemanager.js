@@ -11,23 +11,27 @@
  * mpc (mpc_media_source); фронт его не выбирает. Пути относительны базе источника.
  */
 import { files } from './api.js';
-import { toast, esc, promptDialog, confirmDialog, closeOnBackdrop } from './dom.js';
+import { toast, esc, promptDialog, confirmDialog, openModal } from './dom.js';
 
 var EXT_ICON = { pdf: '📄', zip: '🗜', doc: '📃', docx: '📃', xls: '📊', xlsx: '📊', mp4: '🎬', webm: '🎬', mp3: '🎵', wav: '🎵' };
 
 export function openFileManager(opts) {
     opts = opts || {};
-    if (document.querySelector('.mpcve-fm')) { return Promise.resolve(null); }
     var accept = opts.accept || 'any';
 
     return new Promise(function (resolve) {
         var state = { path: '', selected: null };
 
-        var ov = document.createElement('div');
-        ov.className = 'mpcve-modal mpcve-fm';
-        ov.innerHTML =
-            '<div class="mpcve-modal__card mpcve-modal__card--wide mpcve-fm__card">' +
-                '<div class="mpcve-modal__head">' + esc(opts.title || 'Файлы') + '</div>' +
+        // capture + stopImmediatePropagation: Escape закрывает ТОЛЬКО файловый
+        // менеджер, не подлежащий под ним модал-редактор (тоже слушает Escape) —
+        // это делает сама фабрика (captureEsc), включая пропуск, если поверх
+        // менеджера открыт prompt/confirm (.mpcve-confirm).
+        var m = openModal({
+            guard: '.mpcve-fm',
+            overlayClass: 'mpcve-fm',
+            cardClass: 'mpcve-modal__card--wide mpcve-fm__card',
+            title: opts.title || 'Файлы',
+            bodyHtml:
                 '<div class="mpcve-fm__bar">' +
                     '<button type="button" class="mpcve-btn mpcve-fm__up" title="Вверх">↑</button>' +
                     '<div class="mpcve-fm__crumbs"></div>' +
@@ -37,15 +41,17 @@ export function openFileManager(opts) {
                         '<input type="file" class="mpcve-fm__upload" hidden></label>' +
                     '<button type="button" class="mpcve-btn mpcve-fm__urldl">🔗 По ссылке</button>' +
                 '</div>' +
-                '<div class="mpcve-fm__grid"><div class="mpcve-fm__loading">Загрузка…</div></div>' +
-                '<div class="mpcve-modal__actions">' +
-                    '<span class="mpcve-fm__sel"></span>' +
-                    '<span class="mpcve-modal__spacer"></span>' +
-                    '<button type="button" class="mpcve-btn" data-act="cancel">Отмена</button>' +
-                    '<button type="button" class="mpcve-btn mpcve-btn--primary" data-act="pick" disabled>Выбрать</button>' +
-                '</div>' +
-            '</div>';
-        document.body.appendChild(ov);
+                '<div class="mpcve-fm__grid"><div class="mpcve-fm__loading">Загрузка…</div></div>',
+            actionsHtml:
+                '<span class="mpcve-fm__sel"></span>' +
+                '<span class="mpcve-modal__spacer"></span>' +
+                '<button type="button" class="mpcve-btn" data-act="cancel">Отмена</button>' +
+                '<button type="button" class="mpcve-btn mpcve-btn--primary" data-act="pick" disabled>Выбрать</button>',
+            captureEsc: true,
+            onClose: function () { resolve(null); }
+        });
+        if (!m) { resolve(null); return; }
+        var ov = m.overlay;
 
         var grid     = ov.querySelector('.mpcve-fm__grid');
         var crumbs   = ov.querySelector('.mpcve-fm__crumbs');
@@ -53,19 +59,7 @@ export function openFileManager(opts) {
         var pickBtn  = ov.querySelector('[data-act=pick]');
         var uploadEl = ov.querySelector('.mpcve-fm__upload');
 
-        function done(v) { ov.remove(); document.removeEventListener('keydown', onKey, true); resolve(v); }
-        // capture + stopImmediatePropagation: Escape закрывает ТОЛЬКО файловый
-        // менеджер, не подлежащий под ним модал-редактор (тоже слушает Escape).
-        function onKey(e) {
-            if (e.key !== 'Escape') { return; }
-            // Поверх файлового менеджера может быть prompt/confirm — Escape ему.
-            if (document.querySelector('.mpcve-confirm')) { return; }
-            e.stopImmediatePropagation();
-            done(null);
-        }
-        document.addEventListener('keydown', onKey, true);
-        closeOnBackdrop(ov, function () { done(null); });
-        ov.querySelector('[data-act=cancel]').addEventListener('click', function () { done(null); });
+        function done(v) { resolve(v); m.close(); }
         pickBtn.addEventListener('click', function () { if (state.selected) { done(state.selected); } });
 
         // Путь родителя: 'a/b/' → 'a/', 'a/' → ''.

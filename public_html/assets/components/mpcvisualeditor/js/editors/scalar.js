@@ -3,7 +3,7 @@
  * Один редактор, ветвление по data-mpcve-type. Значение пишем сырым (raw=1) —
  * число/дата не лексиконятся.
  */
-import { toast, esc, closeOnBackdrop } from '../dom.js';
+import { toast, esc, openModal } from '../dom.js';
 import { fieldAddress } from '../address.js';
 import { doSave } from '../save.js';
 
@@ -21,7 +21,6 @@ function fromLocalInput(v) {
 }
 
 export function openScalarEditor(el) {
-    if (document.querySelector('.mpcve-modal')) { return; }
     var addr = fieldAddress(el);
     if (!addr) { toast('Нет адреса поля', true); return; }
 
@@ -45,28 +44,21 @@ export function openScalarEditor(el) {
         toStore = function (root) { return root.querySelector('input').value.trim(); };
     }
 
-    var overlay = document.createElement('div');
-    overlay.className = 'mpcve-modal';
-    overlay.innerHTML =
-        '<div class="mpcve-modal__card mpcve-modal__card--text">' +
-            '<div class="mpcve-modal__head">' + (type === 'date' ? 'Дата' : 'Число') + '</div>' +
-            controlHtml +
-            '<div class="mpcve-modal__actions">' +
-                '<button type="button" class="mpcve-btn" data-act="cancel">Отмена</button>' +
-                '<button type="button" class="mpcve-btn mpcve-btn--primary" data-act="save">Сохранить</button>' +
-            '</div>' +
-        '</div>';
-    document.body.appendChild(overlay);
+    var m = openModal({
+        cardClass: 'mpcve-modal__card--text',
+        title: type === 'date' ? 'Дата' : 'Число',
+        bodyHtml: controlHtml,
+        actionsHtml:
+            '<button type="button" class="mpcve-btn" data-act="cancel">Отмена</button>' +
+            '<button type="button" class="mpcve-btn mpcve-btn--primary" data-act="save">Сохранить</button>'
+    });
+    if (!m) { return; }
+    var overlay = m.overlay;
+    var close = m.close;
 
-    var card = overlay.querySelector('.mpcve-modal__card');
+    var card = m.card;
     var input = overlay.querySelector('input');
     input.focus();
-
-    function close() { overlay.remove(); document.removeEventListener('keydown', onKey); }
-    function onKey(e) { if (e.key === 'Escape') { close(); } }
-    document.addEventListener('keydown', onKey);
-    closeOnBackdrop(overlay, function () { close(); });
-    overlay.querySelector('[data-act=cancel]').addEventListener('click', close);
 
     var saveBtn = overlay.querySelector('[data-act=save]');
     saveBtn.addEventListener('click', function () {

@@ -6,7 +6,7 @@
  */
 import { S } from './state.js';
 import { api, uploadMedia } from './api.js';
-import { esc, parseRecord, isScalar, fieldLabel, toast, closeOnBackdrop } from './dom.js';
+import { esc, parseRecord, isScalar, fieldLabel, toast, openModal } from './dom.js';
 import { SECTION_STYLE_FIELDS, STRUCTURAL } from './constants.js';
 import { findSectionInLevel, sectionConfig } from './address.js';
 import { createRte, sanitizeHtml } from './editors/rte.js';
@@ -458,34 +458,21 @@ function wireControl(rowEl, f, btn) {
 }
 
 export function openBlockPanel(title, descriptors) {
-    if (document.querySelector('.mpcve-modal')) { return; }
     var body = descriptors.map(function (f, i) { return rowHtml(f, i); }).join('');
 
-    var overlay = document.createElement('div');
-    overlay.className = 'mpcve-modal';
-    overlay.innerHTML =
-        '<div class="mpcve-modal__card mpcve-modal__card--wide">' +
-            '<div class="mpcve-modal__head">Скрытые поля · ' + esc(title) + '</div>' +
-            '<div class="mpcve-hpanel">' + body + '</div>' +
-            '<div class="mpcve-modal__actions">' +
-                '<button type="button" class="mpcve-btn" data-act="close">Закрыть</button>' +
-            '</div>' +
-        '</div>';
-    document.body.appendChild(overlay);
-
-    var closed = false;
-    function close() { closed = true; overlay.remove(); document.removeEventListener('keydown', onKey, true); }
-    // capture + stopImmediatePropagation: Escape гасит ТОЛЬКО панель, не редактор
-    // под ней; если сверху confirm/prompt — отдаём Escape ему.
-    function onKey(e) {
-        if (e.key !== 'Escape') { return; }
-        if (document.querySelector('.mpcve-confirm')) { return; }
-        e.stopImmediatePropagation();
-        close();
-    }
-    document.addEventListener('keydown', onKey, true);
-    closeOnBackdrop(overlay, function () { close(); });
-    overlay.querySelector('[data-act=close]').addEventListener('click', close);
+    // captureEsc: Escape гасит ТОЛЬКО панель, не редактор под ней (confirm/prompt
+    // поверх панели фабрика пропускает вперёд сама).
+    var m = openModal({
+        cardClass: 'mpcve-modal__card--wide',
+        title: 'Скрытые поля · ' + title,
+        bodyHtml: '<div class="mpcve-hpanel">' + body + '</div>',
+        actionsHtml: '<button type="button" class="mpcve-btn" data-act="close">Закрыть</button>',
+        closeSelectors: ['[data-act=close]'],
+        captureEsc: true
+    });
+    if (!m) { return; }
+    var overlay = m.overlay;
+    var close = m.close;
 
     overlay.querySelectorAll('.mpcve-hpanel__row').forEach(function (rowEl) {
         var f = descriptors[parseInt(rowEl.getAttribute('data-i'), 10)];
@@ -530,7 +517,7 @@ export function openBlockPanel(title, descriptors) {
             api.post('field/save', { address: addr, value: value, old: old }).then(function (r) {
                 if (r && r.success) {
                     f.value = value;
-                    if (closed) { return; } // панель закрыта — не трогаем detached DOM
+                    if (m.isClosed()) { return; } // панель закрыта — не трогаем detached DOM
                     rowEl.classList.add('mpcve-hpanel__row--saved');
                     btn.textContent = '✓';
                     setTimeout(function () { btn.textContent = 'Сохранить'; btn.disabled = false; }, 1200);

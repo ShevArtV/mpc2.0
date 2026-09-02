@@ -15,7 +15,7 @@
  */
 import { api } from '../api.js';
 import { S } from '../state.js';
-import { toast, esc, closeOnBackdrop } from '../dom.js';
+import { toast, esc, openModal } from '../dom.js';
 import { fieldAddress } from '../address.js';
 
 // "Caption==key||Caption2==key2" → [{label,value}]. @SELECT/динамика/неключевой → null.
@@ -121,24 +121,17 @@ function render(el, addr, etype, multiple, opts) {
             '<div class="mpcve-rows__hint">Опции не удалось получить — введите значение вручную или выберите в админке.</div>';
     }
 
-    var overlay = document.createElement('div');
-    overlay.className = 'mpcve-modal';
-    overlay.innerHTML =
-        '<div class="mpcve-modal__card mpcve-modal__card--text">' +
-            '<div class="mpcve-modal__head">Выбор значения' + (multiple ? ' (несколько)' : '') + '</div>' +
-            controlHtml +
-            '<div class="mpcve-modal__actions">' +
-                '<button type="button" class="mpcve-btn" data-act="cancel">Отмена</button>' +
-                '<button type="button" class="mpcve-btn mpcve-btn--primary" data-act="save">Сохранить</button>' +
-            '</div>' +
-        '</div>';
-    document.body.appendChild(overlay);
-
-    function close() { overlay.remove(); document.removeEventListener('keydown', onKey); }
-    function onKey(e) { if (e.key === 'Escape') { close(); } }
-    document.addEventListener('keydown', onKey);
-    closeOnBackdrop(overlay, function () { close(); });
-    overlay.querySelector('[data-act=cancel]').addEventListener('click', close);
+    var m = openModal({
+        cardClass: 'mpcve-modal__card--text',
+        title: 'Выбор значения' + (multiple ? ' (несколько)' : ''),
+        bodyHtml: controlHtml,
+        actionsHtml:
+            '<button type="button" class="mpcve-btn" data-act="cancel">Отмена</button>' +
+            '<button type="button" class="mpcve-btn mpcve-btn--primary" data-act="save">Сохранить</button>'
+    });
+    if (!m) { return; }
+    var overlay = m.overlay;
+    var close = m.close;
 
     var saveBtn = overlay.querySelector('[data-act=save]');
     saveBtn.addEventListener('click', function () {

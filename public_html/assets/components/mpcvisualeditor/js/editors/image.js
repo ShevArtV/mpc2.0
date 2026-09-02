@@ -3,7 +3,7 @@
  * migx-запись img с атрибутами alt/title/width/height).
  */
 import { api, folderOf } from '../api.js';
-import { toast, bgUrl, hasBg, closeOnBackdrop } from '../dom.js';
+import { toast, bgUrl, hasBg, openModal } from '../dom.js';
 import { fieldAddress } from '../address.js';
 import { openFileManager } from '../filemanager.js';
 import { makeUrlButton } from './urlrow.js';
@@ -52,9 +52,6 @@ function isRecordImage(el) {
 }
 
 export function openImageEditor(el, forcedAddr) {
-    if (document.querySelector('.mpcve-modal')) {
-        return;
-    }
     var asRecord = isRecordImage(el);
     var cur      = currentImageSrc(el);
     var curAlt   = el.getAttribute('alt') || '';
@@ -62,15 +59,13 @@ export function openImageEditor(el, forcedAddr) {
     var curW     = el.getAttribute('width') || '';
     var curH     = el.getAttribute('height') || '';
 
-    var overlay = document.createElement('div');
-    overlay.className = 'mpcve-modal';
     var attrFields = asRecord
         ? '<label class="mpcve-modal__field">alt<input type="text" data-f="alt"></label>' +
           '<label class="mpcve-modal__field">title<input type="text" data-f="title"></label>'
         : '';
-    overlay.innerHTML =
-        '<div class="mpcve-modal__card">' +
-            '<div class="mpcve-modal__head">Изображение</div>' +
+    var m = openModal({
+        title: 'Изображение',
+        bodyHtml:
             '<div class="mpcve-modal__preview"></div>' +
             '<label class="mpcve-modal__drop">' +
                 '<span>Перетащите файл сюда или <b>выберите</b></span>' +
@@ -79,13 +74,14 @@ export function openImageEditor(el, forcedAddr) {
             '<div class="mpcve-modal__picks">' +
                 '<button type="button" class="mpcve-pick-existing" data-act="browse">📁 Выбрать существующий</button>' +
             '</div>' +
-            attrFields +
-            '<div class="mpcve-modal__actions">' +
-                '<button type="button" class="mpcve-btn" data-act="cancel">Отмена</button>' +
-                '<button type="button" class="mpcve-btn mpcve-btn--primary" data-act="save">Сохранить</button>' +
-            '</div>' +
-        '</div>';
-    document.body.appendChild(overlay);
+            attrFields,
+        actionsHtml:
+            '<button type="button" class="mpcve-btn" data-act="cancel">Отмена</button>' +
+            '<button type="button" class="mpcve-btn mpcve-btn--primary" data-act="save">Сохранить</button>'
+    });
+    if (!m) { return; }
+    var overlay = m.overlay;
+    var close = m.close;
 
     var preview    = overlay.querySelector('.mpcve-modal__preview');
     var input      = overlay.querySelector('input[type=file]');
@@ -114,15 +110,6 @@ export function openImageEditor(el, forcedAddr) {
             : '<span class="mpcve-modal__empty">нет изображения</span>';
         if (src) { preview.querySelector('img').src = src; }
     }
-
-    function close() {
-        overlay.remove();
-        document.removeEventListener('keydown', onKey);
-    }
-    function onKey(e) { if (e.key === 'Escape') { close(); } }
-    document.addEventListener('keydown', onKey);
-    closeOnBackdrop(overlay, function () { close(); });
-    overlay.querySelector('[data-act=cancel]').addEventListener('click', close);
 
     function pick(file) {
         if (!file || file.type.indexOf('image/') !== 0) {

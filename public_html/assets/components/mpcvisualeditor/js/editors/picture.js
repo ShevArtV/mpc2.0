@@ -3,7 +3,7 @@
  * <source> (адаптив). Конфиг — источник правды (лексикон-ключи), DOM — превью.
  */
 import { api, uploadAndProbe, folderOf } from '../api.js';
-import { toast, parseRecord, closeOnBackdrop } from '../dom.js';
+import { toast, parseRecord, openModal } from '../dom.js';
 import { fieldAddress, fieldConfigRecord } from '../address.js';
 import { openFileManager } from '../filemanager.js';
 import { makeUrlButton } from './urlrow.js';
@@ -12,7 +12,6 @@ import { makeUrlButton } from './urlrow.js';
 // запись из конфига; превью пустые — DOM нет). Иначе обычный режим (адрес/превью
 // из el на странице).
 export function openPictureEditor(el, override) {
-    if (document.querySelector('.mpcve-modal')) { return; }
     var addr = (override && override.addr) || fieldAddress(el);
     if (!addr || !addr.section || !addr.fieldName) { toast('Нет адреса картинки', true); return; }
     // Конфиг — источник правды (ключи лексикона); DOM — для превью (готовые url).
@@ -51,30 +50,24 @@ export function openPictureEditor(el, override) {
         })
     }]);
 
-    var overlay = document.createElement('div');
-    overlay.className = 'mpcve-modal';
-    overlay.innerHTML =
-        '<div class="mpcve-modal__card mpcve-modal__card--wide">' +
-            '<div class="mpcve-modal__head">Адаптивная картинка</div>' +
+    var m = openModal({
+        cardClass: 'mpcve-modal__card--wide',
+        title: 'Адаптивная картинка',
+        bodyHtml:
             '<div class="mpcve-modal__field">Основная картинка (fallback)</div>' +
             '<div class="mpcve-pic__main"></div>' +
             '<label class="mpcve-modal__field">alt<input type="text" data-f="alt"></label>' +
             '<div class="mpcve-modal__field">Источники (адаптив)</div>' +
             '<div class="mpcve-pic__sources"></div>' +
-            '<button type="button" class="mpcve-btn" data-act="addsrc">+ Добавить источник</button>' +
-            '<div class="mpcve-modal__actions">' +
-                '<button type="button" class="mpcve-btn" data-act="cancel">Отмена</button>' +
-                '<button type="button" class="mpcve-btn mpcve-btn--primary" data-act="save">Сохранить</button>' +
-            '</div>' +
-        '</div>';
-    document.body.appendChild(overlay);
+            '<button type="button" class="mpcve-btn" data-act="addsrc">+ Добавить источник</button>',
+        actionsHtml:
+            '<button type="button" class="mpcve-btn" data-act="cancel">Отмена</button>' +
+            '<button type="button" class="mpcve-btn mpcve-btn--primary" data-act="save">Сохранить</button>'
+    });
+    if (!m) { return; }
+    var overlay = m.overlay;
+    var close = m.close;
     overlay.querySelector('[data-f=alt]').value = main.alt;
-
-    function close() { overlay.remove(); document.removeEventListener('keydown', onKey); }
-    function onKey(e) { if (e.key === 'Escape') { close(); } }
-    document.addEventListener('keydown', onKey);
-    closeOnBackdrop(overlay, function () { close(); });
-    overlay.querySelector('[data-act=cancel]').addEventListener('click', close);
 
     // мини-загрузчик: превью + file-input + «Выбрать существующий». onPick(file)
     // кладёт загружаемый файл в модель, onPickExisting(url) — готовый URL (без загрузки).

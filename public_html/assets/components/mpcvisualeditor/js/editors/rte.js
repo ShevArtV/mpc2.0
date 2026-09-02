@@ -18,7 +18,7 @@
  *
  * opts: { value, allowedTags:[], upload(file)->Promise<url> }.
  */
-import { toast, esc, promptDialog, closeOnBackdrop } from '../dom.js';
+import { toast, esc, promptDialog, openModal } from '../dom.js';
 import { S } from '../state.js';
 
 // Тег → кнопка. exec — execCommand; block — formatBlock; wrap — обернуть выделение
@@ -356,37 +356,34 @@ function setOrRemove(el, attr, val) {
 // иначе вставляем НОВУЮ (src=presetSrc) через insertHTML с атрибутами — голый
 // insertImage не давал задать атрибуты. Замена файла — тем же загрузчиком.
 function openImageDialog(area, opts, imgEl, presetSrc) {
-    if (document.querySelector('.mpcve-imgdlg')) { return; }
     var sel = window.getSelection();
     var savedRange = (!imgEl && sel && sel.rangeCount) ? sel.getRangeAt(0) : null;
     var src = imgEl ? (imgEl.getAttribute('src') || '') : (presetSrc || '');
 
-    var ov = document.createElement('div');
-    ov.className = 'mpcve-imgdlg';
     var canUpload = typeof opts.upload === 'function';
-    ov.innerHTML =
-        '<div class="mpcve-imgdlg__card">' +
-            '<div class="mpcve-modal__head">Картинка</div>' +
+    // Свой гард и свои классы: диалог открывается ПОВЕРХ модалки richtext
+    // (.mpcve-imgdlg z-index выше .mpcve-modal), гард .mpcve-modal его бы запретил.
+    var m = openModal({
+        guard: '.mpcve-imgdlg',
+        overlayClass: 'mpcve-imgdlg',
+        cardClass: 'mpcve-imgdlg__card',
+        title: 'Картинка',
+        bodyHtml:
             '<div class="mpcve-imgdlg__prev"><img alt=""></div>' +
             '<label class="mpcve-modal__field">alt (описание)<input type="text" data-f="alt"></label>' +
             '<label class="mpcve-modal__field">title (подсказка)<input type="text" data-f="title"></label>' +
-            (canUpload ? '<label class="mpcve-pic__pick">Заменить файл<input type="file" accept="image/*" hidden></label>' : '') +
-            '<div class="mpcve-modal__actions">' +
-                '<button type="button" class="mpcve-btn" data-act="cancel">Отмена</button>' +
-                '<button type="button" class="mpcve-btn mpcve-btn--primary" data-act="ok">' + (imgEl ? 'Применить' : 'Вставить') + '</button>' +
-            '</div>' +
-        '</div>';
-    document.body.appendChild(ov);
+            (canUpload ? '<label class="mpcve-pic__pick">Заменить файл<input type="file" accept="image/*" hidden></label>' : ''),
+        actionsHtml:
+            '<button type="button" class="mpcve-btn" data-act="cancel">Отмена</button>' +
+            '<button type="button" class="mpcve-btn mpcve-btn--primary" data-act="ok">' + (imgEl ? 'Применить' : 'Вставить') + '</button>'
+    });
+    if (!m) { return; }
+    var ov = m.overlay;
+    var close = m.close;
     var prev = ov.querySelector('.mpcve-imgdlg__prev img');
     prev.src = src;
     ov.querySelector('[data-f=alt]').value = imgEl ? (imgEl.getAttribute('alt') || '') : '';
     ov.querySelector('[data-f=title]').value = imgEl ? (imgEl.getAttribute('title') || '') : '';
-
-    function close() { ov.remove(); document.removeEventListener('keydown', onKey); }
-    function onKey(e) { if (e.key === 'Escape') { close(); } }
-    document.addEventListener('keydown', onKey);
-    closeOnBackdrop(ov, function () { close(); });
-    ov.querySelector('[data-act=cancel]').addEventListener('click', close);
 
     var fileInput = ov.querySelector('input[type=file]');
     if (fileInput) {

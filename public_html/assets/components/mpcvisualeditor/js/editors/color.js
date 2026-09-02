@@ -4,7 +4,7 @@
  * colorpickerfield настроек data-mpc-info). Значение пишем сырым (raw=1): hex-код
  * не переводимый, лексиконить нечего (как enum-ключи в listbox.js).
  */
-import { toast, esc, closeOnBackdrop } from '../dom.js';
+import { toast, esc, openModal } from '../dom.js';
 import { fieldAddress } from '../address.js';
 import { doSave } from '../save.js';
 
@@ -17,30 +17,29 @@ function toColorInput(v) {
 }
 
 export function openColorEditor(el) {
-    if (document.querySelector('.mpcve-modal')) { return; }
     var addr = fieldAddress(el);
     if (!addr) { toast('Нет адреса поля', true); return; }
     addr.raw = 1; // цвет — код, не лексиконим (как listbox enum-ключи)
 
     var cur = (el.textContent || '').trim();
 
-    var overlay = document.createElement('div');
-    overlay.className = 'mpcve-modal';
-    overlay.innerHTML =
-        '<div class="mpcve-modal__card mpcve-modal__card--text">' +
-            '<div class="mpcve-modal__head">Цвет</div>' +
+    var m = openModal({
+        cardClass: 'mpcve-modal__card--text',
+        title: 'Цвет',
+        bodyHtml:
             '<div class="mpcve-set__widget">' +
                 '<input type="color" class="mpcve-set__color" value="' + esc(toColorInput(cur)) + '">' +
                 '<input type="text" class="mpcve-set__input" value="' + esc(cur) + '" spellcheck="false">' +
-            '</div>' +
-            '<div class="mpcve-modal__actions">' +
-                '<button type="button" class="mpcve-btn" data-act="cancel">Отмена</button>' +
-                '<button type="button" class="mpcve-btn mpcve-btn--primary" data-act="save">Сохранить</button>' +
-            '</div>' +
-        '</div>';
-    document.body.appendChild(overlay);
+            '</div>',
+        actionsHtml:
+            '<button type="button" class="mpcve-btn" data-act="cancel">Отмена</button>' +
+            '<button type="button" class="mpcve-btn mpcve-btn--primary" data-act="save">Сохранить</button>'
+    });
+    if (!m) { return; }
+    var overlay = m.overlay;
+    var close = m.close;
 
-    var card = overlay.querySelector('.mpcve-modal__card');
+    var card = m.card;
     var color = card.querySelector('.mpcve-set__color');
     var text = card.querySelector('.mpcve-set__input');
     // Двусторонняя синхронизация: пик цвета → текст; ручной валидный hex → пикер
@@ -50,12 +49,6 @@ export function openColorEditor(el) {
         if (/^#?[0-9a-fA-F]{6}$/.test(text.value.trim())) { color.value = toColorInput(text.value); }
     });
     text.focus();
-
-    function close() { overlay.remove(); document.removeEventListener('keydown', onKey); }
-    function onKey(e) { if (e.key === 'Escape') { close(); } }
-    document.addEventListener('keydown', onKey);
-    closeOnBackdrop(overlay, function () { close(); });
-    card.querySelector('[data-act=cancel]').addEventListener('click', close);
 
     var saveBtn = card.querySelector('[data-act=save]');
     saveBtn.addEventListener('click', function () {

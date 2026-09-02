@@ -7,28 +7,26 @@
  */
 import { S } from './state.js';
 import { api } from './api.js';
-import { esc, toast, confirmDialog, closeOnBackdrop } from './dom.js';
+import { esc, toast, confirmDialog, openModal } from './dom.js';
 
 var overlay = null;
+var m = null;
 var allEntries = [];
 var flt = { section: '', field: '', source: '', sortDesc: true };
 
 export function toggleChangelog() { overlay ? close() : open(); }
 
-function close() {
-    if (overlay) { overlay.remove(); overlay = null; document.removeEventListener('keydown', onKey); }
-}
-function onKey(e) { if (e.key === 'Escape') { close(); } }
+function close() { if (m) { m.close(); } }
 
 function open() {
     flt = { section: '', field: '', source: '', sortDesc: true }; // сброс фильтров при каждом открытии
-    overlay = document.createElement('div');
-    overlay.className = 'mpcve-modal mpcve-clogm';
-    overlay.innerHTML =
-        '<div class="mpcve-modal__card mpcve-clogm__card">' +
-            '<div class="mpcve-modal__head">История изменений' +
-                '<button type="button" class="mpcve-clogm__x" data-act="close" title="Закрыть">✕</button>' +
-            '</div>' +
+    m = openModal({
+        guard: null,
+        overlayClass: 'mpcve-clogm',
+        cardClass: 'mpcve-clogm__card',
+        titleHtml: 'История изменений' +
+            '<button type="button" class="mpcve-clogm__x" data-act="close" title="Закрыть">✕</button>',
+        bodyHtml:
             '<div class="mpcve-clogm__filters">' +
                 '<label>Секция <select data-f="section"></select></label>' +
                 '<label>Поле <select data-f="field"></select></label>' +
@@ -41,12 +39,11 @@ function open() {
             '<div class="mpcve-clogm__wrap"><table class="mpcve-clogm__table">' +
                 '<thead><tr><th>Время</th><th>Юзер</th><th>Ур.</th><th>Секция · Поле</th><th>Было → Стало</th><th></th></tr></thead>' +
                 '<tbody></tbody>' +
-            '</table></div>' +
-        '</div>';
-    document.body.appendChild(overlay);
-    closeOnBackdrop(overlay, function () { close(); });
-    overlay.querySelector('[data-act=close]').addEventListener('click', close);
-    document.addEventListener('keydown', onKey);
+            '</table></div>',
+        closeSelectors: ['[data-act=close]'],
+        onClose: function () { overlay = null; }
+    });
+    overlay = m.overlay;
 
     overlay.querySelector('[data-f=section]').addEventListener('change', function () {
         flt.section = this.value; flt.field = ''; buildFieldOptions(); render();

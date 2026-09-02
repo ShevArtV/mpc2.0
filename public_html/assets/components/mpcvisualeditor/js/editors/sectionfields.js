@@ -16,7 +16,7 @@
  */
 import { S } from '../state.js';
 import { api, loadConfig } from '../api.js';
-import { parseRecord, isScalar, fieldLabel, esc, toast, confirmDialog, closeOnBackdrop } from '../dom.js';
+import { parseRecord, isScalar, fieldLabel, esc, toast, confirmDialog, openModal } from '../dom.js';
 import { STRUCTURAL } from '../constants.js';
 import { findSectionInLevel } from '../address.js';
 import {
@@ -161,32 +161,22 @@ function rowPreview(row, level) {
 
 // Редактор строк MIGX-списка (config-driven). listAddr: {level,section,parentField,path,resourceId}.
 export function openRowsPanel(listAddr, label) {
-    if (document.querySelector('.mpcve-modal')) { return; }
-    var overlay = document.createElement('div');
-    overlay.className = 'mpcve-modal';
-    overlay.innerHTML =
-        '<div class="mpcve-modal__card mpcve-modal__card--wide">' +
-            '<div class="mpcve-modal__head">Строки списка · ' + esc(label) + '</div>' +
-            '<div class="mpcve-rows"></div>' +
-            '<div class="mpcve-modal__actions">' +
-                '<button type="button" class="mpcve-btn mpcve-btn--primary" data-act="add">+ Добавить строку</button>' +
-                '<button type="button" class="mpcve-btn" data-act="reload" title="Перезагрузить страницу — увидеть рендер">Обновить</button>' +
-                '<button type="button" class="mpcve-btn" data-act="close">Закрыть</button>' +
-            '</div>' +
-        '</div>';
-    document.body.appendChild(overlay);
+    var m = openModal({
+        cardClass: 'mpcve-modal__card--wide',
+        title: 'Строки списка · ' + label,
+        bodyHtml: '<div class="mpcve-rows"></div>',
+        actionsHtml:
+            '<button type="button" class="mpcve-btn mpcve-btn--primary" data-act="add">+ Добавить строку</button>' +
+            '<button type="button" class="mpcve-btn" data-act="reload" title="Перезагрузить страницу — увидеть рендер">Обновить</button>' +
+            '<button type="button" class="mpcve-btn" data-act="close">Закрыть</button>',
+        closeSelectors: ['[data-act=close]'],
+        captureEsc: true
+    });
+    if (!m) { return; }
+    var overlay = m.overlay;
+    var close = m.close;
     var rowsBox = overlay.querySelector('.mpcve-rows');
 
-    function close() { overlay.remove(); document.removeEventListener('keydown', onKey, true); }
-    function onKey(e) {
-        if (e.key !== 'Escape') { return; }
-        if (document.querySelector('.mpcve-confirm')) { return; }
-        e.stopImmediatePropagation();
-        close();
-    }
-    document.addEventListener('keydown', onKey, true);
-    closeOnBackdrop(overlay, function () { close(); });
-    overlay.querySelector('[data-act=close]').addEventListener('click', close);
     overlay.querySelector('[data-act=reload]').addEventListener('click', function () { window.location.reload(); });
 
     // row/op (адресный; path несёт спуск к родительской строке для вложенных).

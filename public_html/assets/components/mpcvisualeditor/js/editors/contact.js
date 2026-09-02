@@ -6,7 +6,7 @@
  * (право mpcve_edit_global).
  */
 import { api } from '../api.js';
-import { toast, esc, closeOnBackdrop } from '../dom.js';
+import { toast, esc, openModal } from '../dom.js';
 import { openFileManager } from '../filemanager.js';
 
 var LABEL = { value: 'Значение', caption: 'Подпись', attributes: 'Доп. данные', icon: 'Иконка' };
@@ -25,7 +25,6 @@ function splitClasses(el) {
 }
 
 export function openContactEditor(el) {
-    if (document.querySelector('.mpcve-modal')) { return; }
     var box = el.closest('[data-mpc-contact]');
     if (!box) { return; }
     var key = box.getAttribute('data-mpc-key') || '';
@@ -64,31 +63,25 @@ export function openContactEditor(el) {
     var classMode = field !== 'value' && readVal(el) === '' && el.hasAttribute('class');
     var headLabel = classMode ? 'CSS-классы' : (LABEL[field] || field);
 
-    var overlay = document.createElement('div');
-    overlay.className = 'mpcve-modal';
-    overlay.innerHTML =
-        '<div class="mpcve-modal__card mpcve-modal__card--text">' +
-            '<div class="mpcve-modal__head">Контакт: ' + esc(headLabel) + ' (' + esc(type) + ')</div>' +
+    var m = openModal({
+        cardClass: 'mpcve-modal__card--text',
+        titleHtml: 'Контакт: ' + esc(headLabel) + ' (' + esc(type) + ')',
+        bodyHtml:
             '<div class="mpcve-modal__note">⚠ Контакт меняется на ВСЕХ страницах сайта.' +
                 (field !== 'value' ? ' Размещение: ' + esc(placement) + '.' : '') +
                 (classMode ? ' Значение — CSS-классы элемента.' : '') + '</div>' +
-            '<textarea class="mpcve-ta__area" spellcheck="false"></textarea>' +
-            '<div class="mpcve-modal__actions">' +
-                '<button type="button" class="mpcve-btn" data-act="cancel">Отмена</button>' +
-                '<button type="button" class="mpcve-btn mpcve-btn--primary" data-act="save">Сохранить</button>' +
-            '</div>' +
-        '</div>';
-    document.body.appendChild(overlay);
+            '<textarea class="mpcve-ta__area" spellcheck="false"></textarea>',
+        actionsHtml:
+            '<button type="button" class="mpcve-btn" data-act="cancel">Отмена</button>' +
+            '<button type="button" class="mpcve-btn mpcve-btn--primary" data-act="save">Сохранить</button>'
+    });
+    if (!m) { return; }
+    var overlay = m.overlay;
+    var close = m.close;
     var ta = overlay.querySelector('.mpcve-ta__area');
     // В class-режиме показываем ТОЛЬКО пользовательские классы (без mpcve-*).
     ta.value = classMode ? splitClasses(el).user.join(' ') : readVal(el);
     ta.focus();
-
-    function close() { overlay.remove(); document.removeEventListener('keydown', onKey); }
-    function onKey(e) { if (e.key === 'Escape') { close(); } }
-    document.addEventListener('keydown', onKey);
-    closeOnBackdrop(overlay, function () { close(); });
-    overlay.querySelector('[data-act=cancel]').addEventListener('click', close);
 
     overlay.querySelector('[data-act=save]').addEventListener('click', function () {
         var value = ta.value;

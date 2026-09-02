@@ -15,7 +15,7 @@
  * атрибут присутствовал в разметке на нарезке (иначе {if} не сгенерён).
  */
 import { api, uploadMedia, folderOf } from '../api.js';
-import { toast, esc, closeOnBackdrop } from '../dom.js';
+import { toast, esc, openModal } from '../dom.js';
 import { fieldAddress, fieldConfigRecord } from '../address.js';
 import { openFileManager } from '../filemanager.js';
 import { makeUrlButton } from './urlrow.js';
@@ -26,7 +26,6 @@ function fileName(path) { return (String(path || '').split('?')[0].split('/').po
 // override = {addr, isVideo} → value-based режим (панель скрытых полей: el=null,
 // тип video/audio передаётся явно, превью пустые). Иначе из el на странице.
 export function openMediaEditor(el, override) {
-    if (document.querySelector('.mpcve-modal')) { return; }
     var addr = (override && override.addr) || fieldAddress(el);
     if (!addr || !addr.section || !addr.fieldName) { toast('Нет адреса медиа', true); return; }
 
@@ -61,12 +60,11 @@ export function openMediaEditor(el, override) {
     var attrInit = function (k) { return (k in rec) ? boolOf(rec[k]) : (el ? el.hasAttribute(k) : false); };
     var preloadInit = rec.preload || (el ? el.getAttribute('preload') : '') || 'metadata';
 
-    var overlay = document.createElement('div');
-    overlay.className = 'mpcve-modal';
     var accept = isVideo ? 'video/*' : 'audio/*';
-    overlay.innerHTML =
-        '<div class="mpcve-modal__card mpcve-modal__card--wide">' +
-            '<div class="mpcve-modal__head">' + (isVideo ? 'Видео' : 'Аудио') + '</div>' +
+    var m = openModal({
+        cardClass: 'mpcve-modal__card--wide',
+        title: isVideo ? 'Видео' : 'Аудио',
+        bodyHtml:
             '<div class="mpcve-modal__field">Основной файл</div>' +
             '<div class="mpcve-media__main"></div>' +
             (isVideo ? '<div class="mpcve-modal__field">Постер (превью видео)</div><div class="mpcve-media__poster"></div>' : '') +
@@ -83,24 +81,19 @@ export function openMediaEditor(el, override) {
             '</div>' +
             '<div class="mpcve-modal__field">Источники (форматы)</div>' +
             '<div class="mpcve-media__sources"></div>' +
-            '<button type="button" class="mpcve-btn" data-act="addsrc">+ Добавить источник</button>' +
-            '<div class="mpcve-modal__actions">' +
-                '<button type="button" class="mpcve-btn" data-act="cancel">Отмена</button>' +
-                '<button type="button" class="mpcve-btn mpcve-btn--primary" data-act="save">Сохранить</button>' +
-            '</div>' +
-        '</div>';
-    document.body.appendChild(overlay);
+            '<button type="button" class="mpcve-btn" data-act="addsrc">+ Добавить источник</button>',
+        actionsHtml:
+            '<button type="button" class="mpcve-btn" data-act="cancel">Отмена</button>' +
+            '<button type="button" class="mpcve-btn mpcve-btn--primary" data-act="save">Сохранить</button>'
+    });
+    if (!m) { return; }
+    var overlay = m.overlay;
+    var close = m.close;
 
     ['controls', 'autoplay', 'loop', 'muted'].forEach(function (k) {
         overlay.querySelector('[data-a=' + k + ']').checked = attrInit(k);
     });
     overlay.querySelector('[data-a=preload]').value = preloadInit;
-
-    function close() { overlay.remove(); document.removeEventListener('keydown', onKey); }
-    function onKey(e) { if (e.key === 'Escape') { close(); } }
-    document.addEventListener('keydown', onKey);
-    closeOnBackdrop(overlay, function () { close(); });
-    overlay.querySelector('[data-act=cancel]').addEventListener('click', close);
 
     var fmAccept = isVideo ? 'video' : 'audio';
 

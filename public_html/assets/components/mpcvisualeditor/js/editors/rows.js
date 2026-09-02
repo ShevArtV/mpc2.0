@@ -12,7 +12,7 @@
  * Img-список даёт 📷 на строку (открывает редактор картинки rows[idx].img).
  */
 import { api } from '../api.js';
-import { toast, esc, isMedia, confirmDialog, closeOnBackdrop } from '../dom.js';
+import { toast, esc, isMedia, confirmDialog, openModal } from '../dom.js';
 import { listAddress, listRows, configRowCount, rowPreview, isListEl } from '../address.js';
 import { markFieldsWithin } from '../mark.js';
 import { openImageEditor } from './image.js';
@@ -59,7 +59,6 @@ function cloneBlankRow(templateRow) {
 }
 
 export function openRowsEditor(listEl) {
-    if (document.querySelector('.mpcve-modal')) { return; }
     var addr = listAddress(listEl);
     if (!addr.section || !addr.parentField) {
         toast('Не удалось определить адрес списка', true);
@@ -70,28 +69,25 @@ export function openRowsEditor(listEl) {
     // 0 / нет атрибута = без лимита.
     var maxRows = parseInt(listEl.getAttribute('data-mpc-max'), 10) || 0;
 
-    var overlay = document.createElement('div');
-    overlay.className = 'mpcve-modal';
-    overlay.innerHTML =
-        '<div class="mpcve-modal__card mpcve-modal__card--wide">' +
-            '<div class="mpcve-modal__head">Строки списка · ' + esc(addr.parentField) + '</div>' +
+    var m = openModal({
+        cardClass: 'mpcve-modal__card--wide',
+        title: 'Строки списка · ' + addr.parentField,
+        bodyHtml:
             '<div class="mpcve-rows__hint">Перетащите строку за ⋮⋮ (или в любом месте), чтобы изменить порядок</div>' +
-            '<div class="mpcve-rows"></div>' +
-            '<div class="mpcve-modal__actions">' +
-                '<button type="button" class="mpcve-btn mpcve-btn--primary" data-act="add">+ Добавить строку</button>' +
-                '<button type="button" class="mpcve-btn" data-act="reload" title="Перезагрузить страницу — увидеть точный рендер">Обновить</button>' +
-                '<button type="button" class="mpcve-btn" data-act="close">Закрыть</button>' +
-            '</div>' +
-        '</div>';
-    document.body.appendChild(overlay);
+            '<div class="mpcve-rows"></div>',
+        actionsHtml:
+            '<button type="button" class="mpcve-btn mpcve-btn--primary" data-act="add">+ Добавить строку</button>' +
+            '<button type="button" class="mpcve-btn" data-act="reload" title="Перезагрузить страницу — увидеть точный рендер">Обновить</button>' +
+            '<button type="button" class="mpcve-btn" data-act="close">Закрыть</button>',
+        closeSelectors: ['[data-act=close]'],
+        onClose: function () { dragFrom = null; }
+    });
+    if (!m) { return; }
+    var overlay = m.overlay;
+    var close = m.close;
     var rowsBox = overlay.querySelector('.mpcve-rows');
     var dragFrom = null; // индекс перетаскиваемой строки (drag-drop переупорядочивание)
 
-    function close() { dragFrom = null; overlay.remove(); document.removeEventListener('keydown', onKey); }
-    function onKey(e) { if (e.key === 'Escape') { close(); } }
-    document.addEventListener('keydown', onKey);
-    closeOnBackdrop(overlay, function () { close(); });
-    overlay.querySelector('[data-act=close]').addEventListener('click', close);
     overlay.querySelector('[data-act=reload]').addEventListener('click', function () { window.location.reload(); });
 
     // Строки страницы (источник для панели и DOM-мутаций). Img-список капим по

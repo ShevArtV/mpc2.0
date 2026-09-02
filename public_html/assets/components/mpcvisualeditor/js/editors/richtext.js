@@ -11,33 +11,33 @@
  */
 import { S } from '../state.js';
 import { api, uploadMedia } from '../api.js';
-import { toast, closeOnBackdrop } from '../dom.js';
+import { toast, openModal } from '../dom.js';
 import { fieldAddress } from '../address.js';
 import { createRte, sanitizeHtml } from './rte.js';
 
 export function openRichtextEditor(el) {
-    if (document.querySelector('.mpcve-modal')) { return; }
     var addr = fieldAddress(el);
     if (!addr) { toast('Нет адреса поля', true); return; }
     var orig = el.innerHTML;
     var allowed = S.cfg.allowedTags;
     var uploader = function (file) { return uploadMedia(file, 'image'); };
 
-    var overlay = document.createElement('div');
-    overlay.className = 'mpcve-modal';
-    overlay.innerHTML =
-        '<div class="mpcve-modal__card mpcve-modal__card--text">' +
-            '<div class="mpcve-modal__head">Текст с форматированием</div>' +
+    var m = openModal({
+        cardClass: 'mpcve-modal__card--text',
+        title: 'Текст с форматированием',
+        bodyHtml:
             '<div class="mpcve-rte__host"></div>' +
-            '<textarea class="mpcve-ta__area mpcve-rte__source" spellcheck="false" style="display:none"></textarea>' +
-            '<div class="mpcve-modal__actions">' +
-                '<button type="button" class="mpcve-btn" data-act="toggle" title="Переключить сырая вёрстка / визуальный редактор">&lt;/&gt; Код</button>' +
-                '<span class="mpcve-modal__spacer"></span>' +
-                '<button type="button" class="mpcve-btn" data-act="cancel">Отмена</button>' +
-                '<button type="button" class="mpcve-btn mpcve-btn--primary" data-act="save">Сохранить</button>' +
-            '</div>' +
-        '</div>';
-    document.body.appendChild(overlay);
+            '<textarea class="mpcve-ta__area mpcve-rte__source" spellcheck="false" style="display:none"></textarea>',
+        actionsHtml:
+            '<button type="button" class="mpcve-btn" data-act="toggle" title="Переключить сырая вёрстка / визуальный редактор">&lt;/&gt; Код</button>' +
+            '<span class="mpcve-modal__spacer"></span>' +
+            '<button type="button" class="mpcve-btn" data-act="cancel">Отмена</button>' +
+            '<button type="button" class="mpcve-btn mpcve-btn--primary" data-act="save">Сохранить</button>',
+        onClose: function () { if (mode === 'visual' && rte) { rte.destroy(); } }
+    });
+    if (!m) { return; }
+    var overlay = m.overlay;
+    var close = m.close;
 
     var host = overlay.querySelector('.mpcve-rte__host');
     var source = overlay.querySelector('.mpcve-rte__source');
@@ -74,16 +74,6 @@ export function openRichtextEditor(el) {
     toggleBtn.addEventListener('click', function () {
         if (mode === 'visual') { toSource(); } else { toVisual(); }
     });
-
-    function close() {
-        if (mode === 'visual' && rte) { rte.destroy(); }
-        overlay.remove();
-        document.removeEventListener('keydown', onKey);
-    }
-    function onKey(e) { if (e.key === 'Escape') { close(); } }
-    document.addEventListener('keydown', onKey);
-    closeOnBackdrop(overlay, function () { close(); });
-    overlay.querySelector('[data-act=cancel]').addEventListener('click', close);
 
     var saveBtn = overlay.querySelector('[data-act=save]');
     saveBtn.addEventListener('click', function () {

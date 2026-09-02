@@ -8,7 +8,7 @@
  * meta — {key, ctx, value, xtype, protected}. Без meta (инлайн) — подтягиваем из БД.
  */
 import { api, loadSettingsList, findSetting } from '../api.js';
-import { toast, esc, closeOnBackdrop } from '../dom.js';
+import { toast, esc, openModal } from '../dom.js';
 import { openFileManager } from '../filemanager.js';
 
 function tag(el) { return el && el.tagName ? el.tagName.toLowerCase() : ''; }
@@ -73,29 +73,27 @@ export function openInfoEditor(el, meta) {
 }
 
 function open(el, meta) {
-    if (document.querySelector('.mpcve-modal')) { return; }
     // Таргет: 'context' (есть контекстная запись — правим её, без глобального
     // предупреждения) vs 'system' (только глобальная — предупреждаем).
     var isCtx = meta.target === 'context';
     var note = isCtx
         ? ('Контекстная настройка' + (meta.ctx ? ' (' + esc(meta.ctx) + ')' : '') + ' — меняется в этом контексте.')
         : '⚠ ГЛОБАЛЬНАЯ настройка — меняется на ВСЕХ контекстах и страницах сайта.';
-    var overlay = document.createElement('div');
-    overlay.className = 'mpcve-modal';
-    overlay.innerHTML =
-        '<div class="mpcve-modal__card mpcve-modal__card--text">' +
-            '<div class="mpcve-modal__head">Настройка: ' + esc(meta.key) +
-                (isCtx && meta.ctx ? ' @' + esc(meta.ctx) : '') + '</div>' +
+    var m = openModal({
+        cardClass: 'mpcve-modal__card--text',
+        titleHtml: 'Настройка: ' + esc(meta.key) + (isCtx && meta.ctx ? ' @' + esc(meta.ctx) : ''),
+        bodyHtml:
             '<div class="mpcve-modal__note">' + note + '</div>' +
             (meta.protected ? '<div class="mpcve-modal__note">🔒 Защищённая настройка — править нельзя.</div>' : '') +
-            '<div class="mpcve-set__widget">' + widgetHtml(meta.xtype, meta.value) + '</div>' +
-            '<div class="mpcve-modal__actions">' +
-                '<button type="button" class="mpcve-btn" data-act="cancel">Отмена</button>' +
-                (meta.protected ? '' : '<button type="button" class="mpcve-btn mpcve-btn--primary" data-act="save">Сохранить</button>') +
-            '</div>' +
-        '</div>';
-    document.body.appendChild(overlay);
-    var card = overlay.querySelector('.mpcve-modal__card');
+            '<div class="mpcve-set__widget">' + widgetHtml(meta.xtype, meta.value) + '</div>',
+        actionsHtml:
+            '<button type="button" class="mpcve-btn" data-act="cancel">Отмена</button>' +
+            (meta.protected ? '' : '<button type="button" class="mpcve-btn mpcve-btn--primary" data-act="save">Сохранить</button>')
+    });
+    if (!m) { return; }
+    var overlay = m.overlay;
+    var close = m.close;
+    var card = m.card;
 
     var ta = card.querySelector('textarea.mpcve-set__input');
     if (ta) { ta.value = meta.value; }
@@ -119,12 +117,6 @@ function open(el, meta) {
     }
     var firstInput = card.querySelector('.mpcve-set__input');
     if (firstInput) { firstInput.focus(); }
-
-    function close() { overlay.remove(); document.removeEventListener('keydown', onKey); }
-    function onKey(e) { if (e.key === 'Escape') { close(); } }
-    document.addEventListener('keydown', onKey);
-    closeOnBackdrop(overlay, function () { close(); });
-    card.querySelector('[data-act=cancel]').addEventListener('click', close);
 
     var saveBtn = card.querySelector('[data-act=save]');
     if (!saveBtn) { return; }

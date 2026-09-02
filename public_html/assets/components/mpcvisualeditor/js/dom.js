@@ -27,6 +27,85 @@ export function closeOnBackdrop(overlay, close) {
     });
 }
 
+/**
+ * Каркас модалки редактора: подложка + карточка + (заголовок) + тело +
+ * (блок кнопок). Забирает ритуал, который раньше был скопирован в каждый
+ * редактор: singleton-гард, Escape, закрытие по подложке и по кнопке отмены,
+ * снятие слушателя при закрытии. Тело и кнопки остаются за вызывающим.
+ *
+ * opts:
+ *   cardClass      доп. классы карточки (базовый mpcve-modal__card уже есть);
+ *   overlayClass   доп. классы подложки (базовый mpcve-modal уже есть);
+ *   title          текст шапки (экранируется здесь), пусто → без шапки;
+ *   titleHtml      готовая разметка шапки, если нужен не просто текст;
+ *   bodyHtml       разметка тела (экранирует вызывающий);
+ *   actionsHtml    разметка блока кнопок, пусто → без блока;
+ *   actionsClass   доп. классы блока кнопок;
+ *   guard          селектор singleton-гарда, по умолчанию '.mpcve-modal';
+ *                  null — гарда нет (слой поверх другой модалки);
+ *   captureEsc     слушать Escape в capture-фазе и гасить его для нижних
+ *                  слоёв (панели/менеджеры, под которыми открыт редактор);
+ *   closeSelectors селекторы кнопок закрытия, по умолчанию ['[data-act=cancel]'];
+ *   onKey          доп. обработчик клавиш (e, close) — Enter и прочее;
+ *   onClose        вызывается ПЕРЕД снятием подложки (rte.destroy, сброс
+ *                  состояния, resolve промиса).
+ *
+ * Возвращает { overlay, card, close, isClosed } либо null, если гард не пустил.
+ */
+export function openModal(opts) {
+    opts = opts || {};
+    var guard = (opts.guard === null) ? null : (opts.guard || '.mpcve-modal');
+    if (guard && document.querySelector(guard)) { return null; }
+
+    var overlay = document.createElement('div');
+    overlay.className = 'mpcve-modal' + (opts.overlayClass ? ' ' + opts.overlayClass : '');
+    var head = opts.titleHtml || (opts.title ? esc(opts.title) : '');
+    overlay.innerHTML =
+        '<div class="mpcve-modal__card' + (opts.cardClass ? ' ' + opts.cardClass : '') + '">' +
+            (head ? '<div class="mpcve-modal__head">' + head + '</div>' : '') +
+            (opts.bodyHtml || '') +
+            (opts.actionsHtml
+                ? '<div class="mpcve-modal__actions' + (opts.actionsClass ? ' ' + opts.actionsClass : '') +
+                  '">' + opts.actionsHtml + '</div>'
+                : '') +
+        '</div>';
+    document.body.appendChild(overlay);
+
+    var closed = false;
+    function close() {
+        if (closed) { return; }
+        closed = true;
+        if (opts.onClose) { opts.onClose(); }
+        overlay.remove();
+        document.removeEventListener('keydown', onKey, !!opts.captureEsc);
+    }
+    function onKey(e) {
+        if (e.key === 'Escape') {
+            // Поверх нас может висеть confirm/prompt — Escape тогда его, не наш.
+            // Сравниваем с собой: сам диалог подтверждения тоже .mpcve-confirm.
+            var top = document.querySelector('.mpcve-confirm');
+            if (top && top !== overlay) { return; }
+            if (opts.captureEsc) { e.stopImmediatePropagation(); }
+            close();
+            return;
+        }
+        if (opts.onKey) { opts.onKey(e, close); }
+    }
+    document.addEventListener('keydown', onKey, !!opts.captureEsc);
+    closeOnBackdrop(overlay, close);
+    (opts.closeSelectors || ['[data-act=cancel]']).forEach(function (sel) {
+        var btn = overlay.querySelector(sel);
+        if (btn) { btn.addEventListener('click', function () { close(); }); }
+    });
+
+    return {
+        overlay: overlay,
+        card: overlay.querySelector('.mpcve-modal__card'),
+        close: close,
+        isClosed: function () { return closed; }
+    };
+}
+
 // JSON-строка migx-рядов [{…},…] → массив объектов, иначе null.
 export function parseRecord(v) {
     if (typeof v !== 'string') { return null; }
@@ -82,35 +161,37 @@ export function toast(message, isError) {
 // от done()>; повторный вызов при открытом диалоге → resolve(cancelValue).
 function buildModal(opts) {
     return new Promise(function (resolve) {
-        if (document.querySelector('.mpcve-confirm')) { resolve(opts.cancelValue); return; }
-        var ov = document.createElement('div');
-        ov.className = 'mpcve-modal mpcve-confirm';
-        var actionsCls = 'mpcve-modal__actions' + (opts.actionsClass ? ' ' + opts.actionsClass : '');
-        ov.innerHTML =
-            '<div class="mpcve-modal__card mpcve-confirm__card">' +
-                (opts.title ? '<div class="mpcve-modal__head"></div>' : '') +
-                '<div class="mpcve-confirm__msg"></div>' +
-                (opts.bodyHtml || '') +
-                '<div class="' + actionsCls + '">' +
-                    '<button type="button" class="mpcve-btn" data-act="cancel"></button>' +
-                    (opts.buttonsHtml || '') +
-                '</div>' +
-            '</div>';
-        document.body.appendChild(ov);
-        if (opts.title) { ov.querySelector('.mpcve-modal__head').textContent = opts.title; }
+        // Свой гард (.mpcve-confirm вместо .mpcve-modal) — диалог подтверждения
+        // открывается ПОВЕРХ редактора, но не поверх другого подтверждения.
+        var m = openModal({
+            guard: '.mpcve-confirm',
+            overlayClass: 'mpcve-confirm',
+            cardClass: 'mpcve-confirm__card',
+            title: opts.title,
+            bodyHtml: '<div class="mpcve-confirm__msg"></div>' + (opts.bodyHtml || ''),
+            actionsHtml: '<button type="button" class="mpcve-btn" data-act="cancel"></button>' +
+                (opts.buttonsHtml || ''),
+            actionsClass: opts.actionsClass,
+            // capture — гасим клавишу для подлежащего редактора (он тоже слушает
+            // keydown на document).
+            captureEsc: true,
+            onKey: function (e) {
+                if (e.key === 'Enter' && opts.onEnter) {
+                    e.preventDefault();
+                    e.stopImmediatePropagation();
+                    opts.onEnter(done, m.overlay);
+                }
+            },
+            // Закрытие штатным путём (Escape / фон / Отмена) = отмена. Если до
+            // этого вызвали done(v), промис уже разрешён — этот resolve холостой.
+            onClose: function () { resolve(opts.cancelValue); }
+        });
+        if (!m) { resolve(opts.cancelValue); return; }
+        var ov = m.overlay;
         ov.querySelector('.mpcve-confirm__msg').textContent = opts.message;
         ov.querySelector('[data-act=cancel]').textContent = opts.cancelLabel || 'Отмена';
 
-        function done(v) { ov.remove(); document.removeEventListener('keydown', onKey, true); resolve(v); }
-        // capture + stopImmediatePropagation — гасим клавишу для подлежащего
-        // редактора (он тоже слушает keydown на document).
-        function onKey(e) {
-            if (e.key === 'Escape') { e.stopImmediatePropagation(); done(opts.cancelValue); }
-            else if (e.key === 'Enter' && opts.onEnter) { e.preventDefault(); e.stopImmediatePropagation(); opts.onEnter(done, ov); }
-        }
-        document.addEventListener('keydown', onKey, true);
-        closeOnBackdrop(ov, function () { done(opts.cancelValue); });
-        ov.querySelector('[data-act=cancel]').addEventListener('click', function () { done(opts.cancelValue); });
+        function done(v) { resolve(v); m.close(); }
         if (opts.onMount) { opts.onMount(ov, done); }
     });
 }
