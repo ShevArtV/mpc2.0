@@ -68,4 +68,5 @@ Author: Arthur Shevchenko (<a href="https://t.me/ShevArtV">https://t.me/ShevArtV
     <li><em>mpcve_max_upload</em> — лимит размера загружаемого изображения, байт (по умолчанию <em>10485760</em> = 10 МБ; <em>0</em> — без лимита).</li>
     <li><em>mpcve_lock_ttl</em> — TTL блокировки ресурса = idle-таймаут, сек (по умолчанию <em>300</em>).</li>
     <li><em>mpcve_allowed_attrs</em> — белый список HTML-атрибутов для очистки содержимого редактируемого поля (по умолчанию <em>class,href,src,alt,title</em>). Обработчики <code>on*</code>, <code>javascript:</code> и опасный <code>style</code> режутся всегда, независимо от этой настройки.</li>
+    <li><em>mpcve_rte_entities</em> — состав палитры HTML-сущностей (кнопка <em>Ω</em> в редакторе текста с форматированием), список через запятую. Пусто — набор по умолчанию: <em>nbsp, shy, mdash, ndash, laquo, raquo, bdquo, ldquo, rdquo, hellip, times, plusmn, deg, copy, reg, trade, rarr</em>. Принимаются имена сущностей (<em>nbsp</em>) и числовые ссылки (<em>#8212</em>, <em>#x2014</em>).</li>
 </ul>
