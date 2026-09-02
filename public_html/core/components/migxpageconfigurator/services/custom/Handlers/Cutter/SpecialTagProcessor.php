@@ -16,6 +16,14 @@ use MpcServices\Handlers\Parser;
  */
 class SpecialTagProcessor
 {
+    /** Открывающий тег с атрибутом data-mpc-remove — для текстового фолбэка удаления. */
+    private const OPEN_TAG_RE = '/<([a-z][a-z0-9-]*)[^<>]*\sdata-mpc-remove(?=[\s>=\/])/i';
+    private const CUT_LIMIT   = 200;
+    private const VOID_TAGS   = [
+        'area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input',
+        'link', 'meta', 'param', 'source', 'track', 'wbr',
+    ];
+
     private array                $properties;
     private Parser               $parser;
     private SnippetCallBuilder   $snippetCallBuilder;
@@ -169,6 +177,66 @@ class SpecialTagProcessor
             $properties['html'] = str_replace($hiddenHtml, '', $properties['html']);
         }
 
+        // Удаление выше — это str_replace по сериализации DiDom, а к этому моменту
+        // предыдущие проходы (setPlaceholders) уже вписали Fenom прямо в позицию
+        // имени тега: `<source{if $source.media} media="..."{/if} ...>`. DiDom при
+        // ре-сериализации выбрасывает такой мусорный «атрибут», строка расходится
+        // с исходной, и замена промахивается — узел-объявление уезжает на фронт.
+        // Тот же класс дефекта описан у unwrapBlock в SectionFileWriter::putToFile.
+        // Фолбэк вырезает уцелевшие узлы по самому тексту, без парсера.
+        if (preg_match(self::OPEN_TAG_RE, $properties['html'])) {
+            $properties['html'] = $this->cutHiddenByText($properties['html']);
+        }
+
         return $properties;
+    }
+
+    /**
+     * Текстовое вырезание уцелевших [data-mpc-remove] узлов.
+     *
+     * От открывающего тега до парного закрывающего с учётом вложенности одноимённых
+     * тегов. Не тронет узел, у которого не нашлось пары, — лучше оставить как есть,
+     * чем срезать половину секции. Ищется именно открывающий тег, а не подстрока:
+     * имя атрибута встречается и в комментариях вёрстки, а там резать нечего.
+     */
+    private function cutHiddenByText(string $html): string
+    {
+        $guard = 0;
+        while (preg_match(self::OPEN_TAG_RE, $html, $m, PREG_OFFSET_CAPTURE) && ++$guard <= self::CUT_LIMIT) {
+            $openStart = $m[0][1];
+            $openEnd   = strpos($html, '>', $openStart + strlen($m[0][0]) - 1);
+            if ($openEnd === false) {
+                break;
+            }
+
+            $tag = strtolower($m[1][0]);
+            $end = $openEnd + 1;
+
+            if (!in_array($tag, self::VOID_TAGS, true) && substr($html, $openEnd - 1, 1) !== '/') {
+                $depth   = 1;
+                $offset  = $end;
+                $pattern = '/<(\/?)' . preg_quote($tag, '/') . '\b/i';
+
+                while ($depth > 0 && preg_match($pattern, $html, $found, PREG_OFFSET_CAPTURE, $offset)) {
+                    $depth += $found[1][0] === '/' ? -1 : 1;
+                    $offset = $found[0][1] + strlen($found[0][0]);
+                }
+
+                if ($depth !== 0) {
+                    break;
+                }
+
+                $closeEnd = strpos($html, '>', $offset);
+                if ($closeEnd === false) {
+                    break;
+                }
+
+                $end = $closeEnd + 1;
+            }
+
+            $html = substr($html, 0, $openStart) . substr($html, $end);
+        }
+
+        return $html;
     }
 }
