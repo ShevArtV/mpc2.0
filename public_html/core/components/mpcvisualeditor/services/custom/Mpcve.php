@@ -65,6 +65,12 @@ class Mpcve
             'trim',
             explode(',', (string)$this->modx->getOption('mpcve_allowed_attrs', null, ''))
         )));
+        // Символы палитры «Ω» в RTE: csv имён сущностей (mpcve_rte_entities).
+        // Пусто → дефолтный набор DEFAULT_ENTITIES в rte.js.
+        $entities = array_values(array_filter(array_map(
+            'trim',
+            explode(',', (string)$this->modx->getOption('mpcve_rte_entities', null, ''))
+        )));
         return [
             'connectorUrl' => $this->config['connectorUrl'],
             'assetsUrl'    => $this->config['assetsUrl'],
@@ -76,6 +82,7 @@ class Mpcve
             'contextKey'   => (string)($this->modx->context ? $this->modx->context->get('key') : 'web'),
             'allowedTags'  => $allowedTags,
             'allowedAttrs' => $allowedAttrs,
+            'entities'     => $entities,
             // Право на правку ГЛОБАЛЬНЫХ данных (настройки data-mpc-info, контакты):
             // фронт помечает их редактируемыми только при наличии mpcve_edit_global.
             'editGlobal'   => (new Handlers\PermissionChecker($this->modx))->canEditGlobal(),

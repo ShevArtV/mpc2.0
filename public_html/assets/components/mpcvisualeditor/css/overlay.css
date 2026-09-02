@@ -1001,6 +1001,36 @@ input.mpcve-ta__area {
     background: #e2e8f0;
 }
 
+/* Палитра типографских символов: выпадает из-под кнопки «Ω» тулбара RTE. */
+.mpcve-rte__ents {
+    position: relative;
+    display: inline-flex;
+}
+
+.mpcve-rte__entsbox {
+    position: absolute;
+    z-index: 5;
+    top: calc(100% + 4px);
+    left: 0;
+    display: grid;
+    grid-template-columns: repeat(8, 30px);
+    gap: 4px;
+    padding: 6px;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    background: #fff;
+    box-shadow: 0 8px 24px rgba(15, 23, 42, .18);
+}
+
+.mpcve-rte__entsbox[hidden] {
+    display: none;
+}
+
+.mpcve-rte__btn--ent {
+    padding: 0;
+    font-size: 15px;
+}
+
 .mpcve-rte__area {
     min-height: 220px;
     max-height: 60vh;

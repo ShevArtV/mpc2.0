@@ -10,7 +10,10 @@
  * 3) MutationObserver на области диспатчит события (всплывают):
  *    mpcve:rte:nodeadded / noderemoved / nodechanged (detail.node[, attribute]) —
  *    проект слушает их и навешивает классы/обработчики на вставленные теги.
- * 4) Подменить редактор: window.MpcVE.setRte(provider) — объект с методом
+ * 4) Кнопка «Ω» — палитра типографских символов (HTML-сущностей). Набор берётся
+ *    из системной настройки mpcve_rte_entities (S.cfg.entities), пусто → дефолт
+ *    DEFAULT_ENTITIES. От allowedTags не зависит: это текст, а не теги.
+ * 5) Подменить редактор: window.MpcVE.setRte(provider) — объект с методом
  *    create(container, opts) → инстанс { getHTML, focus, destroy }.
  *
  * opts: { value, allowedTags:[], upload(file)->Promise<url> }.
@@ -43,6 +46,95 @@ var BUTTONS = [
     { tag: 'a', label: '🔗', title: 'Ссылка', link: true },
     { tag: 'img', label: '🖼', title: 'Картинка', image: true }
 ];
+
+// --- типографские символы (HTML-сущности) --------------------------------
+// Палитра под кнопкой «Ω» в тулбаре. Вставляем ИМЕННО сущность (insertHTML), а не
+// готовый символ: невидимые (nbsp/shy) иначе теряются при нормализации пробелов.
+// От allowedTags не зависит — это текст, а не теги, sanitizeHtml его не трогает.
+// В сохранённом html останется то, что вернёт innerHTML: nbsp/amp/lt/gt — снова
+// сущностями, остальные — литералами UTF-8 («—», ««»).
+var ENTITIES = {
+    nbsp:   { ch: '␣', title: 'Неразрывный пробел (&nbsp;)' },
+    shy:    { ch: '·-', title: 'Мягкий перенос (&shy;)' },
+    mdash:  { ch: '—', title: 'Длинное тире (&mdash;)' },
+    ndash:  { ch: '–', title: 'Среднее тире (&ndash;)' },
+    minus:  { ch: '−', title: 'Минус (&minus;)' },
+    laquo:  { ch: '«', title: 'Кавычка-ёлочка открывающая (&laquo;)' },
+    raquo:  { ch: '»', title: 'Кавычка-ёлочка закрывающая (&raquo;)' },
+    bdquo:  { ch: '„', title: 'Кавычка-лапка нижняя (&bdquo;)' },
+    ldquo:  { ch: '“', title: 'Кавычка-лапка открывающая (&ldquo;)' },
+    rdquo:  { ch: '”', title: 'Кавычка-лапка закрывающая (&rdquo;)' },
+    hellip: { ch: '…', title: 'Многоточие (&hellip;)' },
+    middot: { ch: '·', title: 'Точка по центру (&middot;)' },
+    bull:   { ch: '•', title: 'Маркер списка (&bull;)' },
+    times:  { ch: '×', title: 'Знак умножения (&times;)' },
+    plusmn: { ch: '±', title: 'Плюс-минус (&plusmn;)' },
+    frac12: { ch: '½', title: 'Одна вторая (&frac12;)' },
+    deg:    { ch: '°', title: 'Градус (&deg;)' },
+    copy:   { ch: '©', title: 'Копирайт (&copy;)' },
+    reg:    { ch: '®', title: 'Зарегистрированный знак (&reg;)' },
+    trade:  { ch: '™', title: 'Торговая марка (&trade;)' },
+    euro:   { ch: '€', title: 'Евро (&euro;)' },
+    rarr:   { ch: '→', title: 'Стрелка вправо (&rarr;)' },
+    larr:   { ch: '←', title: 'Стрелка влево (&larr;)' },
+    amp:    { ch: '&', title: 'Амперсанд (&amp;)' },
+    lt:     { ch: '<', title: 'Знак «меньше» (&lt;)' },
+    gt:     { ch: '>', title: 'Знак «больше» (&gt;)' }
+};
+
+// Набор по умолчанию (порядок = порядок кнопок). Переопределяется системной
+// настройкой mpcve_rte_entities → S.cfg.entities.
+var DEFAULT_ENTITIES = ['nbsp', 'shy', 'mdash', 'ndash', 'laquo', 'raquo', 'bdquo',
+    'ldquo', 'rdquo', 'hellip', 'times', 'plusmn', 'deg', 'copy', 'reg',
+    'trade', 'rarr'];
+
+// Имя из настройки → { ent, ch, title }. Принимает «mdash», «&mdash;», числовые
+// «#8594» / «#x2192». Неизвестное — null (кнопки не будет, молча).
+function entityDef(raw) {
+    var name = String(raw == null ? '' : raw).trim().replace(/^&/, '').replace(/;$/, '').toLowerCase();
+    if (!name) { return null; }
+    if (ENTITIES[name]) {
+        return { ent: '&' + name + ';', ch: ENTITIES[name].ch, title: ENTITIES[name].title };
+    }
+    var m = /^#(x?)([0-9a-f]+)$/.exec(name);
+    if (!m) { return null; }
+    var code = parseInt(m[2], m[1] ? 16 : 10);
+    if (!code || code > 0x10ffff) { return null; }
+    var ch = String.fromCodePoint ? String.fromCodePoint(code) : String.fromCharCode(code);
+    return { ent: '&#' + (m[1] ? 'x' + m[2] : String(code)) + ';', ch: ch, title: 'Символ &#' + code + ';' };
+}
+
+// Кнопки палитры: из настройки (S.cfg.entities), пусто/нет → DEFAULT_ENTITIES.
+function entityDefs() {
+    var src = (S.cfg && S.cfg.entities && S.cfg.entities.length) ? S.cfg.entities : DEFAULT_ENTITIES;
+    return src.map(function (n) { return entityDef(n); }).filter(Boolean);
+}
+
+function entityPaletteHtml(defs) {
+    return '<span class="mpcve-rte__ents">' +
+        '<button type="button" class="mpcve-rte__btn" data-ents="1" title="Символы и типографика">Ω</button>' +
+        '<span class="mpcve-rte__entsbox" hidden>' +
+        defs.map(function (d) {
+            return '<button type="button" class="mpcve-rte__btn mpcve-rte__btn--ent" data-ent="' +
+                esc(d.ent) + '" title="' + esc(d.title) + '">' + esc(d.ch) + '</button>';
+        }).join('') +
+        '</span></span>';
+}
+
+// Вставка в позицию каретки/поверх выделения. insertHTML даёт саму сущность;
+// где команда не поддержана — кладём готовый символ текстом.
+function insertEntity(ent, ch) {
+    if (document.queryCommandSupported && document.queryCommandSupported('insertHTML')) {
+        document.execCommand('insertHTML', false, ent);
+        return;
+    }
+    document.execCommand('insertText', false, ch);
+}
+
+function closeEnts(container) {
+    var box = container.querySelector('.mpcve-rte__entsbox');
+    if (box) { box.hidden = true; }
+}
 
 function norm(tags) {
     return (tags || []).map(function (t) { return String(t).trim().toLowerCase(); }).filter(Boolean);
@@ -93,6 +185,12 @@ function create(container, opts) {
         toolbarInner += '<span class="mpcve-rte__sep"></span>' +
             '<button type="button" class="mpcve-rte__btn" data-clear="1" title="Очистить формат">⌫</button>';
     }
+    // Палитра типографских символов — своей группой в конце тулбара.
+    var entDefs = entityDefs();
+    if (entDefs.length) {
+        toolbarInner += (toolbarInner ? '<span class="mpcve-rte__sep"></span>' : '') +
+            entityPaletteHtml(entDefs);
+    }
 
     container.innerHTML =
         (toolbarInner ? '<div class="mpcve-rte__toolbar">' + toolbarInner + '</div>' : '') +
@@ -130,6 +228,14 @@ function create(container, opts) {
             if (!el) { return; }
             e.preventDefault();
             area.focus();
+            if (el.getAttribute('data-ents')) {
+                var box = container.querySelector('.mpcve-rte__entsbox');
+                if (box) { box.hidden = !box.hidden; }
+                return;
+            }
+            var ent = el.getAttribute('data-ent');
+            if (ent) { insertEntity(ent, el.textContent); closeEnts(container); return; }
+            closeEnts(container);
             if (el.getAttribute('data-clear')) { document.execCommand('removeFormat', false, null); return; }
             var b = BUTTONS[parseInt(el.getAttribute('data-i'), 10)];
             runAction(b, area, opts);
@@ -157,10 +263,20 @@ function create(container, opts) {
     });
     obs.observe(area, { childList: true, subtree: true, attributes: true, characterData: false });
 
+    // Палитра символов закрывается кликом мимо редактора (внутри тулбара её
+    // закрывает сам обработчик click).
+    var onDocDown = function (e) {
+        if (!container.contains(e.target)) { closeEnts(container); }
+    };
+    document.addEventListener('mousedown', onDocDown);
+
     return {
         getHTML: function () { return area.innerHTML; },
         focus: function () { area.focus(); },
-        destroy: function () { obs.disconnect(); }
+        destroy: function () {
+            obs.disconnect();
+            document.removeEventListener('mousedown', onDocDown);
+        }
     };
 }
 

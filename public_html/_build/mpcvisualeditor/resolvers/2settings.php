@@ -26,6 +26,11 @@ switch ($options[xPDOTransport::PACKAGE_ACTION]) {
                 'xtype' => 'textfield',
                 'area'  => 'editor',
             ],
+            'mpcve_rte_entities' => [
+                'value' => '',
+                'xtype' => 'textfield',
+                'area'  => 'editor',
+            ],
         ];
         foreach ($newSettings as $key => $def) {
             if ($modx->getObject('modSystemSetting', $key)) {

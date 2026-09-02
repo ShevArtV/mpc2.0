@@ -59,3 +59,5 @@ $_lang['setting_mpcve_max_upload'] = 'Image upload limit (bytes)';
 $_lang['setting_mpcve_max_upload_desc'] = 'Maximum file size when uploading from the editor. Default 10485760 (10 MB). 0 — no limit.';
 $_lang['setting_mpcve_allowed_attrs'] = 'HTML attributes whitelist';
 $_lang['setting_mpcve_allowed_attrs_desc'] = 'Attributes kept when sanitizing edited field content (richtext/text/textarea), comma-separated. Empty — fallback list in rte.js. on* handlers, javascript: and unsafe style are always stripped.';
+$_lang['setting_mpcve_rte_entities'] = 'Editor character palette';
+$_lang['setting_mpcve_rte_entities_desc'] = 'HTML entities for the toolbar «Ω» button, comma-separated and in the desired order: nbsp, mdash, laquo. «&mdash;» and numeric «#8594» / «#x2192» are accepted too. Empty — default set from rte.js. Unknown names are skipped.';

@@ -74,4 +74,12 @@ return [
         'value' => 'class,href,src,alt,title',
         'area'  => 'mpcve_editor',
     ],
+    // Символы палитры «Ω» в тулбаре RTE: csv имён HTML-сущностей (принимаются
+    // «mdash», «&mdash;», числовые «#8594»/«#x2192»). Пусто → дефолтный набор
+    // DEFAULT_ENTITIES в rte.js. Неизвестное имя молча пропускается.
+    'mpcve_rte_entities' => [
+        'xtype' => 'textfield',
+        'value' => '',
+        'area'  => 'mpcve_editor',
+    ],
 ];
