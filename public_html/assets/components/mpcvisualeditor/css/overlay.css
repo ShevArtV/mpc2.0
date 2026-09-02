@@ -312,6 +312,72 @@ body.mpcve-on .mpcve-editing:empty::before {
     display: contents !important;
 }
 
+/* Оборотная сторона display:contents: у такого поля нет собственного бокса,
+   поэтому штатные .mpcve-editable рамка/ховер/бейдж на нём не рисуются вовсе.
+   Аффорданс даёт накладка в портальном слое (js/unwrap.js) — по объединённому
+   боксу потомков поля. Слой сквозной для мыши: клик должен доходить до самого
+   поля, его ловит делегат в app.js. */
+.mpcve-unwrap-layer {
+    position: fixed;
+    inset: 0;
+    z-index: 99989;
+    pointer-events: none;
+}
+
+/* Рамка повторяет вид .mpcve-editable, но живёт вне потока страницы:
+   позицию и размеры выставляет JS. */
+.mpcve-unwrap-frame {
+    position: absolute;
+    top: 0;
+    left: 0;
+    box-sizing: border-box;
+    outline: 1px dashed rgba(59, 130, 246, .55);
+    outline-offset: 2px;
+    pointer-events: none;
+    transition: outline-color .15s ease;
+}
+
+.mpcve-unwrap-frame.is-hover {
+    outline: 2px solid #3b82f6;
+}
+
+/* Бейдж типа — тот же набор иконок, что у .mpcve-editable:hover::after. */
+.mpcve-unwrap-frame.is-hover::after {
+    content: "\270E"; /* ✎ текст по умолчанию */
+    position: absolute;
+    top: -11px;
+    left: -11px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    font: 12px/1 -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    color: #fff;
+    background: #3b82f6;
+    border-radius: 50%;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, .3);
+    pointer-events: none;
+}
+
+.mpcve-unwrap-frame[data-mpcve-type="image"].is-hover::after { content: "\1F5BC"; } /* 🖼 */
+.mpcve-unwrap-frame[data-mpcve-type="media"].is-hover::after { content: "\25B6"; }  /* ▶ */
+.mpcve-unwrap-frame[data-mpcve-type="rows"].is-hover::after  { content: "\2630"; }  /* ☰ */
+
+/* Инлайн-правка: зелёная рамка, как штатная .mpcve-editing. */
+.mpcve-unwrap-frame.is-editing {
+    outline: 2px solid #16a34a;
+    background: rgba(22, 163, 74, .06);
+}
+
+/* Пустому unwrap-полю накладку строить не по чему (нет потомков). Возвращаем
+   ему бокс — тогда работают штатные рамка и плейсхолдер :empty::before.
+   !important нужен, чтобы перебить display:contents выше. */
+body.mpcve-on .mpcve-editable[data-mpc-unwrap]:empty {
+    display: block !important;
+    min-height: 1.3em;
+}
+
 /* Ряд действий «Выбрать существующий» + «По ссылке» (редактор картинки). */
 .mpcve-modal__picks {
     display: flex;

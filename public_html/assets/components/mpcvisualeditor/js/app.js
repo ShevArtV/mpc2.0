@@ -11,6 +11,7 @@ import { toast } from './dom.js';
 import { markEl, markInfo, markContacts } from './mark.js';
 import { editors } from './editors/index.js';
 import { buildHiddenTriggers, removeHiddenTriggers } from './panels.js';
+import { buildUnwrapFrames, removeUnwrapFrames } from './unwrap.js';
 import { toggleSidebar } from './sidebar.js';
 import { toggleChangelog } from './changelog.js';
 import { toggleSettings } from './settings.js';
@@ -151,12 +152,16 @@ function applyEditingState() {
         attachRowsBadges();
         buildHiddenTriggers();
         document.body.classList.add('mpcve-on');
+        // Строго после markEditable и класса mpcve-on: накладки ищут уже
+        // помеченные поля и меряют их в геометрии режима правки.
+        buildUnwrapFrames();
     } else {
         unmarkEditable();
         unmarkCopies();
         removeAudioBadges();
         removeRowsBadges();
         removeHiddenTriggers();
+        removeUnwrapFrames();
         document.body.classList.remove('mpcve-on');
     }
 }
