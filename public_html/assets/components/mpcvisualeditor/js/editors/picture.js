@@ -7,10 +7,18 @@ import { toast, parseRecord, openModal } from '../dom.js';
 import { fieldAddress, fieldConfigRecord } from '../address.js';
 import { openFileManager } from '../filemanager.js';
 import { makeUrlButton } from './urlrow.js';
+import { lexValue } from '../state.js';
+
+// Годится ли значение как src превью. В конфиге вместо пути может лежать ключ
+// лексикона, которого нет в карте (другой уровень, лексиконы выключены) — тогда
+// лучше показать «нет», чем битую картинку.
+function previewUrl(v) {
+    var s = String(v == null ? '' : v);
+    return /^(?:https?:)?\/\/|^\/|^data:image\//.test(s) ? s : '';
+}
 
 // override = {addr} → value-based режим (панель скрытых полей: el=null, адрес и
-// запись из конфига; превью пустые — DOM нет). Иначе обычный режим (адрес/превью
-// из el на странице).
+// запись из конфига). Иначе обычный режим (адрес/превью из el на странице).
 export function openPictureEditor(el, override) {
     var addr = (override && override.addr) || fieldAddress(el);
     if (!addr || !addr.section || !addr.fieldName) { toast('Нет адреса картинки', true); return; }
@@ -20,13 +28,19 @@ export function openPictureEditor(el, override) {
     var cfgSources = Array.isArray(rec.sources) ? rec.sources : [];
     var domMain = el ? el.querySelector('img') : null;
     var domSources = el ? Array.prototype.slice.call(el.querySelectorAll('source')) : [];
+    // Без DOM (панель скрытых полей) единственный источник и превью, и alt —
+    // конфиг: `preview` записи, иначе сам путь. В DOM-режиме alt уже отрендерен
+    // лексиконом, поэтому и здесь берём значение, а не ключ.
+    var lex = function (v) { return String(lexValue(v == null ? '' : String(v), addr.level) || ''); };
 
     var main = {
         src: imgRec.src || '',                 // ключ из конфига (если не меняли)
-        alt: domMain ? (domMain.getAttribute('alt') || '') : '',
+        alt: domMain ? (domMain.getAttribute('alt') || '') : lex(imgRec.alt),
         title: imgRec.title || '',
         width: imgRec.width || '', height: imgRec.height || '',
-        preview: domMain ? (domMain.currentSrc || domMain.src || '') : '',
+        preview: domMain
+            ? (domMain.currentSrc || domMain.src || '')
+            : (previewUrl(rec.preview) || previewUrl(lex(imgRec.src))),
         file: null
     };
     var sources = cfgSources.map(function (cs, k) {
@@ -35,7 +49,9 @@ export function openPictureEditor(el, override) {
             srcset: cs.srcset || '',           // ключ из конфига
             media: cs.media || (dom ? dom.getAttribute('media') : '') || '',
             type: cs.type || null, sizes: cs.sizes || null, width: cs.width || null, height: cs.height || null,
-            preview: dom ? (dom.getAttribute('srcset') || dom.getAttribute('data-lazy') || '') : '',
+            preview: dom
+                ? (dom.getAttribute('srcset') || dom.getAttribute('data-lazy') || '')
+                : previewUrl(lex(cs.srcset)),
             file: null
         };
     });

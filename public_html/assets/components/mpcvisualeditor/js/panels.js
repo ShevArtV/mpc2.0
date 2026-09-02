@@ -4,7 +4,7 @@
  * в mpc_config. Вешаем на КАЖДЫЙ блок (секцию / строку списка) с такими полями
  * кнопку-триггер; клик открывает панель ЭТОГО блока. Запись — field/save.
  */
-import { S } from './state.js';
+import { S, lexValue } from './state.js';
 import { api, uploadMedia } from './api.js';
 import { esc, parseRecord, isScalar, fieldLabel, toast, openModal } from './dom.js';
 import { SECTION_STYLE_FIELDS, STRUCTURAL } from './constants.js';
@@ -13,14 +13,9 @@ import { createRte, sanitizeHtml } from './editors/rte.js';
 import { openPictureEditor } from './editors/picture.js';
 import { openMediaEditor } from './editors/media.js';
 
-// Значение лексикона по ключу (в режиме лексиконов конфиг хранит КЛЮЧ, перевод —
-// в файле). Показываем перевод, а не ключ. Если v не ключ (или лексиконы выкл) —
-// возвращаем как есть. Карты приходят из config/get (S.lexicons по уровням).
-export function lexValue(v, level) {
-    if (typeof v !== 'string') { return v; }
-    var map = (S.lexicons && S.lexicons[level]) || null;
-    return (map && Object.prototype.hasOwnProperty.call(map, v)) ? map[v] : v;
-}
+// lexValue переехал в state.js (нужен и редакторам, а импорт из panels.js замкнул
+// бы цикл). Реэкспорт — чтобы прежние импортёры (sectionfields.js) не правились.
+export { lexValue };
 
 // migx-служебка секции (вне табов mpc_base) — никогда не редактируем.
 export var MIGX_SERVICE = ['MIGX_id', 'MIGX_formname', 'limit'];

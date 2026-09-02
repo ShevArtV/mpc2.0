@@ -24,3 +24,14 @@ export var S = {
     configData: null,    // { resourceId, isType, resource:{}, type:{}, global:{}, lexicons:{} }
     lexicons: { resource: {}, type: {}, global: {} } // карты key→value по уровням
 };
+
+// Значение лексикона по ключу (в режиме лексиконов конфиг хранит КЛЮЧ, перевод —
+// в файле). Показываем перевод, а не ключ. Если v не ключ (или лексиконы выкл) —
+// возвращаем как есть. Карты приходят из config/get (S.lexicons по уровням).
+// Живёт здесь, а не в panels.js: значение из конфига нужно и редакторам (picture),
+// а импорт из panels.js замкнул бы цикл panels → editors/picture → panels.
+export function lexValue(v, level) {
+    if (typeof v !== 'string') { return v; }
+    var map = (S.lexicons && S.lexicons[level]) || null;
+    return (map && Object.prototype.hasOwnProperty.call(map, v)) ? map[v] : v;
+}
