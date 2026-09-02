@@ -18,7 +18,7 @@
  *
  * opts: { value, allowedTags:[], upload(file)->Promise<url> }.
  */
-import { toast, esc, promptDialog } from '../dom.js';
+import { toast, esc, promptDialog, closeOnBackdrop } from '../dom.js';
 import { S } from '../state.js';
 
 // Тег → кнопка. exec — execCommand; block — formatBlock; wrap — обернуть выделение
@@ -385,7 +385,7 @@ function openImageDialog(area, opts, imgEl, presetSrc) {
     function close() { ov.remove(); document.removeEventListener('keydown', onKey); }
     function onKey(e) { if (e.key === 'Escape') { close(); } }
     document.addEventListener('keydown', onKey);
-    ov.addEventListener('click', function (e) { if (e.target === ov) { close(); } });
+    closeOnBackdrop(ov, function () { close(); });
     ov.querySelector('[data-act=cancel]').addEventListener('click', close);
 
     var fileInput = ov.querySelector('input[type=file]');

@@ -11,7 +11,7 @@
  * mpc (mpc_media_source); фронт его не выбирает. Пути относительны базе источника.
  */
 import { files } from './api.js';
-import { toast, esc, promptDialog, confirmDialog } from './dom.js';
+import { toast, esc, promptDialog, confirmDialog, closeOnBackdrop } from './dom.js';
 
 var EXT_ICON = { pdf: '📄', zip: '🗜', doc: '📃', docx: '📃', xls: '📊', xlsx: '📊', mp4: '🎬', webm: '🎬', mp3: '🎵', wav: '🎵' };
 
@@ -64,7 +64,7 @@ export function openFileManager(opts) {
             done(null);
         }
         document.addEventListener('keydown', onKey, true);
-        ov.addEventListener('click', function (e) { if (e.target === ov) { done(null); } });
+        closeOnBackdrop(ov, function () { done(null); });
         ov.querySelector('[data-act=cancel]').addEventListener('click', function () { done(null); });
         pickBtn.addEventListener('click', function () { if (state.selected) { done(state.selected); } });
 

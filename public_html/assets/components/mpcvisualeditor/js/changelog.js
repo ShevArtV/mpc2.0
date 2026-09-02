@@ -7,7 +7,7 @@
  */
 import { S } from './state.js';
 import { api } from './api.js';
-import { esc, toast, confirmDialog } from './dom.js';
+import { esc, toast, confirmDialog, closeOnBackdrop } from './dom.js';
 
 var overlay = null;
 var allEntries = [];
@@ -44,7 +44,7 @@ function open() {
             '</table></div>' +
         '</div>';
     document.body.appendChild(overlay);
-    overlay.addEventListener('click', function (e) { if (e.target === overlay) { close(); } });
+    closeOnBackdrop(overlay, function () { close(); });
     overlay.querySelector('[data-act=close]').addEventListener('click', close);
     document.addEventListener('keydown', onKey);
 

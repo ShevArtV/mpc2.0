@@ -3,7 +3,7 @@
  * <source> (адаптив). Конфиг — источник правды (лексикон-ключи), DOM — превью.
  */
 import { api, uploadAndProbe, folderOf } from '../api.js';
-import { toast, parseRecord } from '../dom.js';
+import { toast, parseRecord, closeOnBackdrop } from '../dom.js';
 import { fieldAddress, fieldConfigRecord } from '../address.js';
 import { openFileManager } from '../filemanager.js';
 import { makeUrlButton } from './urlrow.js';
@@ -73,7 +73,7 @@ export function openPictureEditor(el, override) {
     function close() { overlay.remove(); document.removeEventListener('keydown', onKey); }
     function onKey(e) { if (e.key === 'Escape') { close(); } }
     document.addEventListener('keydown', onKey);
-    overlay.addEventListener('click', function (e) { if (e.target === overlay) { close(); } });
+    closeOnBackdrop(overlay, function () { close(); });
     overlay.querySelector('[data-act=cancel]').addEventListener('click', close);
 
     // мини-загрузчик: превью + file-input + «Выбрать существующий». onPick(file)

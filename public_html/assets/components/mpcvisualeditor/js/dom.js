@@ -10,6 +10,23 @@ export function esc(s) {
         .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
+// Закрытие модалки кликом по подложке. Проверяем И mousedown, И click: браузер
+// шлёт click ближайшему ОБЩЕМУ предку нажатия и отпускания, поэтому при drag-
+// выделении текста внутри карточки с отпусканием мыши за её пределами target
+// клика — подложка, и модалка закрывалась сама (жалоба оператора 02.09.2026).
+export function closeOnBackdrop(overlay, close) {
+    var downOnBackdrop = false;
+    overlay.addEventListener('mousedown', function (e) { downOnBackdrop = (e.target === overlay); });
+    // Обратный случай: выделение начато на подложке и закончено в карточке —
+    // click снова прилетит подложке, закрывать тоже не надо.
+    overlay.addEventListener('mouseup', function (e) { if (e.target !== overlay) { downOnBackdrop = false; } });
+    overlay.addEventListener('click', function (e) {
+        var wasDown = downOnBackdrop;
+        downOnBackdrop = false;
+        if (e.target === overlay && wasDown) { close(); }
+    });
+}
+
 // JSON-строка migx-рядов [{…},…] → массив объектов, иначе null.
 export function parseRecord(v) {
     if (typeof v !== 'string') { return null; }
@@ -92,7 +109,7 @@ function buildModal(opts) {
             else if (e.key === 'Enter' && opts.onEnter) { e.preventDefault(); e.stopImmediatePropagation(); opts.onEnter(done, ov); }
         }
         document.addEventListener('keydown', onKey, true);
-        ov.addEventListener('click', function (e) { if (e.target === ov) { done(opts.cancelValue); } });
+        closeOnBackdrop(ov, function () { done(opts.cancelValue); });
         ov.querySelector('[data-act=cancel]').addEventListener('click', function () { done(opts.cancelValue); });
         if (opts.onMount) { opts.onMount(ov, done); }
     });

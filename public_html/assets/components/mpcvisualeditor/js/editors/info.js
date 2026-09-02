@@ -8,7 +8,7 @@
  * meta — {key, ctx, value, xtype, protected}. Без meta (инлайн) — подтягиваем из БД.
  */
 import { api, loadSettingsList, findSetting } from '../api.js';
-import { toast, esc } from '../dom.js';
+import { toast, esc, closeOnBackdrop } from '../dom.js';
 import { openFileManager } from '../filemanager.js';
 
 function tag(el) { return el && el.tagName ? el.tagName.toLowerCase() : ''; }
@@ -123,7 +123,7 @@ function open(el, meta) {
     function close() { overlay.remove(); document.removeEventListener('keydown', onKey); }
     function onKey(e) { if (e.key === 'Escape') { close(); } }
     document.addEventListener('keydown', onKey);
-    overlay.addEventListener('click', function (e) { if (e.target === overlay) { close(); } });
+    closeOnBackdrop(overlay, function () { close(); });
     card.querySelector('[data-act=cancel]').addEventListener('click', close);
 
     var saveBtn = card.querySelector('[data-act=save]');

@@ -12,7 +12,7 @@
  * Img-список даёт 📷 на строку (открывает редактор картинки rows[idx].img).
  */
 import { api } from '../api.js';
-import { toast, esc, isMedia, confirmDialog } from '../dom.js';
+import { toast, esc, isMedia, confirmDialog, closeOnBackdrop } from '../dom.js';
 import { listAddress, listRows, configRowCount, rowPreview, isListEl } from '../address.js';
 import { markFieldsWithin } from '../mark.js';
 import { openImageEditor } from './image.js';
@@ -90,7 +90,7 @@ export function openRowsEditor(listEl) {
     function close() { dragFrom = null; overlay.remove(); document.removeEventListener('keydown', onKey); }
     function onKey(e) { if (e.key === 'Escape') { close(); } }
     document.addEventListener('keydown', onKey);
-    overlay.addEventListener('click', function (e) { if (e.target === overlay) { close(); } });
+    closeOnBackdrop(overlay, function () { close(); });
     overlay.querySelector('[data-act=close]').addEventListener('click', close);
     overlay.querySelector('[data-act=reload]').addEventListener('click', function () { window.location.reload(); });
 

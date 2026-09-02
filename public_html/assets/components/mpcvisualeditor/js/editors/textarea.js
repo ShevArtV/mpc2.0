@@ -4,7 +4,7 @@
  * в окне, чтобы было удобно и не ломалась вёрстка. Значение — plain text.
  */
 import { S } from '../state.js';
-import { toast } from '../dom.js';
+import { toast, closeOnBackdrop } from '../dom.js';
 import { fieldAddress } from '../address.js';
 import { doSave } from '../save.js';
 import { sanitizeHtml } from './rte.js';
@@ -39,7 +39,7 @@ export function openTextareaEditor(el) {
     function close() { overlay.remove(); document.removeEventListener('keydown', onKey); }
     function onKey(e) { if (e.key === 'Escape') { close(); } }
     document.addEventListener('keydown', onKey);
-    overlay.addEventListener('click', function (e) { if (e.target === overlay) { close(); } });
+    closeOnBackdrop(overlay, function () { close(); });
     overlay.querySelector('[data-act=cancel]').addEventListener('click', close);
 
     var saveBtn = overlay.querySelector('[data-act=save]');

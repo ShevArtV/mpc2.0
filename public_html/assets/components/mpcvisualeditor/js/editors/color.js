@@ -4,7 +4,7 @@
  * colorpickerfield настроек data-mpc-info). Значение пишем сырым (raw=1): hex-код
  * не переводимый, лексиконить нечего (как enum-ключи в listbox.js).
  */
-import { toast, esc } from '../dom.js';
+import { toast, esc, closeOnBackdrop } from '../dom.js';
 import { fieldAddress } from '../address.js';
 import { doSave } from '../save.js';
 
@@ -54,7 +54,7 @@ export function openColorEditor(el) {
     function close() { overlay.remove(); document.removeEventListener('keydown', onKey); }
     function onKey(e) { if (e.key === 'Escape') { close(); } }
     document.addEventListener('keydown', onKey);
-    overlay.addEventListener('click', function (e) { if (e.target === overlay) { close(); } });
+    closeOnBackdrop(overlay, function () { close(); });
     card.querySelector('[data-act=cancel]').addEventListener('click', close);
 
     var saveBtn = card.querySelector('[data-act=save]');

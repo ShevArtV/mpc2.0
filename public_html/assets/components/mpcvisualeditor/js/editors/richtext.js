@@ -11,7 +11,7 @@
  */
 import { S } from '../state.js';
 import { api, uploadMedia } from '../api.js';
-import { toast } from '../dom.js';
+import { toast, closeOnBackdrop } from '../dom.js';
 import { fieldAddress } from '../address.js';
 import { createRte, sanitizeHtml } from './rte.js';
 
@@ -82,7 +82,7 @@ export function openRichtextEditor(el) {
     }
     function onKey(e) { if (e.key === 'Escape') { close(); } }
     document.addEventListener('keydown', onKey);
-    overlay.addEventListener('click', function (e) { if (e.target === overlay) { close(); } });
+    closeOnBackdrop(overlay, function () { close(); });
     overlay.querySelector('[data-act=cancel]').addEventListener('click', close);
 
     var saveBtn = overlay.querySelector('[data-act=save]');

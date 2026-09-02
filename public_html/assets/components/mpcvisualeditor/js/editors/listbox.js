@@ -15,7 +15,7 @@
  */
 import { api } from '../api.js';
 import { S } from '../state.js';
-import { toast, esc } from '../dom.js';
+import { toast, esc, closeOnBackdrop } from '../dom.js';
 import { fieldAddress } from '../address.js';
 
 // "Caption==key||Caption2==key2" → [{label,value}]. @SELECT/динамика/неключевой → null.
@@ -137,7 +137,7 @@ function render(el, addr, etype, multiple, opts) {
     function close() { overlay.remove(); document.removeEventListener('keydown', onKey); }
     function onKey(e) { if (e.key === 'Escape') { close(); } }
     document.addEventListener('keydown', onKey);
-    overlay.addEventListener('click', function (e) { if (e.target === overlay) { close(); } });
+    closeOnBackdrop(overlay, function () { close(); });
     overlay.querySelector('[data-act=cancel]').addEventListener('click', close);
 
     var saveBtn = overlay.querySelector('[data-act=save]');

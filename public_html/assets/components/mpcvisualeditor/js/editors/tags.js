@@ -3,7 +3,7 @@
  * поле ввода (Enter/запятая добавляют). Хранение — список через запятую (дефолтный
  * разделитель MODX tag-TV). Пишем сырым (raw=1).
  */
-import { toast, esc } from '../dom.js';
+import { toast, esc, closeOnBackdrop } from '../dom.js';
 import { fieldAddress } from '../address.js';
 import { doSave } from '../save.js';
 
@@ -62,7 +62,7 @@ export function openTagsEditor(el) {
     function close() { overlay.remove(); document.removeEventListener('keydown', onKey); }
     function onKey(e) { if (e.key === 'Escape') { close(); } }
     document.addEventListener('keydown', onKey);
-    overlay.addEventListener('click', function (e) { if (e.target === overlay) { close(); } });
+    closeOnBackdrop(overlay, function () { close(); });
     overlay.querySelector('[data-act=cancel]').addEventListener('click', close);
 
     var saveBtn = overlay.querySelector('[data-act=save]');

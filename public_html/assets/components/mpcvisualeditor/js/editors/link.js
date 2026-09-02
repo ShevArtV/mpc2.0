@@ -6,7 +6,7 @@
  * значение поля = URL (бэк пишет его так же, как при нарезке, лексикон-aware).
  */
 import { api } from '../api.js';
-import { toast, esc } from '../dom.js';
+import { toast, esc, closeOnBackdrop } from '../dom.js';
 import { fieldAddress } from '../address.js';
 
 export function openLinkEditor(el) {
@@ -44,7 +44,7 @@ export function openLinkEditor(el) {
         else if (e.key === 'Enter') { e.preventDefault(); saveBtn.click(); }
     }
     document.addEventListener('keydown', onKey);
-    overlay.addEventListener('click', function (e) { if (e.target === overlay) { close(); } });
+    closeOnBackdrop(overlay, function () { close(); });
     overlay.querySelector('[data-act=cancel]').addEventListener('click', close);
 
     saveBtn.addEventListener('click', function () {

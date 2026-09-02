@@ -6,7 +6,7 @@
  */
 import { S } from './state.js';
 import { api, uploadMedia } from './api.js';
-import { esc, parseRecord, isScalar, fieldLabel, toast } from './dom.js';
+import { esc, parseRecord, isScalar, fieldLabel, toast, closeOnBackdrop } from './dom.js';
 import { SECTION_STYLE_FIELDS, STRUCTURAL } from './constants.js';
 import { findSectionInLevel, sectionConfig } from './address.js';
 import { createRte, sanitizeHtml } from './editors/rte.js';
@@ -484,7 +484,7 @@ export function openBlockPanel(title, descriptors) {
         close();
     }
     document.addEventListener('keydown', onKey, true);
-    overlay.addEventListener('click', function (e) { if (e.target === overlay) { close(); } });
+    closeOnBackdrop(overlay, function () { close(); });
     overlay.querySelector('[data-act=close]').addEventListener('click', close);
 
     overlay.querySelectorAll('.mpcve-hpanel__row').forEach(function (rowEl) {

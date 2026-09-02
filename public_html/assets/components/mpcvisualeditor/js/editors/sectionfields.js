@@ -16,7 +16,7 @@
  */
 import { S } from '../state.js';
 import { api, loadConfig } from '../api.js';
-import { parseRecord, isScalar, fieldLabel, esc, toast, confirmDialog } from '../dom.js';
+import { parseRecord, isScalar, fieldLabel, esc, toast, confirmDialog, closeOnBackdrop } from '../dom.js';
 import { STRUCTURAL } from '../constants.js';
 import { findSectionInLevel } from '../address.js';
 import {
@@ -185,7 +185,7 @@ export function openRowsPanel(listAddr, label) {
         close();
     }
     document.addEventListener('keydown', onKey, true);
-    overlay.addEventListener('click', function (e) { if (e.target === overlay) { close(); } });
+    closeOnBackdrop(overlay, function () { close(); });
     overlay.querySelector('[data-act=close]').addEventListener('click', close);
     overlay.querySelector('[data-act=reload]').addEventListener('click', function () { window.location.reload(); });
 

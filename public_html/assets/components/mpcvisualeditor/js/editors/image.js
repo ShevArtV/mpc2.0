@@ -3,7 +3,7 @@
  * migx-запись img с атрибутами alt/title/width/height).
  */
 import { api, folderOf } from '../api.js';
-import { toast, bgUrl, hasBg } from '../dom.js';
+import { toast, bgUrl, hasBg, closeOnBackdrop } from '../dom.js';
 import { fieldAddress } from '../address.js';
 import { openFileManager } from '../filemanager.js';
 import { makeUrlButton } from './urlrow.js';
@@ -121,7 +121,7 @@ export function openImageEditor(el, forcedAddr) {
     }
     function onKey(e) { if (e.key === 'Escape') { close(); } }
     document.addEventListener('keydown', onKey);
-    overlay.addEventListener('click', function (e) { if (e.target === overlay) { close(); } });
+    closeOnBackdrop(overlay, function () { close(); });
     overlay.querySelector('[data-act=cancel]').addEventListener('click', close);
 
     function pick(file) {
