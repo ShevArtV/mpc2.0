@@ -9,7 +9,7 @@ if (PHP_SAPI !== 'cli') {
 
 define('MODX_API_MODE', true);
 if (!defined('MODX_CORE_PATH')) {
-    define('MODX_CORE_PATH', str_replace('/', '\\', dirname(__FILE__, 4)) . '/');
+    define('MODX_CORE_PATH', str_replace('\\', '/', dirname(__FILE__, 4)) . '/');
 }
 if (!defined('MODX_CONFIG_KEY')) {
     define('MODX_CONFIG_KEY', 'config');
