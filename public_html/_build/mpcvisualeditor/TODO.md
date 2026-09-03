@@ -3,6 +3,23 @@
 Оставшиеся работы по фронт-редактированию (mpcVE) и связанному бэкенду mpc.
 Отмечено `[mpcVE]` / `[mpc]` — в каком пакете основная часть.
 
+## ТРЕБУЕТ ПОРТА в линию MODX 3 (репозиторий mpc3)
+
+Ветка `v2.0.0`, релиз mpc 2.5.67-rc / mpcVE 1.2.5-rc (03.09.2026) — адресация
+одноимённых секций. Порт делать руками: неймспейсы (`Migxpageconfigurator\` vs
+`MpcServices\`), расположение кода (`src/` vs `services/custom/`), PHPUnit 11
+требует статических data provider'ов.
+
+| Коммит | Что портировать |
+|---|---|
+| `562b2f0` | `Render::applySectionIdentity()` + её вызов в `renderSections()`: подстановка `data-mpc-name` / `data-mpc-lexicon` из записи конфига в открывающий тег секции |
+| `9be649f` | `sectionKeyOf()` в `address.js` и его применение в `address.js` / `scope.js` / `panels.js` / `sidebar.js` (JS переносится почти дословно) |
+| `3684df4` | тесты `RenderTest` (applySectionIdentity) и `FieldWriterTest` (запись в свою копию одноимённой секции) |
+| `e1dd926` | `console/clear_cache.php`: нормализация `MODX_CORE_PATH` (`'\\' → '/'`, а не наоборот) — проверить, есть ли та же опечатка в тройке |
+
+Серверные матчеры (`FieldWriter`, `SectionOpHandler`) править не требуется: они уже
+матчат `section_name || MIGX_formname`.
+
 ## РОАДМАП следующей сессии (зафиксирован 2026-06-04, порядок приоритета)
 
 1. [x] **Файловый менеджер в редакторе** `[mpcVE]`+`[mpc]` — ✅ M28: мини-менеджер на `modMediaSource` (`FileManagerHandler` + экшены `files/list|mkdir|rename|remove|upload`; фронт `filemanager.js` → `openFileManager({accept,title})`). Навигация (хлебные крошки + ↑), CRUD папок и файлов (создать папку, переименовать/удалить файл и папку), загрузка в текущую папку, переключатель источника (source-aware). Встроено «📁 Выбрать существующий» рядом с «Загрузить» в редакторах `image` (вкл. `bg`), `picture` (основная+источники), `media` (файл/постер/источники). Пути — относительные базе источника; права источника принудительно включаются после доверенной проверки коннектора (mpcve_edit), т.к. в web-контексте mgr-прав на файлы нет. `promptDialog` добавлен в `dom.js`. ✅ интеграция в `file`-TV сделана (M29: `editors/file.js` → `openFileManager`, маппинг `ftype='file'` в `address.js`). Лексиконы `mpcve_fm_*` добавлены.
