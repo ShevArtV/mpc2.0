@@ -1077,7 +1077,9 @@ input.mpcve-ta__area {
     position: absolute;
     z-index: 5;
     top: calc(100% + 4px);
-    left: 0;
+    /* Раскрываем влево от кнопки: «Ω» стоит в конце тулбара, и палитру с left: 0
+       обрезал правый край карточки модалки (у неё overflow: auto). */
+    right: 0;
     display: grid;
     grid-template-columns: repeat(8, 30px);
     gap: 4px;
