@@ -5,7 +5,7 @@
 import { S } from './state.js';
 import { api, loadConfig } from './api.js';
 import { choiceDialog, confirmDialog, toast } from './dom.js';
-import { sectionScope } from './address.js';
+import { sectionScope, sectionKeyOf } from './address.js';
 
 function localize(name) {
     return api.post('section/op', {
@@ -71,7 +71,7 @@ export function openForElement(el, opener) {
         return Promise.resolve(true);
     }
     return openForSection(
-        section.getAttribute('data-mpc-section') || '',
+        sectionKeyOf(section),
         section.hasAttribute('data-mpc-static'),
         opener
     );

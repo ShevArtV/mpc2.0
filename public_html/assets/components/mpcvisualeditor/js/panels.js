@@ -8,7 +8,7 @@ import { S, lexValue } from './state.js';
 import { api, uploadMedia } from './api.js';
 import { esc, parseRecord, isScalar, fieldLabel, toast, openModal } from './dom.js';
 import { SECTION_STYLE_FIELDS, STRUCTURAL } from './constants.js';
-import { findSectionInLevel, sectionConfig } from './address.js';
+import { findSectionInLevel, sectionConfig, sectionKeyOf } from './address.js';
 import { createRte, sanitizeHtml } from './editors/rte.js';
 import { openPictureEditor } from './editors/picture.js';
 import { openMediaEditor } from './editors/media.js';
@@ -101,7 +101,7 @@ export function recordKind(rec) {
 // global. Иначе для static-секции правка в global маскируется ресурсным
 // переопределением — и «не обновляется» на странице.
 function sectionStyleFields(sectionEl) {
-    var name = sectionEl.getAttribute('data-mpc-section') || '';
+    var name = sectionKeyOf(sectionEl);
     var sc = findSectionInLevel(name, 'resource') || findSectionInLevel(name, 'global');
     if (!sc) { return []; }
     return SECTION_STYLE_FIELDS.map(function (fname) {
@@ -332,7 +332,7 @@ export function buildHiddenTriggers() {
     sections.forEach(function (sectionEl) {
         var fields = sectionHidden(sectionEl);
         if (fields.length) {
-            attachTrigger(sectionEl, 'Скрытые поля секции «' + sectionEl.getAttribute('data-mpc-section') + '»', fields);
+            attachTrigger(sectionEl, 'Скрытые поля секции «' + sectionKeyOf(sectionEl) + '»', fields);
             triggers++;
         }
     });

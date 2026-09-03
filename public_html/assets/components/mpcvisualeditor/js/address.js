@@ -14,6 +14,19 @@ var RFIELD_TYPES = {
     description: 'textarea'
 };
 
+// Ключ секции для адресации в конфиге. data-mpc-name — имя ЭТОЙ записи конфига
+// (section_name, уникально), data-mpc-section — имя ТИПА секции (MIGX_formname,
+// общее у копий: три «card_grid» на странице). Берём первое, иначе правки всех
+// копий уходили бы в первую запись. Сервер матчит section_name || MIGX_formname,
+// поэтому оба значения адресуют корректно, а старый mpc (без подстановки имени
+// в рендере) просто продолжает работать по прежнему ключу.
+export function sectionKeyOf(sectionEl) {
+    if (!sectionEl || !sectionEl.getAttribute) { return ''; }
+    return sectionEl.getAttribute('data-mpc-name')
+        || sectionEl.getAttribute('data-mpc-section')
+        || '';
+}
+
 // --- адрес поля из DOM -------------------------------------------------
 export function resolveAddress(el) {
     var type = null, fieldName = null;
@@ -66,7 +79,7 @@ export function fieldAddress(el) {
         return addr;
     }
     var sectionEl = el.closest('[data-mpc-section]');
-    addr.section = sectionEl ? sectionEl.getAttribute('data-mpc-section') : '';
+    addr.section = sectionKeyOf(sectionEl);
     addr.level = (sectionEl && sectionEl.hasAttribute('data-mpc-static')) ? 'global' : 'resource';
     addr.resourceId = S.cfg.resourceId || 0;
     applySectionScope(addr, !!(sectionEl && sectionEl.hasAttribute('data-mpc-static')));
@@ -249,7 +262,7 @@ export function listAddress(listEl) {
     }
     var fa = listFieldAttr(listEl);
     var addr = {
-        section: sectionEl ? sectionEl.getAttribute('data-mpc-section') : '',
+        section: sectionKeyOf(sectionEl),
         parentField: fa ? (listEl.getAttribute(fa.attr) || '') : '',
         level: (sectionEl && sectionEl.hasAttribute('data-mpc-static')) ? 'global' : 'resource',
         resourceId: rid
@@ -344,7 +357,7 @@ function applySectionScope(addr, isStatic) {
 
 // Конфиг-объект секции для КОНТЕНТА/строк: static→global, иначе resource.
 export function sectionConfig(sectionEl) {
-    var name = sectionEl.getAttribute('data-mpc-section') || '';
+    var name = sectionKeyOf(sectionEl);
     var scope = sectionScope(name, sectionEl.hasAttribute('data-mpc-static'));
     var level = scope === 'global' ? 'global' : (scope === 'inherited' ? 'type' : 'resource');
     return findSectionInLevel(name, level);

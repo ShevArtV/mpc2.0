@@ -13,33 +13,41 @@ import { api, loadConfig } from './api.js';
 import { esc, toast, confirmDialog } from './dom.js';
 import { openSectionFields } from './editors/sectionfields.js';
 import { openForSection } from './scope.js';
+import { sectionKeyOf } from './address.js';
 
 function boolOf(v) { return v === true || v === 1 || v === '1' || v === 'true'; }
 function byPos(a, b) { return (parseInt(a.position, 10) || 0) - (parseInt(b.position, 10) || 0); }
 
-// Ключ секции в DOM (атрибут data-mpc-section). На странице это MIGX_formname
-// (машинное имя из data-mpc-section вёрстки), а НЕ section_name (человекочитаемое
-// data-mpc-name, которое показываем в панели).
+// Ключ записи конфига. section_name уникален (человекочитаемое имя ЭТОЙ записи),
+// MIGX_formname — имя ТИПА секции, общее у копий; серверные матчеры и
+// findSectionInLevel понимают оба, поэтому уникальное берём первым.
 function domKeyOf(s) {
-    return String(s.MIGX_formname || s.section_name || '');
+    return String(s.section_name || s.MIGX_formname || '');
+}
+// Поиск секции в DOM: сперва по уникальному section_name (mpc с 2.5.67
+// подставляет его в data-mpc-name каждой копии), затем фолбэк на MIGX_formname
+// для старого рендера, где у всех копий атрибуты первой секции.
+function findSectionDom(s) {
+    var keys = [String(s.section_name || ''), String(s.MIGX_formname || '')];
+    var els = Array.prototype.slice.call(document.querySelectorAll('[data-mpc-section]'));
+    for (var k = 0; k < keys.length; k++) {
+        if (!keys[k]) { continue; }
+        for (var i = 0; i < els.length; i++) {
+            if (sectionKeyOf(els[i]) === keys[k]
+                || els[i].getAttribute('data-mpc-section') === keys[k]) {
+                return { el: els[i], idx: i };
+            }
+        }
+    }
+    return { el: null, idx: -1 };
 }
 // DOM-элемент секции (на странице). null — секции нет в DOM (скрытая/вырезанная).
 function findSectionEl(s) {
-    var key = domKeyOf(s);
-    var els = document.querySelectorAll('[data-mpc-section]');
-    for (var i = 0; i < els.length; i++) {
-        if (els[i].getAttribute('data-mpc-section') === key) { return els[i]; }
-    }
-    return null;
+    return findSectionDom(s).el;
 }
 // Индекс секции в порядке DOM (как на странице); -1 если нет в DOM.
 function domIndex(s) {
-    var key = domKeyOf(s);
-    var els = Array.prototype.slice.call(document.querySelectorAll('[data-mpc-section]'));
-    for (var i = 0; i < els.length; i++) {
-        if (els[i].getAttribute('data-mpc-section') === key) { return i; }
-    }
-    return -1;
+    return findSectionDom(s).idx;
 }
 // Сортировка как на СТРАНИЦЕ: по позиции в DOM; секции без DOM (наследуемые/
 // скрытые) — в конец, между собой по position.
