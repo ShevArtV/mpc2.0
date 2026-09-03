@@ -187,6 +187,33 @@ class FieldWriterTest extends TestCase
         $this->assertSame('New', $stored['1']['title']);
     }
 
+    /**
+     * Копии одной секции: MIGX_formname общий, section_name уникален. Правка
+     * адресуется по section_name и обязана попасть в СВОЮ запись, а не в первую
+     * одноимённую (mpcVE шлёт section = data-mpc-name).
+     */
+    public function testWritesToTheRightCopyOfSameSectionType(): void
+    {
+        $config = json_encode([
+            '1' => ['section_name' => 'Card grid',   'MIGX_formname' => 'card_grid', 'title' => 'First'],
+            '2' => ['section_name' => 'Card grid 2', 'MIGX_formname' => 'card_grid', 'title' => 'Second'],
+            '3' => ['section_name' => 'Card grid 3', 'MIGX_formname' => 'card_grid', 'title' => 'Third'],
+        ], JSON_UNESCAPED_UNICODE);
+        $resource = new ModxObjectStub('modResource', ['id' => 5, 'context_key' => 'web', 'tv_mpc_config' => $config]);
+        $writer = new FieldWriter($this->makeModx($resource));
+
+        $result = $writer->write(
+            ['type' => 'field', 'level' => 'local', 'resourceId' => 5, 'section' => 'Card grid 3', 'fieldName' => 'title'],
+            'Новый третий'
+        );
+
+        $this->assertTrue($result['success'], $result['message']);
+        $stored = json_decode($resource->getTVValue('mpc_config'), true);
+        $this->assertSame('Новый третий', $stored['3']['title']);
+        $this->assertSame('First', $stored['1']['title']);
+        $this->assertSame('Second', $stored['2']['title']);
+    }
+
     /** Fake LexiconWriter: has() по списку ключей, set() в журнал. */
     private function injectLex(FieldWriter $writer, array $keysPresent, array &$log): void
     {
