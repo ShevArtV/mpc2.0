@@ -427,6 +427,7 @@ class Render extends Base
             }
             $tmp = FenomFormatter::convertStaticHashToBrace($tmp); // ##→{ для фронт-парсера pdoTools (не трогая data-mpc-*)
             $tmp = FenomFormatter::quoteSnippetParamValues($tmp);  // голые значения параметров (## eager-резолв) → в кавычки
+            $tmp = $this->applySectionIdentity($tmp, $section);     // имя/префикс — этой записи конфига, а не первой одноимённой
 
             $this->modx->invokeEvent('mpcOnGetSectionHtml', [
                 'section' => $section,
@@ -440,6 +441,58 @@ class Render extends Base
             $i++;
         }
         return $sectionsHtml;
+    }
+
+    /**
+     * Проставляет отрендеренной секции ЕЁ собственные имя и лексикон-префикс.
+     *
+     * Чанк секции — один на `MIGX_formname`: копии (`data-mpc-copy` в вёрстке)
+     * рендерятся тем же файлом, а `data-mpc-name`/`data-mpc-lexicon` в нём зашиты
+     * статикой ПЕРВОЙ секции. В отрендеренном HTML экземпляры становились
+     * неразличимы: `data-mpc-section` у них общий по определению (это имя типа
+     * секции), и редактор (mpcVE) адресовал правку второй/третьей секции в
+     * первую запись конфига. Различия живут только в конфиге, а знает, какая
+     * запись рендерится сейчас, лишь это место — поэтому чиним здесь, без
+     * перенарезки шаблонов.
+     *
+     * Меняем ТОЛЬКО существующие атрибуты и только в первом теге секции
+     * (открывающий тег с `data-mpc-section`): нет маркеров — не edit-режим,
+     * трогать нечего. Пустые значения конфига не затирают разметку.
+     */
+    private function applySectionIdentity(string $html, array $section): string
+    {
+        $identity = array_filter([
+            'data-mpc-name'    => (string)($section['section_name'] ?? ''),
+            'data-mpc-lexicon' => (string)($section['lexicon_prefix'] ?? ''),
+        ], 'strlen');
+        if (!$identity) {
+            return $html;
+        }
+
+        // Границы открывающего тега секции: правим только его, чтобы одноимённые
+        // атрибуты вложенных элементов (напр. произвольный data-mpc-lexicon поля)
+        // остались нетронутыми.
+        $marker = strpos($html, 'data-mpc-section=');
+        if ($marker === false) {
+            return $html; // не edit-режим: маркеров в HTML нет
+        }
+        $open = strrpos(substr($html, 0, $marker), '<');
+        $close = strpos($html, '>', $marker);
+        if ($open === false || $close === false) {
+            return $html;
+        }
+        $tag = substr($html, $open, $close - $open + 1);
+
+        foreach ($identity as $attr => $value) {
+            $tag = preg_replace(
+                '#(\s' . preg_quote($attr, '#') . '=")[^"]*(")#',
+                '${1}' . str_replace(['\\', '$'], ['\\\\', '\\$'], htmlspecialchars($value, ENT_QUOTES, 'UTF-8')) . '${2}',
+                $tag,
+                1
+            );
+        }
+
+        return substr_replace($html, $tag, $open, $close - $open + 1);
     }
 
     /**

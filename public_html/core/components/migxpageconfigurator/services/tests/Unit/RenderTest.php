@@ -370,4 +370,70 @@ class RenderTest extends TestCase
         );
         $this->assertSame('', $out['content']);
     }
+
+    // --- applySectionIdentity: имя/лексикон ЭТОЙ записи конфига ---------------
+
+    private function identity(string $html, array $section): string
+    {
+        $ref      = new ReflectionClass(Render::class);
+        $instance = $ref->newInstanceWithoutConstructor();
+        $method   = $ref->getMethod('applySectionIdentity');
+        $method->setAccessible(true);
+
+        return $method->invoke($instance, $html, $section);
+    }
+
+    /** Копия секции получает своё имя и свой лексикон-префикс, а не первой. */
+    public function testAppliesOwnNameAndLexiconToSectionTag(): void
+    {
+        $in = '<section data-mpc-lexicon="card_grid" data-mpc-section="card_grid" '
+            . 'data-mpc-name="Card grid" class="card-grid"><h2>x</h2></section>';
+        $out = $this->identity($in, [
+            'section_name'   => 'Card grid 2',
+            'lexicon_prefix' => 'card_grid_2',
+            'MIGX_formname'  => 'card_grid',
+        ]);
+        $this->assertStringContainsString('data-mpc-name="Card grid 2"', $out);
+        $this->assertStringContainsString('data-mpc-lexicon="card_grid_2"', $out);
+        // Имя ТИПА секции не трогаем: по нему рендерится чанк.
+        $this->assertStringContainsString('data-mpc-section="card_grid"', $out);
+    }
+
+    /** Вложенные data-mpc-lexicon (произвольные ключи полей) остаются как были. */
+    public function testDoesNotTouchNestedLexiconMarkers(): void
+    {
+        $in = '<section data-mpc-lexicon="card_grid" data-mpc-section="card_grid" '
+            . 'data-mpc-name="Card grid"><span data-mpc-lexicon="common:more">…</span></section>';
+        $out = $this->identity($in, [
+            'section_name'   => 'Card grid 3',
+            'lexicon_prefix' => 'card_grid_3',
+        ]);
+        $this->assertStringContainsString('<span data-mpc-lexicon="common:more">', $out);
+        $this->assertStringContainsString('data-mpc-lexicon="card_grid_3" data-mpc-section=', $out);
+    }
+
+    /** Не edit-режим (маркеров нет) — HTML возвращается дословно. */
+    public function testLeavesHtmlIntactWithoutMarkers(): void
+    {
+        $in = '<section class="card-grid"><h2>x</h2></section>';
+        $this->assertSame($in, $this->identity($in, [
+            'section_name'   => 'Card grid 2',
+            'lexicon_prefix' => 'card_grid_2',
+        ]));
+    }
+
+    /** Пустые значения конфига разметку не затирают. */
+    public function testKeepsMarkupWhenConfigValuesEmpty(): void
+    {
+        $in = '<section data-mpc-section="card_grid" data-mpc-name="Card grid"></section>';
+        $this->assertSame($in, $this->identity($in, ['section_name' => '', 'lexicon_prefix' => '']));
+    }
+
+    /** Кавычки и спецсимволы в имени экранируются, атрибут не разваливается. */
+    public function testEscapesQuotesInSectionName(): void
+    {
+        $in  = '<section data-mpc-section="card_grid" data-mpc-name="Card grid"></section>';
+        $out = $this->identity($in, ['section_name' => 'Grid "A" & $B']);
+        $this->assertStringContainsString('data-mpc-name="Grid &quot;A&quot; &amp; $B"', $out);
+    }
 }
