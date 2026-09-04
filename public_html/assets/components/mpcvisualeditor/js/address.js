@@ -118,6 +118,34 @@ export function fieldAddress(el) {
     return addr;
 }
 
+// «Призрачные» строки: копии, которые вставляют в тот же контейнер сторонние
+// скрипты (Swiper в режиме loop, slick). Несут те же data-mpc-* и потому сдвигают
+// подсчёт индексов. Селектор переопределяется настройкой mpcve_row_ignore_selectors.
+export var GHOST_ROW_SEL = '.swiper-slide-duplicate, .slick-cloned';
+
+export function isGhostRow(el) {
+    if (!el || !el.matches) { return false; }
+    var sel = (S.cfg && S.cfg.rowIgnoreSelectors) || GHOST_ROW_SEL;
+    try { return el.matches(sel); } catch (e) { return false; }
+}
+
+// Индекс строки в списке. Считать соседей «как есть» нельзя: клон слайда перед
+// первой строкой смещает весь список на +1, и правка уходит в соседнюю строку.
+// Swiper проставляет каждому слайду data-swiper-slide-index — это индекс
+// ОРИГИНАЛА, верный и на клоне; поэтому он в приоритете. Фолбэк — счёт соседей
+// без призраков (для клона slick, у которого нет своего индекса, остаётся
+// неточность — он адресуется как ближайший оригинал).
+export function rowIndexOf(itemEl, itemAttr) {
+    var si = itemEl.getAttribute ? itemEl.getAttribute('data-swiper-slide-index') : null;
+    if (si !== null && si !== '' && !isNaN(parseInt(si, 10))) { return parseInt(si, 10); }
+    var idx = 0, sib = itemEl.previousElementSibling;
+    while (sib) {
+        if (sib.hasAttribute(itemAttr) && !isGhostRow(sib)) { idx++; }
+        sib = sib.previousElementSibling;
+    }
+    return idx;
+}
+
 // Путь [{field,idx}, …] от секции к строке для поля уровня lvl (data-mpc-field-lvl).
 // Уровень N: ряд = data-mpc-item-(N-1) (data-mpc-item для N=1), контейнер
 // списка = data-mpc-field-(N-1) (data-mpc-field для N=1).
@@ -131,12 +159,7 @@ export function buildRowPath(el, lvl) {
         if (!itemEl) { return null; }
         var listEl = itemEl.closest('[' + listAttr + ']');
         if (!listEl || listEl === itemEl) { return null; }
-        var idx = 0, sib = itemEl.previousElementSibling;
-        while (sib) {
-            if (sib.hasAttribute(itemAttr)) { idx++; }
-            sib = sib.previousElementSibling;
-        }
-        path.unshift({ field: listEl.getAttribute(listAttr), idx: idx });
+        path.unshift({ field: listEl.getAttribute(listAttr), idx: rowIndexOf(itemEl, itemAttr) });
         base = listEl;
     }
     return path;
@@ -294,11 +317,13 @@ export function listRows(el, field) {
     var fa = listFieldAttr(el);
     var itemAttr = itemAttrForLevel(fa ? fa.lvl : 0);
     var listSel = fa ? fa.attr : 'data-mpc-field';
+    // Клоны слайдеров отбрасываем: иначе строк «больше», чем в конфиге, а порядок
+    // для add/move/delete не совпадает с данными (см. isGhostRow).
     var items = Array.prototype.slice.call(el.querySelectorAll('[' + itemAttr + ']'))
-        .filter(function (it) { return it.closest('[' + listSel + ']') === el; });
+        .filter(function (it) { return it.closest('[' + listSel + ']') === el && !isGhostRow(it); });
     if (!items.length && isMedia(el) && el.parentElement) {
         items = Array.prototype.slice.call(el.parentElement.children).filter(function (c) {
-            return c.getAttribute && c.getAttribute('data-mpc-field') === field;
+            return c.getAttribute && c.getAttribute('data-mpc-field') === field && !isGhostRow(c);
         });
     }
     return items;

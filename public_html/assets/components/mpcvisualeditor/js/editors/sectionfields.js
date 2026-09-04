@@ -35,6 +35,25 @@ function recOf(v) {
     return (typeof v === 'string') ? parseRecord(v) : null;
 }
 
+// Ключи, из которых состоит media-ЗАПИСЬ (picture/video/audio/img). Всё, что вне
+// набора, — пользовательское поле строки MIGX-списка.
+var MEDIA_KEYS = [
+    'MIGX_id', 'src', 'srcset', 'sources', 'img', 'alt', 'title', 'width', 'height',
+    'poster', 'type', 'media', 'class', 'id', 'style', 'loading', 'controls', 'autoplay',
+    'loop', 'muted', 'playsinline', 'preload'
+];
+
+// Список СТРОК, а не media-запись. Media-запись всегда одна (rec.length === 1) и
+// состоит только из MEDIA_KEYS; список строк — либо длиннее одной, либо несёт
+// собственные поля. Проверять ДО recordKind: строка с подполем `img` (частый
+// случай карточки с картинкой) иначе опознаётся как <picture> и список
+// становится нередактируемым.
+function isRowsRecord(rec) {
+    if (!Array.isArray(rec) || !rec.length || !rec[0] || typeof rec[0] !== 'object') { return false; }
+    if (rec.length > 1) { return true; }
+    return Object.keys(rec[0]).some(function (k) { return MEDIA_KEYS.indexOf(k) === -1; });
+}
+
 // Тип поля для панели: сначала карта типов mpc_base (надёжнее формы значения),
 // затем — форма записи как фолбэк. Возвращает: rows|image|picture|video|audio|scalar.
 function fieldKind(fname, rec) {
@@ -44,6 +63,7 @@ function fieldKind(fname, rec) {
     if (t === 'picture') { return 'picture'; }
     if (t === 'video') { return 'video'; }
     if (t === 'audio') { return 'audio'; }
+    if (isRowsRecord(rec)) { return 'rows'; }
     if (isImgRecord(rec)) { return 'image'; }
     var k = recordKind(rec);
     if (k === 'video' || k === 'audio') {

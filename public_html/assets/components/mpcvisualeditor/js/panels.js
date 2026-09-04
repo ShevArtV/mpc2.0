@@ -8,7 +8,7 @@ import { S, lexValue } from './state.js';
 import { api, uploadMedia } from './api.js';
 import { esc, parseRecord, isScalar, fieldLabel, toast, openModal } from './dom.js';
 import { SECTION_STYLE_FIELDS, STRUCTURAL } from './constants.js';
-import { findSectionInLevel, sectionConfig, sectionKeyOf } from './address.js';
+import { findSectionInLevel, sectionConfig, sectionKeyOf, rowIndexOf } from './address.js';
 import { createRte, sanitizeHtml } from './editors/rte.js';
 import { openPictureEditor } from './editors/picture.js';
 import { openMediaEditor } from './editors/media.js';
@@ -183,14 +183,10 @@ function itemInfo(itemEl) {
     if (!sc) { return null; }
     var listEl = itemEl.closest('[data-mpc-field]'); // контейнер списка (предок)
     if (!listEl) { return null; }
-    var idx = 0, sib = itemEl.previousElementSibling;
-    while (sib) {
-        if (sib.hasAttribute('data-mpc-item')) { idx++; }
-        sib = sib.previousElementSibling;
-    }
     return {
         section: sc.section, level: sc.level, obj: sc.obj,
-        parentField: listEl.getAttribute('data-mpc-field'), idx: idx
+        parentField: listEl.getAttribute('data-mpc-field'),
+        idx: rowIndexOf(itemEl, 'data-mpc-item')
     };
 }
 
