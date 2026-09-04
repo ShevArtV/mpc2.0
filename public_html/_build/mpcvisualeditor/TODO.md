@@ -16,6 +16,7 @@
 | `9be649f` | `sectionKeyOf()` в `address.js` и его применение в `address.js` / `scope.js` / `panels.js` / `sidebar.js` (JS переносится почти дословно) |
 | `3684df4` | тесты `RenderTest` (applySectionIdentity) и `FieldWriterTest` (запись в свою копию одноимённой секции) |
 | `e1dd926` | `console/clear_cache.php`: нормализация `MODX_CORE_PATH` (`'\\' → '/'`, а не наоборот) — проверить, есть ли та же опечатка в тройке |
+| `c4ad458` | `isRowsRecord()` в `editors/sectionfields.js` (список строк с подполем `img` не должен опознаваться как picture) + `rowIndexOf()` / `isGhostRow()` в `address.js` и их применение в `address.js` / `panels.js` (индекс строки из `data-swiper-slide-index`, клоны слайдера мимо). JS переносится дословно |
 
 Серверные матчеры (`FieldWriter`, `SectionOpHandler`) править не требуется: они уже
 матчат `section_name || MIGX_formname`.
