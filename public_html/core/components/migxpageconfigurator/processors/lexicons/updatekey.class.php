@@ -4,10 +4,14 @@
  */
 class MigxpageconfiguratorLexiconsUpdatekeyProcessor extends modProcessor
 {
-    /** Требуется право mpc_view (как CMP лексиконов); коннектор проверяет лишь сессию. */
+    /**
+     * Правка ключа словаря — пишущая операция: требуется mpc_lexicon_manage.
+     * Одного mpc_view (право «посмотреть словарь») недостаточно.
+     * Коннектор проверяет лишь сессию.
+     */
     public function checkPermissions()
     {
-        return $this->modx->hasPermission('mpc_view');
+        return $this->modx->hasPermission('mpc_lexicon_manage');
     }
 
     public function process()

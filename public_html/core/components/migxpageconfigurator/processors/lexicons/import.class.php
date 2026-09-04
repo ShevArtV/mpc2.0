@@ -15,10 +15,20 @@
  */
 class MigxpageconfiguratorLexiconsImportProcessor extends modProcessor
 {
-    /** Требуется право mpc_view (как CMP лексиконов); коннектор проверяет лишь сессию. */
+    /**
+     * Массовый импорт словаря — пишущая операция: требуется mpc_lexicon_manage.
+     * Одного mpc_view (право «посмотреть словарь») недостаточно: импорт
+     * заливает тексты витрины разом по всему сайту.
+     * Коннектор проверяет лишь сессию.
+     */
     public function checkPermissions()
     {
-        return $this->modx->hasPermission('mpc_view');
+        /* save_document — второй уровень: импорт меняет тексты сразу по всему
+           сайту, поэтому одного «можно писать в словарь» мало, нужно и общее
+           право сохранять контент. Правку одного ключа (updatekey) это условие
+           намеренно не затрагивает. */
+        return $this->modx->hasPermission('mpc_lexicon_manage')
+            && $this->modx->hasPermission('save_document');
     }
 
     private string $lexiconBase = '';

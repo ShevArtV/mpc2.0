@@ -16,14 +16,16 @@ if (!defined('PKG_NAME')) {
 return [
     'name' => 'MigxPageConfigurator',
     'name_lower' => 'migxpageconfigurator',
-    'version' => '2.5.67',
+    'version' => '2.5.68',
     'release' => 'rc',
     // Install package to site right after build
     'install' => false,
     // Which elements should be updated on package upgrade
     'update' => [
         'chunks' => false,
-        'menus' => false,
+        // true с 2.5.68-rc: иначе гейт permissions=mpc_view у пункта меню
+        // не доедет до сайтов, где пакет уже стоит (пункт обновляется по text).
+        'menus' => true,
         'permission' => false,
         'plugins' => true,
         'policies' => false,

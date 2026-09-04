@@ -14,10 +14,15 @@
  */
 class MigxpageconfiguratorResourceCopysectionsProcessor extends modProcessor
 {
-    /** Требуется право редактирования ресурса (коннектор проверяет лишь сессию). */
+    /**
+     * Требуется право сохранения документа (коннектор проверяет лишь сессию).
+     * Ветка с `mpc_edit` убрана в 2.5.68-rc: такого права пакет никогда не
+     * заводил — ни резолвером, ни шаблоном политики, — поэтому условие всегда
+     * было ложным и копирование секций и так держалось на `save_document`.
+     */
     public function checkPermissions()
     {
-        return $this->modx->hasPermission('save_document') || $this->modx->hasPermission('mpc_edit');
+        return $this->modx->hasPermission('save_document');
     }
 
     public function process()
