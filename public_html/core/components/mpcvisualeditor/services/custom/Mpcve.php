@@ -92,6 +92,9 @@ class Mpcve
             'managerUrl'   => (string)$this->modx->getOption('manager_url', null, '/manager/'),
             // Положение панели редактора: top | bottom (настройка mpcve_toolbar_position).
             'toolbarPosition' => $this->modx->getOption('mpcve_toolbar_position', null, 'top') === 'bottom' ? 'bottom' : 'top',
+            // Селекторы копий строк, которые добавляет слайдер (Swiper loop, slick):
+            // при подсчёте номера строки они не учитываются. Пусто → дефолт в address.js.
+            'rowIgnoreSelectors' => trim((string)$this->modx->getOption('mpcve_row_ignore_selectors', null, '')),
         ];
     }
 

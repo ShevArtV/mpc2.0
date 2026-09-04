@@ -61,3 +61,5 @@ $_lang['setting_mpcve_allowed_attrs'] = 'HTML attributes whitelist';
 $_lang['setting_mpcve_allowed_attrs_desc'] = 'Attributes kept when sanitizing edited field content (richtext/text/textarea), comma-separated. Empty — fallback list in rte.js. on* handlers, javascript: and unsafe style are always stripped.';
 $_lang['setting_mpcve_rte_entities'] = 'Editor character palette';
 $_lang['setting_mpcve_rte_entities_desc'] = 'HTML entities for the toolbar «Ω» button, comma-separated and in the desired order: nbsp, mdash, laquo. «&mdash;» and numeric «#8594» / «#x2192» are accepted too. Empty — default set from rte.js. Unknown names are skipped.';
+$_lang['setting_mpcve_row_ignore_selectors'] = 'Row clone selectors (sliders)';
+$_lang['setting_mpcve_row_ignore_selectors_desc'] = 'CSS selectors of elements a slider adds to a list as slide clones (Swiper loop mode, slick). Such clones are not counted as rows: otherwise an edit goes into the neighbouring row. Empty — default set: .swiper-slide-duplicate, .slick-cloned.';

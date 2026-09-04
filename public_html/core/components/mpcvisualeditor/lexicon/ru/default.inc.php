@@ -61,3 +61,5 @@ $_lang['setting_mpcve_allowed_attrs'] = 'Белый список HTML-атриб
 $_lang['setting_mpcve_allowed_attrs_desc'] = 'Атрибуты, сохраняемые при очистке содержимого правимого поля (richtext/text/textarea), через запятую. Пусто — fallback-список в rte.js. Обработчики on*, javascript: и опасный style режутся всегда.';
 $_lang['setting_mpcve_rte_entities'] = 'Символы палитры редактора';
 $_lang['setting_mpcve_rte_entities_desc'] = 'HTML-сущности кнопки «Ω» в тулбаре редактора текста, через запятую и в нужном порядке: nbsp, mdash, laquo. Принимаются также «&mdash;» и числовые «#8594» / «#x2192». Пусто — набор по умолчанию из rte.js. Неизвестное имя пропускается.';
+$_lang['setting_mpcve_row_ignore_selectors'] = 'Селекторы копий строк (слайдеры)';
+$_lang['setting_mpcve_row_ignore_selectors_desc'] = 'CSS-селекторы элементов, которые слайдер добавляет в список как копии слайдов (Swiper в режиме loop, slick). Такие копии не считаются строками: иначе правка уходит в соседнюю строку. Пусто — набор по умолчанию: .swiper-slide-duplicate, .slick-cloned.';

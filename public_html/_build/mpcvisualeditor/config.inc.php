@@ -23,7 +23,7 @@ if (!defined('PKG_NAME')) {
 return [
     'name' => 'mpcVisualEditor',
     'name_lower' => 'mpcvisualeditor',
-    'version' => '1.2.5',
+    'version' => '1.2.6',
     'release' => 'rc',
 
     // Пакетные ресурсы и сборочные каталоги — свои, не общие с mpc.

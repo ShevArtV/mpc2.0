@@ -82,4 +82,13 @@ return [
         'value' => '',
         'area'  => 'mpcve_editor',
     ],
+    // Селекторы «призрачных» строк списка: копии слайдов, которые вставляют в
+    // разметку слайдеры в режиме бесконечной прокрутки (Swiper loop, slick).
+    // Они несут те же data-mpc-* и сбивают нумерацию строк. Пусто → дефолт
+    // GHOST_ROW_SEL в address.js ('.swiper-slide-duplicate, .slick-cloned').
+    'mpcve_row_ignore_selectors' => [
+        'xtype' => 'textfield',
+        'value' => '',
+        'area'  => 'mpcve_editor',
+    ],
 ];
