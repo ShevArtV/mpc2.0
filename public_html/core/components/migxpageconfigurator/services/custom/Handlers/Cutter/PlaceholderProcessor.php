@@ -70,7 +70,10 @@ class PlaceholderProcessor
         foreach ($fields as $field) {
             $fieldName = $field->getAttribute($fieldAttrName);
             $properties['fieldName'] = $fieldName;
-            $fieldHTML = $this->parser->getHTMLString($field);
+            // Формы сериализации (а не одна декодированная строка): иначе поле с
+            // HTML-сущностями внутри не находится в исходном HTML и плейсхолдер
+            // молча не подставляется — см. Parser::replaceFragment (баг #2609-70).
+            $fieldSearch = $this->parser->getHTMLVariants($field);
 
             if ($fieldName === 'bg_img') {
                 $fieldHTMLNew = $this->setBackgroundPlaceholder($field, $fieldName, $properties);
@@ -188,7 +191,8 @@ class PlaceholderProcessor
                 : $fieldHTMLNew;
 
             if (!empty($fieldHTMLNew)) {
-                $properties['html'] = str_replace($fieldHTML, $fieldHTMLNew, $properties['html']);
+                $properties['html'] = $this->parser->replaceFragment($properties['html'], $fieldSearch, $fieldHTMLNew)
+                    ?? $properties['html'];
             }
         }
 

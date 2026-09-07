@@ -63,7 +63,7 @@ class SpecialTagProcessor
             }
 
             $call        = $this->snippetCallBuilder->getSnippetCall($value, $firstSymbol);
-            $snippetHtml = $this->parser->getHTMLString($snippet);
+            $snippetSearch = $this->parser->getHTMLVariants($snippet);
 
             if (!$snippet->hasAttribute('data-mpc-unwrap')) {
                 $snippet->setInnerHtml($call);
@@ -75,7 +75,8 @@ class SpecialTagProcessor
                 $call = $this->placeholderProcessor->wrapInCondition($condition, $call, $firstSymbol);
             }
 
-            $properties['html'] = str_replace($snippetHtml, $call, $properties['html']);
+            $properties['html'] = $this->parser->replaceFragment($properties['html'], $snippetSearch, $call)
+                ?? $properties['html'];
         }
 
         return $properties;
@@ -115,10 +116,11 @@ class SpecialTagProcessor
                 $params = '[]';
             }
             $path       = $this->properties['pathToChunks'] . $chunk;
-            $parseHtml  = $this->parser->getHTMLString($parse);
+            $parseSearch = $this->parser->getHTMLVariants($parse);
             $parseHtmlNew = $symbol . '$_modx->parseChunk("@FILE ' . $path . '", ' . $params . ')}';
 
-            $properties['html'] = str_replace($parseHtml, $parseHtmlNew, $properties['html']);
+            $properties['html'] = $this->parser->replaceFragment($properties['html'], $parseSearch, $parseHtmlNew)
+                ?? $properties['html'];
         }
 
         return $properties;
@@ -151,10 +153,11 @@ class SpecialTagProcessor
             }
             $path        = $this->properties['pathToChunks'] . $chunk;
             $symbol      = trim((string)$include->getAttribute('data-mpc-symbol')) ?: '{';
-            $includeHtml = $this->parser->getHTMLString($include);
+            $includeSearch = $this->parser->getHTMLVariants($include);
             $includeHtmlNew = $symbol . 'include "file:' . $path . '"}';
 
-            $properties['html'] = str_replace($includeHtml, $includeHtmlNew, $properties['html']);
+            $properties['html'] = $this->parser->replaceFragment($properties['html'], $includeSearch, $includeHtmlNew)
+                ?? $properties['html'];
         }
 
         return $properties;
@@ -173,8 +176,9 @@ class SpecialTagProcessor
         }
 
         foreach ($hiddenPls as $hidden) {
-            $hiddenHtml = $this->parser->getHTMLString($hidden);
-            $properties['html'] = str_replace($hiddenHtml, '', $properties['html']);
+            $hiddenSearch = $this->parser->getHTMLVariants($hidden);
+            $properties['html'] = $this->parser->replaceFragment($properties['html'], $hiddenSearch, '')
+                ?? $properties['html'];
         }
 
         // Удаление выше — это str_replace по сериализации DiDom, а к этому моменту

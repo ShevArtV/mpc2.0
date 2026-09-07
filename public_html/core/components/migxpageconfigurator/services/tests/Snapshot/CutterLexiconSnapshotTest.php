@@ -134,6 +134,27 @@ class CutterLexiconSnapshotTest extends TestCase
         $this->assertStringContainsString('{$item1.content | lexicon}', $unstatic);
     }
 
+    /**
+     * Регресс #2609-70: произвольный лексиконный блок с HTML-сущностью внутри
+     * (`TERMS &amp; CONDITIONS`) тоже получает плейсхолдер. До фикса поиск шёл по
+     * декодированной сериализации (`&amp;` → `&`), в исходном HTML такой строки нет
+     * → str_replace молча ничего не менял и в чанк уезжал статический текст.
+     */
+    public function testArbitraryLexiconWithHtmlEntitiesGetsPlaceholder(): void
+    {
+        $cutter = new Cutter($this->modx, $this->makeBaseProperties());
+        $this->assertTrue($cutter->handle('lexicon_entities.html')['success']);
+
+        $tpl = file_get_contents($this->outputDir . '/sections/returns.tpl');
+
+        // соседний простой span подставлялся и раньше — страж симметрии
+        $this->assertStringContainsString("site_product_tab_returns' | lexicon}", $tpl);
+        // блок с сущностью — собственно баг
+        $this->assertStringContainsString("site_product_returns' | lexicon}", $tpl);
+        $this->assertStringNotContainsString('INSIDE EUROPEAN UNION', $tpl);
+        $this->assertStringNotContainsString('TERMS &amp; CONDITIONS', $tpl);
+    }
+
     private function clearDir(string $dir): void
     {
         if (!is_dir($dir)) {

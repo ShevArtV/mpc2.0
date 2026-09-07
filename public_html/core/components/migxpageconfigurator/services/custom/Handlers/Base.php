@@ -245,6 +245,43 @@ class Base
     }
 
     /**
+     * Заменяет фрагмент элемента в исходном HTML, перебирая формы сериализации.
+     *
+     * Прямой `str_replace($this->parser->getHTMLString($item), ...)` промахивается,
+     * если в исходнике есть HTML-сущности (`TERMS &amp; CONDITIONS`): getHTMLString
+     * их раскрывает, такой строки в файле нет — замена молча не происходит
+     * (баг #2609-70). Идём по формам из Parser::getHTMLVariants: `decoded` (старое
+     * поведение, покрывает url-энкод атрибутов), затем `entities`, затем `raw`.
+     * Подставляем ту же форму замены, что и найденная, — иначе неизменная часть
+     * фрагмента потеряла бы сущности. Ни одна форма не нашлась — пишем в лог, а не
+     * молчим.
+     *
+     * @param string $html исходный HTML
+     * @param array $search формы искомого фрагмента (Parser::getHTMLVariants)
+     * @param array|string $replacement формы замены или готовая строка на все формы
+     * @param string $context для лога (__METHOD__ вызывающего)
+     * @return string
+     */
+    protected function replaceElementHtml(string $html, array $search, $replacement, string $context): string
+    {
+        $result = $this->parser->replaceFragment($html, $search, $replacement);
+        if ($result !== null) {
+            return $result;
+        }
+
+        $this->logging->write(
+            $context,
+            'Фрагмент не найден в исходном HTML, замена пропущена: '
+            . mb_substr(trim((string)($search['decoded'] ?? '')), 0, 200),
+            [],
+            false,
+            Logging::WARN
+        );
+
+        return $html;
+    }
+
+    /**
      * @param string $value
      * @return string
      */

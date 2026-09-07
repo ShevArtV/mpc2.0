@@ -234,7 +234,7 @@ class Cutter extends Base
         }
         foreach ($items as $item) {
             $infoKey     = $item->getAttribute('data-mpc-info');
-            $itemHtml    = $this->parser->getHTMLString($item);
+            $search      = $this->parser->getHTMLVariants($item);
             $itemHtmlNew = '';
             $pls         = "{\$_modx->config['$infoKey']}";
 
@@ -254,14 +254,19 @@ class Cutter extends Base
                     break;
             }
 
-            $itemHtmlNew = $itemHtmlNew ?: $this->parser->getHTMLString($item);
+            $replacement = $itemHtmlNew ?: $this->parser->getHTMLVariants($item);
 
             if ($item->hasAttribute('data-mpc-if')) {
                 $condition   = $item->getAttribute('data-mpc-if') ?: "\$_modx->config['$infoKey']";
-                $itemHtmlNew = $this->placeholderProcessor->wrapInCondition($condition, $itemHtmlNew);
+                $replacement = is_array($replacement)
+                    ? array_map(
+                        fn(string $html): string => $this->placeholderProcessor->wrapInCondition($condition, $html),
+                        $replacement
+                    )
+                    : $this->placeholderProcessor->wrapInCondition($condition, $replacement);
             }
 
-            $this->html = str_replace($itemHtml, $itemHtmlNew, $this->html);
+            $this->html = $this->replaceElementHtml($this->html, $search, $replacement, __METHOD__);
         }
     }
 
@@ -276,8 +281,10 @@ class Cutter extends Base
             return;
         }
 
-        $search      = [];
-        $replacement = [];
+        // Пары «формы искомого фрагмента → форма замены»: замену делаем через
+        // replaceElementHtml, который перебирает формы сериализации (сущности,
+        // url-энкод) и логирует промах вместо тихого пропуска.
+        $pairs = [];
 
         foreach ($items as $item) {
             $itemHtml = $this->parser->getHTMLString($item);
@@ -313,7 +320,7 @@ class Cutter extends Base
             foreach ($fields as $field) {
                 $fieldName   = $field->getAttribute('data-mpc-cfield');
                 $complexName = $this->contactFieldExpr($placement, $key, $fieldName, $type, $map);
-                $search[]    = $this->parser->getHTMLString($field);
+                $fieldSearch = $this->parser->getHTMLVariants($field);
 
                 if ($fieldName === 'value') {
                     if ($field->hasAttribute('href')) {
@@ -328,10 +335,10 @@ class Cutter extends Base
                     $fvalueExpr = $this->contactFieldExpr($placement, $key, 'fvalue', $type, $map);
                     // data-mpc-unwrap (без href) → голый плейсхолдер, иначе обёртка.
                     if ($field->hasAttribute('data-mpc-unwrap') && !$field->hasAttribute('href')) {
-                        $replacement[] = $fvalueExpr;
+                        $pairs[] = [$fieldSearch, $fvalueExpr];
                     } else {
                         $field->setInnerHtml($fvalueExpr);
-                        $replacement[] = $this->parser->getHTMLString($field);
+                        $pairs[] = [$fieldSearch, $this->parser->getHTMLVariants($field)];
                     }
                 } else {
                     if ($field->hasAttribute('src')) {
@@ -357,7 +364,7 @@ class Cutter extends Base
                             $field->setAttribute('src', $complexName);
                         }
 
-                        $replacement[] = $this->parser->getHTMLString($field);
+                        $pairs[] = [$fieldSearch, $this->parser->getHTMLVariants($field)];
                     } elseif (trim($field->innerHtml()) === '' && $field->hasAttribute('class')) {
                         // Иконка-классом: пустой элемент без src и без текста/HTML, но
                         // с class (<i data-mpc-cfield="attributes" class="…">) → плейс-
@@ -365,25 +372,25 @@ class Cutter extends Base
                         // симметрично грабежу ContactUpdater). Без этого обёртка
                         // innerHtml положила бы плейсхолдер внутрь, а не в class.
                         $field->setAttribute('class', $complexName);
-                        $replacement[] = $this->parser->getHTMLString($field);
+                        $pairs[] = [$fieldSearch, $this->parser->getHTMLVariants($field)];
                     } elseif ($field->hasAttribute('data-mpc-unwrap')) {
                         // Опт-ин (как у обычных полей): отбросить обёртку, оставить
                         // только плейсхолдер.
-                        $replacement[] = $complexName;
+                        $pairs[] = [$fieldSearch, $complexName];
                     } else {
                         // По умолчанию оборачиваем плейсхолдер обратно в элемент
                         // (симметрично value/img). Иначе терялась обёртка
                         // (<span class="…">) и маркер data-mpc-cfield не доживал до
                         // edit-mode → caption/attributes нельзя было кликнуть в редакторе.
                         $field->setInnerHtml($complexName);
-                        $replacement[] = $this->parser->getHTMLString($field);
+                        $pairs[] = [$fieldSearch, $this->parser->getHTMLVariants($field)];
                     }
                 }
             }
         }
 
-        if (!empty($replacement)) {
-            $this->html = str_replace($search, $replacement, $this->html);
+        foreach ($pairs as [$fieldSearch, $fieldReplacement]) {
+            $this->html = $this->replaceElementHtml($this->html, $fieldSearch, $fieldReplacement, __METHOD__);
         }
     }
 
@@ -504,7 +511,7 @@ class Cutter extends Base
                     ? "##'" . $lexiconKeyPrefix . $name . "' | lexicon}"
                     : '{' . $expr . '}';
             }
-            $itemHtml    = $this->parser->getHTMLString($item);
+            $search      = $this->parser->getHTMLVariants($item);
             $itemHtmlNew = '';
 
             switch ($item->tagName()) {
@@ -560,14 +567,19 @@ class Cutter extends Base
                     break;
             }
 
-            $itemHtmlNew = $itemHtmlNew ?: $this->parser->getHTMLString($item);
+            $replacement = $itemHtmlNew ?: $this->parser->getHTMLVariants($item);
 
             if ($item->hasAttribute('data-mpc-if')) {
                 $condition   = $item->getAttribute('data-mpc-if') ?: $expr;
-                $itemHtmlNew = $this->placeholderProcessor->wrapInCondition($condition, $itemHtmlNew);
+                $replacement = is_array($replacement)
+                    ? array_map(
+                        fn(string $html): string => $this->placeholderProcessor->wrapInCondition($condition, $html),
+                        $replacement
+                    )
+                    : $this->placeholderProcessor->wrapInCondition($condition, $replacement);
             }
 
-            $this->html = str_replace($itemHtml, $itemHtmlNew, $this->html);
+            $this->html = $this->replaceElementHtml($this->html, $search, $replacement, __METHOD__);
         }
     }
 
@@ -604,9 +616,14 @@ class Cutter extends Base
             if ($parsed === null) {
                 continue;
             }
-            $itemHtml = $this->parser->getHTMLString($item);
+            $search = $this->parser->getHTMLVariants($item);
             $item->setInnerHtml("##'" . $parsed['key'] . "' | lexicon}");
-            $this->html = str_replace($itemHtml, $this->parser->getHTMLString($item), $this->html);
+            $this->html = $this->replaceElementHtml(
+                $this->html,
+                $search,
+                $this->parser->getHTMLVariants($item),
+                __METHOD__
+            );
         }
     }
 
