@@ -166,6 +166,7 @@ class LexiconStore
                 foreach ($byRid as $rid => $fileOps) {
                     $kv = $this->read((string)$lang, (string)$rid);
                     $dirty = false;
+                    $fileAppliedOps = [];
 
                     foreach ($fileOps as $op) {
                         $key      = (string)$op['key'];
@@ -180,12 +181,10 @@ class LexiconStore
 
                         if ((string)$op['action'] === LexiconMerge::CLEAR) {
                             unset($kv[$key]);
-                            $result['cleared']++;
                         } else {
                             $kv[$key] = $this->sanitize((string)$op['desired']);
-                            $result['applied']++;
                         }
-                        $result['appliedOps'][] = $op;
+                        $fileAppliedOps[] = $op;
                         $dirty = true;
                     }
 
@@ -194,6 +193,14 @@ class LexiconStore
                     }
                     if ($this->write((string)$lang, (string)$rid, $kv)) {
                         $result['touched'][] = $lang . '/' . $rid;
+                        foreach ($fileAppliedOps as $appliedOp) {
+                            if ((string)$appliedOp['action'] === LexiconMerge::CLEAR) {
+                                $result['cleared']++;
+                            } else {
+                                $result['applied']++;
+                            }
+                            $result['appliedOps'][] = $appliedOp;
+                        }
                     } else {
                         $result['failed'][] = $lang . '/' . $rid;
                     }
@@ -265,21 +272,23 @@ class LexiconStore
 
     private function acquire(): void
     {
-        if ($this->lockDepth++ > 0) {
+        if ($this->lockDepth > 0) {
+            $this->lockDepth++;
             return;
         }
-        if (!is_dir($this->basePath)) {
-            mkdir($this->basePath, 0755, true);
+        if (!is_dir($this->basePath) && !mkdir($this->basePath, 0755, true) && !is_dir($this->basePath)) {
+            throw new \RuntimeException('Не создан каталог блокировки лексиконов: ' . $this->basePath);
         }
         $h = fopen($this->basePath . self::LOCK_FILE, 'c');
         if ($h === false) {
-            // Без блокировки работать можно (запись всё равно атомарна), но
-            // гонку «сверка → запись» она уже не закрывает — это надо видеть.
-            $this->lockHandle = null;
-            return;
+            throw new \RuntimeException('Не открыт lock-файл лексиконов');
         }
-        flock($h, LOCK_EX);
+        if (!flock($h, LOCK_EX)) {
+            fclose($h);
+            throw new \RuntimeException('Не взята блокировка лексиконов');
+        }
         $this->lockHandle = $h;
+        $this->lockDepth = 1;
     }
 
     private function release(): void

@@ -175,19 +175,21 @@ class SnapshotStore
     public function backup(string $tag, array $entries): string
     {
         $tag = preg_replace('/[^a-z0-9_-]+/i', '-', $tag) ?: 'prune';
-        $dir = $this->basePath . 'backup-' . $tag . '-' . date('Ymd-His') . '/';
+        $dir = $this->basePath . 'backup-' . $tag . '-' . date('Ymd-His') . '-' . bin2hex(random_bytes(6)) . '/';
         $this->ensureDir();
         foreach ($entries as $rid => $byLang) {
             foreach ((array)$byLang as $lang => $kv) {
                 $target = $dir . basename((string)$lang) . '/';
-                if (!is_dir($target)) {
-                    mkdir($target, 0755, true);
+                if (!is_dir($target) && !mkdir($target, 0755, true) && !is_dir($target)) {
+                    throw new \RuntimeException('Не создан каталог бэкапа: ' . $target);
                 }
-                file_put_contents(
+                if (file_put_contents(
                     $target . basename((string)$rid) . '.json',
                     (string)json_encode($kv, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT),
                     LOCK_EX
-                );
+                ) === false) {
+                    throw new \RuntimeException('Не записан бэкап лексикона: ' . $target . $rid);
+                }
             }
         }
         return $dir;
@@ -197,15 +199,21 @@ class SnapshotStore
     private function ensureDir(): void
     {
         if (!is_dir($this->basePath)) {
-            mkdir($this->basePath, 0755, true);
+            if (!mkdir($this->basePath, 0755, true) && !is_dir($this->basePath)) {
+                throw new \RuntimeException('Не создан каталог снимков: ' . $this->basePath);
+            }
         }
         // Снимки содержат тексты витрины целиком; каталог лежит под core/, но
         // на нестандартном webroot core бывает доступен — закрываемся сами.
         if (!is_file($this->basePath . 'index.php')) {
-            file_put_contents($this->basePath . 'index.php', "<?php\n// silence is golden\n");
+            if (file_put_contents($this->basePath . 'index.php', "<?php\n// silence is golden\n") === false) {
+                throw new \RuntimeException('Не закрыт каталог снимков');
+            }
         }
         if (!is_file($this->basePath . '.htaccess')) {
-            file_put_contents($this->basePath . '.htaccess', "Deny from all\nRequire all denied\n");
+            if (file_put_contents($this->basePath . '.htaccess', "Deny from all\nRequire all denied\n") === false) {
+                throw new \RuntimeException('Не закрыт каталог снимков');
+            }
         }
     }
 

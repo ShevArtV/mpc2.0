@@ -23,6 +23,7 @@ class LexiconSync
     /** @var string[] */
     private array $languages;
     private PendingTranslations $pending;
+    private \MpcServices\Handlers\Lexicon\LexiconStore $store;
 
     /**
      * @param string   $baseLexiconPath абсолютный путь к корню лексиконов (…/lexicon/)
@@ -35,6 +36,7 @@ class LexiconSync
         $this->defaultLang     = $defaultLang;
         $this->languages       = array_values(array_filter(array_map('trim', $languages)));
         $this->pending         = new PendingTranslations($this->baseLexiconPath);
+        $this->store           = new \MpcServices\Handlers\Lexicon\LexiconStore($this->baseLexiconPath);
     }
 
     /** Языки кроме дефолтного. */
@@ -86,10 +88,11 @@ class LexiconSync
      */
     public function syncResource(string $identifier, array $defaultLex): void
     {
-        if (empty($defaultLex)) {
-            return;
-        }
-        foreach ($this->otherLanguages() as $lang) {
+        $this->store->withLock(function () use ($identifier, $defaultLex): void {
+            if (empty($defaultLex)) {
+                return;
+            }
+            foreach ($this->otherLanguages() as $lang) {
             $existing = $this->readLexicon($lang, $identifier);
 
             $out = [];
@@ -98,13 +101,14 @@ class LexiconSync
             }
             $this->writeLexicon($lang, $identifier, $out);
 
-            $this->pending->sync(
+                $this->pending->sync(
                 $lang,
                 $identifier,
                 array_map('strval', array_keys($defaultLex)),
                 array_map('strval', array_keys($existing))
-            );
-        }
+                );
+            }
+        });
     }
 
     /**
@@ -117,6 +121,7 @@ class LexiconSync
      */
     public function syncKey(string $identifier, string $key, string $value, string $currentLang): void
     {
+        $this->store->withLock(function () use ($identifier, $key, $value, $currentLang): void {
         // Перевод (не дефолтный язык) — значение уже записано в файл этого языка
         // вызывающим кодом; снимаем ключ с pending (переведено).
         if ($currentLang !== $this->defaultLang) {
@@ -154,6 +159,7 @@ class LexiconSync
                 $this->pending->save($lang, $identifier, $keys);
             }
         }
+        });
     }
 
     /**
