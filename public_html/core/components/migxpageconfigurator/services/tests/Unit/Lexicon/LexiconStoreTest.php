@@ -62,6 +62,52 @@ class LexiconStoreTest extends TestCase
         $this->assertSame(['a' => 'новое', 'b' => 'b'], $s->read('ru', '10'));
     }
 
+    public function testAtomicApplyWritesNothingWhenOneOperationIsStale(): void
+    {
+        $s = $this->store();
+        $s->write('de', 'a', ['k' => 'old']);
+        $s->write('de', 'b', ['k' => 'manager']); // менеджер успел до применения
+
+        $res = $s->apply([
+            ['lang' => 'de', 'rid' => 'a', 'key' => 'k', 'action' => M::WRITE,
+             'current' => 'old', 'desired' => 'new'],
+            ['lang' => 'de', 'rid' => 'b', 'key' => 'k', 'action' => M::WRITE,
+             'current' => 'old', 'desired' => 'new'],
+        ], ['atomic' => true]);
+
+        // Страница не должна получить половину своих ключей.
+        $this->assertTrue($res['aborted']);
+        $this->assertSame(0, $res['applied']);
+        $this->assertCount(1, $res['stale']);
+        $this->assertSame([], $res['touched']);
+        $this->assertSame('old', $s->read('de', 'a')['k']);
+        $this->assertSame('manager', $s->read('de', 'b')['k']);
+    }
+
+    public function testFailedWriteRollsBackFilesAlreadyWrittenInTheSameSet(): void
+    {
+        $s = $this->store();
+        $s->write('de', 'a', ['k' => 'old']);
+        $s->write('fr', 'a', ['k' => 'old']);
+        // Второй язык становится незаписываемым: файл de уже переписан, fr — нет.
+        @chmod($this->base . 'fr', 0555);
+
+        $res = $s->apply([
+            ['lang' => 'de', 'rid' => 'a', 'key' => 'k', 'action' => M::WRITE,
+             'current' => 'old', 'desired' => 'new'],
+            ['lang' => 'fr', 'rid' => 'a', 'key' => 'k', 'action' => M::WRITE,
+             'current' => 'old', 'desired' => 'new'],
+        ], ['atomic' => true]);
+        @chmod($this->base . 'fr', 0755);
+
+        $this->assertTrue($res['aborted']);
+        $this->assertSame(0, $res['applied']);
+        $this->assertSame(['fr/a'], $res['failed']);
+        $this->assertSame(['de/a'], $res['rolledBack']);
+        $this->assertSame('old', $s->read('de', 'a')['k']);
+        $this->assertSame('old', $s->read('fr', 'a')['k']);
+    }
+
     public function testClearRemovesKeyAndKeepsTheRest(): void
     {
         $s = $this->store();

@@ -94,3 +94,4 @@
 
 # Рабочие отчёты code review — не в репозиторий
 CODE-REVIEW*.md
+.mpc-lexicon.lock

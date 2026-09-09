@@ -20,6 +20,7 @@ class LexiconBatchService
     private LexiconStore $store;
     private SnapshotStore $snapshots;
     private OrphanRegistry $orphans;
+    private ?ReleaseLedger $releases = null;
     /** Язык, по файлам которого определяется существование ресурса. */
     private string $defaultLang;
     /** Файл лексикона секции статических блоков (вкладка `Static`). */
@@ -72,6 +73,75 @@ class LexiconBatchService
     public function orphans(): OrphanRegistry
     {
         return $this->orphans;
+    }
+
+    /** Журнал доставленных релизных манифестов (рядом со снимками). */
+    public function releases(): ReleaseLedger
+    {
+        if ($this->releases === null) {
+            $this->releases = new ReleaseLedger($this->snapshots->basePath());
+        }
+
+        return $this->releases;
+    }
+
+    /**
+     * Доставка релизного манифеста: проверка журнала, план, атомарное
+     * применение и фиксация факта — всё под ОДНОЙ блокировкой писателей.
+     * Иначе между «уже применён?» и записью успевает вклиниться второй деплой
+     * или менеджер, и решение принимается по устаревшим данным.
+     *
+     * @param array  $manifest ['expected' => ..., 'desired' => ...]
+     * @param string $name     имя файла манифеста для журнала
+     * @param bool   $write    false — только план
+     * @return array{skipped:bool,plan:array,result:array,fingerprint:string,ledger:array|null}
+     */
+    public function release(array $manifest, string $name = '', bool $write = false): array
+    {
+        return $this->store->withLock(function () use ($manifest, $name, $write): array {
+            $ledger      = $this->releases();
+            $fingerprint = ReleaseLedger::fingerprint($manifest);
+            $already     = $ledger->applied($fingerprint);
+
+            $out = [
+                'skipped'     => false,
+                'plan'        => ['ops' => [], 'summary' => [], 'conflicts' => []],
+                'result'      => [],
+                'fingerprint' => $fingerprint,
+                'ledger'      => $already,
+            ];
+
+            // Манифест уже доставлен: его база относится к прошлому состоянию
+            // словаря, и повторный план дал бы ложный конфликт.
+            if ($already !== null) {
+                $out['skipped'] = true;
+                return $out;
+            }
+
+            $out['plan'] = $this->planRelease(
+                (array)($manifest['expected'] ?? []),
+                (array)($manifest['desired'] ?? [])
+            );
+            if (!$write || !empty($out['plan']['conflicts'])) {
+                return $out;
+            }
+
+            $result = $this->apply($out['plan']['ops'], [], ['tag' => 'release', 'atomic' => true]);
+            $out['result'] = $result;
+
+            $delivered = empty($result['failed']) && empty($result['stale']) && empty($result['aborted']);
+            if ($delivered) {
+                $ledger->record($fingerprint, [
+                    'manifest' => $name,
+                    'applied'  => (int)($result['applied'] ?? 0),
+                    'cleared'  => (int)($result['cleared'] ?? 0),
+                    'touched'  => (array)($result['touched'] ?? []),
+                    'backup'   => (string)($result['backup'] ?? ''),
+                ]);
+            }
+
+            return $out;
+        });
     }
 
     /**
@@ -197,8 +267,11 @@ class LexiconBatchService
     {
         $dryRun = !empty($opts['dryRun']);
         $tag    = (string)($opts['tag'] ?? 'import');
+        // Релизная доставка применяется целиком или не применяется вовсе:
+        // страница не должна выйти с половиной своих ключей.
+        $atomic = !empty($opts['atomic']);
 
-        return $this->store->withLock(function (LexiconStore $s) use ($ops, $resolutions, $dryRun, $tag): array {
+        return $this->store->withLock(function (LexiconStore $s) use ($ops, $resolutions, $dryRun, $tag, $atomic): array {
             $current  = $s->currentFor($ops);
             $resolved = [];
             foreach ($ops as $op) {
@@ -231,10 +304,15 @@ class LexiconBatchService
                     'conflicts' => LexiconMerge::conflicts($resolved),
                     'applied' => 0, 'cleared' => 0, 'stale' => [], 'failed' => [],
                     'touched' => [], 'backup' => '', 'appliedOps' => [],
+                    'aborted' => false, 'rolledBack' => [],
                 ];
             }
 
-            $res = $s->apply($resolved, ['backup' => $this->snapshots, 'tag' => $tag]);
+            $res = $s->apply($resolved, [
+                'backup' => $this->snapshots,
+                'tag'    => $tag,
+                'atomic' => $atomic,
+            ]);
             return $res + [
                 'dryRun' => false,
                 'summary' => $summary,

@@ -206,6 +206,66 @@ class LexiconBatchServiceTest extends TestCase
         $this->assertSame(['ru' => ['10' => ['a' => 'ок']]], $this->service->desiredFromPlan($plan));
     }
 
+    public function testDeliveredManifestIsSkippedOnRepeatedDeploy(): void
+    {
+        $this->store()->write('de', 'common', ['k' => 'v0']);
+        $m1 = ['expected' => ['de' => ['common' => ['k' => 'v0']]], 'desired' => ['de' => ['common' => ['k' => 'v1']]]];
+        $m2 = ['expected' => ['de' => ['common' => ['k' => 'v1']]], 'desired' => ['de' => ['common' => ['k' => 'v2']]]];
+
+        $this->assertSame(1, $this->service->release($m1, 'm1.json', true)['result']['applied']);
+        $this->assertSame(1, $this->service->release($m2, 'm2.json', true)['result']['applied']);
+        $this->assertSame('v2', $this->store()->read('de', 'common')['k']);
+
+        // Следующий деплой снова перебирает весь каталог манифестов: исторический
+        // m1 не сходится с сервером, но он уже доставлен — это не конфликт.
+        $again = $this->service->release($m1, 'm1.json', true);
+        $this->assertTrue($again['skipped']);
+        $this->assertSame([], $again['plan']['conflicts']);
+        $this->assertSame('v2', $this->store()->read('de', 'common')['k']);
+        $this->assertSame('m1.json', $this->service->releases()->applied(
+            \MpcServices\Handlers\Lexicon\ReleaseLedger::fingerprint($m1)
+        )['manifest']);
+    }
+
+    public function testReleaseWritesNothingWhenManagerEditsBetweenPlanAndApply(): void
+    {
+        $this->store()->write('de', 'a', ['k' => 'old']);
+        $this->store()->write('de', 'b', ['k' => 'old']);
+        $manifest = [
+            'expected' => ['de' => ['a' => ['k' => 'old'], 'b' => ['k' => 'old']]],
+            'desired'  => ['de' => ['a' => ['k' => 'new'], 'b' => ['k' => 'new']]],
+        ];
+        $plan = $this->service->planRelease($manifest['expected'], $manifest['desired']);
+        $this->store()->write('de', 'b', ['k' => 'manager']); // правка между планом и применением
+
+        $res = $this->service->apply($plan['ops'], [], ['tag' => 'release', 'atomic' => true]);
+
+        $this->assertTrue($res['aborted']);
+        $this->assertSame(0, $res['applied']);
+        $this->assertSame('old', $this->store()->read('de', 'a')['k']);
+        $this->assertSame('manager', $this->store()->read('de', 'b')['k']);
+        // Незавершённый релиз в журнал не попадает — доставка повторяется.
+        $this->assertNull($this->service->releases()->applied(
+            \MpcServices\Handlers\Lexicon\ReleaseLedger::fingerprint($manifest)
+        ));
+    }
+
+    public function testConflictingReleaseIsNotRecordedAndKeepsManagerValue(): void
+    {
+        $this->store()->write('de', 'a', ['k' => 'менеджер']);
+        $manifest = [
+            'expected' => ['de' => ['a' => ['k' => 'было']]],
+            'desired'  => ['de' => ['a' => ['k' => 'станет']]],
+        ];
+
+        $res = $this->service->release($manifest, 'conflict.json', true);
+
+        $this->assertFalse($res['skipped']);
+        $this->assertCount(1, $res['plan']['conflicts']);
+        $this->assertSame('менеджер', $this->store()->read('de', 'a')['k']);
+        $this->assertNull($this->service->releases()->applied($res['fingerprint']));
+    }
+
     public function testPruneIsDryRunUntilAskedAndBacksUpBeforeDeleting(): void
     {
         $this->store()->write('ru', '10', ['dead' => 'мёртвый', 'alive' => 'живой']);

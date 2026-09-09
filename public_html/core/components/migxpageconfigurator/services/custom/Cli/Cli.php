@@ -531,20 +531,46 @@ class Cli
         }
 
         $service = \MpcServices\Handlers\Lexicon\LexiconBatchService::fromModx($this->modx);
-        $plan = $service->planRelease($manifest['expected'], $manifest['desired']);
-        $data = ['summary' => $plan['summary'], 'conflicts' => $plan['conflicts']];
-        if (!$write || empty($opts['force'])) {
-            return $out->result(['success' => empty($plan['conflicts']), 'message' => 'release-план построен', 'data' => $data]);
-        }
-        if (!empty($plan['conflicts'])) {
-            return $out->result(['success' => false, 'message' => 'release остановлен: есть конфликты', 'data' => $data]);
+        $apply   = $write && !empty($opts['force']);
+        $release = $service->release($manifest, basename($path), $apply);
+
+        // Манифест из прошлого релиза: его база уже перекрыта следующей
+        // принятой правкой. Повтор деплоя не обязан на этом останавливаться.
+        if (!empty($release['skipped'])) {
+            return $out->result([
+                'success' => true,
+                'message' => 'release уже доставлен ' . (string)($release['ledger']['applied_at'] ?? '') . ', пропущен',
+                'data'    => ['skipped' => true, 'fingerprint' => $release['fingerprint'], 'ledger' => $release['ledger']],
+            ]);
         }
 
-        $result = $service->apply($plan['ops'], [], ['tag' => 'release']);
+        $plan = $release['plan'];
+        $data = [
+            'summary'     => $plan['summary'],
+            'conflicts'   => $plan['conflicts'],
+            'fingerprint' => $release['fingerprint'],
+        ];
+        if (!empty($plan['conflicts'])) {
+            return $out->result([
+                'success' => false,
+                'message' => $apply ? 'release остановлен: есть конфликты' : 'release-план построен: есть конфликты',
+                'data'    => $data,
+            ]);
+        }
+        if (!$apply) {
+            return $out->result(['success' => true, 'message' => 'release-план построен', 'data' => $data]);
+        }
+
+        $result = $release['result'];
         $this->modx->getCacheManager()->refresh(['lexicon_topics' => []]);
+        $ok = empty($result['failed']) && empty($result['stale']) && empty($result['aborted']);
         return $out->result([
-            'success' => empty($result['failed']) && empty($result['stale']),
-            'message' => 'release применён: ' . (int)$result['applied'],
+            'success' => $ok,
+            'message' => $ok
+                ? 'release применён: ' . (int)$result['applied']
+                : 'release не применён: устаревших ' . count((array)$result['stale'])
+                    . ', сбоев записи ' . count((array)$result['failed'])
+                    . ', откачено файлов ' . count((array)$result['rolledBack']),
             'data' => $result + $data,
         ]);
     }
@@ -622,6 +648,8 @@ class Cli
             '  lexicon   plan <файл.xlsx|zip>   — трёхсторонний план импорта книги (ничего не пишет)',
             '  lexicon   apply <файл.xlsx|zip> --force [--conflicts=mine|server]   — применить план',
             '  lexicon   prune --lang=ru [--older-than=N] [--force]   — чистка мёртвых ключей по реестру',
+            '  lexicon   release-plan <manifest.json>   — план доставки релизного манифеста (ничего не пишет)',
+            '  lexicon   release-apply <manifest.json> --force   — доставить манифест: всё или ничего, повтор пропускается',
             '',
             'Флаги: --dry-run (только план), --force (деструктив), --only=ref (точечно), --json',
         ]);

@@ -121,19 +121,31 @@ class LexiconStore
      * заново и сверяются с `current` из плана; несовпадение — `stale`, запись
      * не делается.
      *
+     * Две фазы намеренно разделены. Сначала СВЕРЯЕТСЯ ВЕСЬ набор и в памяти
+     * собирается будущее содержимое каждого файла, и только потом идёт запись.
+     * Поэтому в атомарном режиме (`atomic`, релизная доставка) устаревшая
+     * операция останавливает набор целиком: страница не получает половину
+     * своих ключей. Если запись всё же оборвалась на середине набора, уже
+     * записанные файлы возвращаются к значениям, прочитанным в первой фазе.
+     *
      * @param array $ops  операции плана (write/clear/noop/skip/conflict)
-     * @param array $opts ['backup' => SnapshotStore|null, 'tag' => string]
-     * @return array{applied:int,cleared:int,stale:array,failed:array,backup:string,touched:array}
+     * @param array $opts ['backup' => SnapshotStore|null, 'tag' => string, 'atomic' => bool]
+     * @return array{applied:int,cleared:int,stale:array,failed:array,backup:string,touched:array,aborted:bool,rolledBack:array}
      */
     public function apply(array $ops, array $opts = []): array
     {
         return $this->withLock(function () use ($ops, $opts): array {
+            $atomic = !empty($opts['atomic']);
             $result = [
                 'applied' => 0, 'cleared' => 0,
                 'stale' => [], 'failed' => [], 'backup' => '', 'touched' => [],
                 // Реально записанные операции: по ним вызывающий обновляет
                 // сопутствующие реестры (непереведённое, кандидаты на удаление).
                 'appliedOps' => [],
+                // Набор остановлен до записи (атомарный режим).
+                'aborted' => false,
+                // Файлы, возвращённые к исходному состоянию после сбоя записи.
+                'rolledBack' => [],
             ];
 
             // Группируем по файлу: один файл переписывается один раз.
@@ -149,22 +161,13 @@ class LexiconStore
                 return $result;
             }
 
-            // Бэкап затронутых файлов ДО записи: единственный способ вернуть
-            // словарь, если применение оборвётся на середине набора.
-            $store = $opts['backup'] ?? null;
-            if ($store instanceof SnapshotStore) {
-                $entries = [];
-                foreach ($byFile as $lang => $byRid) {
-                    foreach ($byRid as $rid => $_) {
-                        $entries[$rid][$lang] = $this->read((string)$lang, (string)$rid);
-                    }
-                }
-                $result['backup'] = $store->backup((string)($opts['tag'] ?? 'apply'), $entries);
-            }
-
+            // Фаза 1: сверка всего набора и подготовка содержимого файлов.
+            $before  = [];
+            $planned = [];
             foreach ($byFile as $lang => $byRid) {
                 foreach ($byRid as $rid => $fileOps) {
                     $kv = $this->read((string)$lang, (string)$rid);
+                    $before[(string)$lang][(string)$rid] = $kv;
                     $dirty = false;
                     $fileAppliedOps = [];
 
@@ -188,12 +191,40 @@ class LexiconStore
                         $dirty = true;
                     }
 
-                    if (!$dirty) {
-                        continue;
+                    if ($dirty) {
+                        $planned[(string)$lang][(string)$rid] = ['kv' => $kv, 'ops' => $fileAppliedOps];
                     }
-                    if ($this->write((string)$lang, (string)$rid, $kv)) {
+                }
+            }
+
+            // Устаревшая операция в атомарном режиме = не пишем НИЧЕГО.
+            if ($atomic && !empty($result['stale'])) {
+                $result['aborted'] = true;
+                return $result;
+            }
+            if (empty($planned)) {
+                return $result;
+            }
+
+            // Бэкап затронутых файлов ДО записи: единственный способ вернуть
+            // словарь, если применение оборвётся на середине набора.
+            $store = $opts['backup'] ?? null;
+            if ($store instanceof SnapshotStore) {
+                $entries = [];
+                foreach ($planned as $lang => $byRid) {
+                    foreach ($byRid as $rid => $_) {
+                        $entries[$rid][$lang] = $before[$lang][$rid];
+                    }
+                }
+                $result['backup'] = $store->backup((string)($opts['tag'] ?? 'apply'), $entries);
+            }
+
+            // Фаза 2: запись. Первый же сбой откатывает записанное в этом вызове.
+            foreach ($planned as $lang => $byRid) {
+                foreach ($byRid as $rid => $file) {
+                    if ($this->write((string)$lang, (string)$rid, $file['kv'])) {
                         $result['touched'][] = $lang . '/' . $rid;
-                        foreach ($fileAppliedOps as $appliedOp) {
+                        foreach ($file['ops'] as $appliedOp) {
                             if ((string)$appliedOp['action'] === LexiconMerge::CLEAR) {
                                 $result['cleared']++;
                             } else {
@@ -201,9 +232,22 @@ class LexiconStore
                             }
                             $result['appliedOps'][] = $appliedOp;
                         }
-                    } else {
-                        $result['failed'][] = $lang . '/' . $rid;
+                        continue;
                     }
+
+                    $result['failed'][] = $lang . '/' . $rid;
+                    foreach ($result['touched'] as $address) {
+                        [$tLang, $tRid] = explode('/', $address, 2);
+                        if ($this->write($tLang, $tRid, $before[$tLang][$tRid])) {
+                            $result['rolledBack'][] = $address;
+                        }
+                    }
+                    $result['touched'] = [];
+                    $result['appliedOps'] = [];
+                    $result['applied'] = 0;
+                    $result['cleared'] = 0;
+                    $result['aborted'] = true;
+                    return $result;
                 }
             }
 
@@ -225,7 +269,7 @@ class LexiconStore
         }
 
         if (empty($kv)) {
-            return is_file($path) ? unlink($path) : true;
+            return is_file($path) ? @unlink($path) : true;
         }
 
         ksort($kv);
@@ -238,11 +282,13 @@ class LexiconStore
         }
 
         $tmp = $path . '.' . bin2hex(random_bytes(6)) . '.tmp';
-        if (file_put_contents($tmp, $content, LOCK_EX) === false) {
+        // Права каталога снимаются извне (сбой диска, чужой chmod) — падать
+        // предупреждением нельзя: вызывающий обязан увидеть false и откатиться.
+        if (@file_put_contents($tmp, $content, LOCK_EX) === false) {
             @unlink($tmp);
             return false;
         }
-        if (!rename($tmp, $path)) {
+        if (!@rename($tmp, $path)) {
             @unlink($tmp);
             return false;
         }
