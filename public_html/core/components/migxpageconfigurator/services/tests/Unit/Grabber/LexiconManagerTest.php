@@ -284,6 +284,8 @@ class LexiconManagerTest extends TestCase
             'mpc_resource_x'  => 'keep',    // глобалка — цела
         ];
 
+        // Реестр известных префиксов — обязательное условие чистки.
+        $m->setKnownPrefixes(['cta', 'hero']);
         $m->setContext('cta', true);
 
         $this->assertArrayNotHasKey('cta_old_orphan', $m->lexicons['static']);
@@ -320,6 +322,199 @@ class LexiconManagerTest extends TestCase
         $m->setContext('cta', false);
 
         $this->assertArrayHasKey('cta_btn', $m->lexicons['static']);
+    }
+
+    // ---------------------------------------------------------------
+    // setContext() — принадлежность ключа префиксу (самый длинный побеждает)
+    // ---------------------------------------------------------------
+
+    /** Раскладка-виновник: секция с коротким префиксом и соседи с длинными. */
+    private function siblingLexicons(): array
+    {
+        return [
+            'difference_title'            => 'общий заголовок',
+            'difference_weighted_title'   => 'DEEP <b>SENSORY PRESSURE</b>',
+            'difference_weighted_text'    => 'weighted text',
+            'difference_ventilated_title' => 'VENTILATED',
+            'mpc_resource_x'              => 'глобалка',
+        ];
+    }
+
+    private const SIBLING_PREFIXES = ['difference', 'difference_weighted', 'difference_ventilated'];
+
+    public function testShortPrefixKeepsSiblingKeys(): void
+    {
+        $m = $this->makeManager();
+        $m->lexicons['static'] = $this->siblingLexicons();
+        $m->setKnownPrefixes(self::SIBLING_PREFIXES);
+
+        $m->setContext('difference', true);
+
+        // Свой ключ ушёл — секция наполнит его заново.
+        $this->assertArrayNotHasKey('difference_title', $m->lexicons['static']);
+        // Соседи целы: у них есть более длинный известный префикс.
+        $this->assertEquals('DEEP <b>SENSORY PRESSURE</b>', $m->lexicons['static']['difference_weighted_title']);
+        $this->assertArrayHasKey('difference_weighted_text', $m->lexicons['static']);
+        $this->assertEquals('VENTILATED', $m->lexicons['static']['difference_ventilated_title']);
+        $this->assertArrayHasKey('mpc_resource_x', $m->lexicons['static']);
+    }
+
+    public function testLongPrefixWipesOnlyItsOwnKeys(): void
+    {
+        $m = $this->makeManager();
+        $m->lexicons['static'] = $this->siblingLexicons();
+        $m->setKnownPrefixes(self::SIBLING_PREFIXES);
+
+        $m->setContext('difference_weighted', true);
+
+        $this->assertArrayNotHasKey('difference_weighted_title', $m->lexicons['static']);
+        $this->assertArrayNotHasKey('difference_weighted_text', $m->lexicons['static']);
+        $this->assertEquals('общий заголовок', $m->lexicons['static']['difference_title']);
+        $this->assertEquals('VENTILATED', $m->lexicons['static']['difference_ventilated_title']);
+    }
+
+    /**
+     * Порядок обхода шаблонов на результат не влияет: до фикса выживал тот
+     * сосед, чей шаблон нарезан после виновника (`Mpc::getFilesList` не
+     * сортирует, порядок зависит от ФС конкретной машины).
+     */
+    public function testWipeOrderDoesNotChangeResult(): void
+    {
+        $forward = $this->makeManager();
+        $forward->lexicons['static'] = $this->siblingLexicons();
+        $forward->setKnownPrefixes(self::SIBLING_PREFIXES);
+        $forward->setContext('difference', true);
+        $forward->setContext('difference_weighted', true);
+
+        $backward = $this->makeManager();
+        $backward->lexicons['static'] = $this->siblingLexicons();
+        $backward->setKnownPrefixes(self::SIBLING_PREFIXES);
+        $backward->setContext('difference_weighted', true);
+        $backward->setContext('difference', true);
+
+        $this->assertEquals($backward->lexicons['static'], $forward->lexicons['static']);
+        // В обоих порядках уцелел сосед, которого никто не грабил.
+        $this->assertEquals('VENTILATED', $forward->lexicons['static']['difference_ventilated_title']);
+    }
+
+    /** Секция новая, записи в mpc_tracked_fields нет — префикс берётся из вёрстки. */
+    public function testNewSectionWithoutTrackedRecordIsProtected(): void
+    {
+        $m = $this->makeManager();
+        $m->lexicons['static'] = [
+            'difference_title'      => 'общий',
+            'difference_new_title'  => 'свежая секция',
+        ];
+        // Реестр собран из вёрстки: tracked-записи у новой секции ещё нет.
+        $m->setKnownPrefixes(['difference', 'difference_new']);
+
+        $m->setContext('difference', true);
+
+        $this->assertEquals('свежая секция', $m->lexicons['static']['difference_new_title']);
+    }
+
+    /** Границы: `x_y` не владеет ключами `x_yz` и наоборот. */
+    public function testPrefixBoundaryIsUnderscore(): void
+    {
+        $m = $this->makeManager();
+        $m->lexicons['static'] = [
+            'x_y_title'  => 'y',
+            'x_yz_title' => 'yz',
+        ];
+        $m->setKnownPrefixes(['x_y', 'x_yz']);
+
+        $m->setContext('x_y', true);
+
+        $this->assertArrayNotHasKey('x_y_title', $m->lexicons['static']);
+        $this->assertEquals('yz', $m->lexicons['static']['x_yz_title']);
+    }
+
+    /** Три уровня вложенности: каждый владеет только своим. */
+    public function testNestedPrefixesEachOwnTheirKeys(): void
+    {
+        $m = $this->makeManager();
+        $base = [
+            'a_title'     => 'a',
+            'a_b_title'   => 'ab',
+            'a_b_c_title' => 'abc',
+        ];
+        $m->lexicons['static'] = $base;
+        $m->setKnownPrefixes(['a', 'a_b', 'a_b_c']);
+
+        $m->setContext('a', true);
+        $this->assertEquals(['a_b_title' => 'ab', 'a_b_c_title' => 'abc'], $m->lexicons['static']);
+
+        $m->lexicons['static'] = $base;
+        $m->setContext('a_b', true);
+        $this->assertEquals(['a_title' => 'a', 'a_b_c_title' => 'abc'], $m->lexicons['static']);
+    }
+
+    /** Устаревшее собственное поле чистится по-прежнему: секции `cta_old` нет. */
+    public function testStaleOwnFieldStillWiped(): void
+    {
+        $m = $this->makeManager();
+        $m->lexicons['static'] = [
+            'cta_old_orphan' => 'stale',
+            'cta_btn'        => 'old',
+        ];
+        $m->setKnownPrefixes(['cta']);
+
+        $m->setContext('cta', true);
+
+        $this->assertSame([], $m->lexicons['static']);
+    }
+
+    /**
+     * Повторный прогон по тому же набору ничего не меняет: чистка и наполнение
+     * приводят массив к одному и тому же состоянию.
+     */
+    public function testRepeatedRunIsIdempotent(): void
+    {
+        $run = function (): array {
+            $m = $this->makeManager();
+            $m->lexicons['static'] = $this->siblingLexicons();
+            $m->setKnownPrefixes(self::SIBLING_PREFIXES);
+            foreach (self::SIBLING_PREFIXES as $prefix) {
+                $m->setContext($prefix, true);
+                $m->setLexicons('из вёрстки', ['fieldName' => 'title']);
+            }
+            return $m->lexicons['static'];
+        };
+
+        $first = $run();
+        $second = $run();
+
+        $this->assertEquals($first, $second);
+        $this->assertArrayHasKey('difference_weighted_title', $first);
+        $this->assertArrayHasKey('mpc_resource_x', $first);
+    }
+
+    /**
+     * Значение, изменённое редактором в админке, чистка соседа не трогает:
+     * ключ принадлежит другой секции, а собственную секцию наполняет грабинг.
+     */
+    public function testEditorValueOfSiblingSurvivesWipe(): void
+    {
+        $m = $this->makeManager();
+        $m->lexicons['static'] = $this->siblingLexicons();
+        $m->lexicons['static']['difference_weighted_title'] = 'Правка редактора';
+        $m->setKnownPrefixes(self::SIBLING_PREFIXES);
+
+        $m->setContext('difference', true);
+
+        $this->assertEquals('Правка редактора', $m->lexicons['static']['difference_weighted_title']);
+    }
+
+    /** Реестр построить не удалось — чистка не идёт вовсе, чужие ключи целы. */
+    public function testNoWipeWithoutPrefixRegistry(): void
+    {
+        // basePath шаблонов в тестовых свойствах не задан → скан пуст → реестр неполон.
+        $m = $this->makeManager();
+        $m->lexicons['static'] = $this->siblingLexicons();
+
+        $m->setContext('difference', true);
+
+        $this->assertEquals($this->siblingLexicons(), $m->lexicons['static']);
     }
 
     // ---------------------------------------------------------------

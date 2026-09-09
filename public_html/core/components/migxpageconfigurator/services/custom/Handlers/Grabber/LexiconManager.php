@@ -22,6 +22,18 @@ class LexiconManager
      */
     private array  $identifierCache = [];
 
+    /**
+     * Реестр известных префиксов секций: `prefix => true`. `null` — реестр не
+     * построен (или построить не удалось), тогда чистка по префиксу не идёт
+     * вовсе: без полного реестра нельзя отличить свой устаревший ключ от
+     * чужого. Заполняется лениво в `ensurePrefixRegistry()` или снаружи через
+     * `setKnownPrefixes()`.
+     */
+    private ?array $knownPrefixes = null;
+
+    /** Попытка построить реестр уже была (второй раз не читаем диск и БД). */
+    private bool $prefixRegistryAttempted = false;
+
     public function __construct(\modX $modx, array $properties)
     {
         $this->modx       = $modx;
@@ -56,6 +68,12 @@ class LexiconManager
      * No-op для cutter-флоу: там `lexicons[$rid]` не предзагружается, guard
      * `empty(...)` коротко замыкает. Глобалки (`mpc_resource_*` и пр.) целы —
      * они не начинаются с префикса секции.
+     *
+     * Чистка идёт только при полном реестре известных префиксов
+     * (`ensurePrefixRegistry`) и сносит лишь ключи, принадлежащие ИМЕННО этой
+     * секции (`ownsLexiconKey`, правило самого длинного префикса). Реестр
+     * строится ДО первой очистки — иначе результат зависел бы от того, какой
+     * шаблон нарезан раньше.
      */
     public function setContext(string $prefix, bool $isStatic, bool $isCopy = false): void
     {
@@ -69,11 +87,167 @@ class LexiconManager
         if ($rid === '' || empty($this->lexicons[$rid])) {
             return;
         }
-        $needle = $prefix . '_';
+        if (!$this->ensurePrefixRegistry()) {
+            return;
+        }
         foreach (array_keys($this->lexicons[$rid]) as $key) {
-            if (strpos((string)$key, $needle) === 0) {
+            if ($this->ownsLexiconKey((string)$key, $prefix)) {
                 unset($this->lexicons[$rid][$key]);
             }
+        }
+    }
+
+    /**
+     * Принадлежит ли ключ секции с префиксом `$prefix` — правило «побеждает самый
+     * длинный известный префикс».
+     *
+     * Сравниваем ПОЛНЫЙ ключ с `$prefix . '_'`, а затем проверяем, нет ли в
+     * реестре более длинного известного префикса, которому ключ подходит лучше.
+     * Без второй проверки секция с коротким префиксом (`difference`) сносила
+     * ключи соседей с длинными (`difference_weighted_title`), а вернуть их мог
+     * только грабинг самих соседей — то есть выживание ключа зависело от порядка
+     * обхода каталога шаблонов (`Mpc::getFilesList()` не сортирует). Разбор —
+     * knowledge-base `tasks/2026-09-09-sleepandglow-empty-section-titles.md`.
+     *
+     * Границы соблюдаются за счёт подчёркивания: для префикса `x_y` ключ
+     * `x_yz_title` чужой (не начинается с `x_y_`), а `x_y_title` — свой.
+     * Устаревшее СОБСТВЕННОЕ поле (`cta_old_orphan` при отсутствии секции
+     * `cta_old`) чистится по-прежнему: более длинного известного префикса нет.
+     */
+    private function ownsLexiconKey(string $key, string $prefix): bool
+    {
+        $needle = $prefix . '_';
+        if (strpos($key, $needle) !== 0) {
+            return false;
+        }
+        foreach ($this->knownPrefixes as $known => $_) {
+            if (strlen($known) <= strlen($prefix)) {
+                continue;
+            }
+            if (strpos($known, $needle) !== 0) {
+                continue; // не вложен в наш префикс — к этому ключу отношения не имеет
+            }
+            if (strpos($key, $known . '_') === 0) {
+                return false; // ключ принадлежит более длинному префиксу
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Задать реестр известных префиксов секций снаружи (нарезка/тесты).
+     * Вызов означает: реестр полный, чистке можно доверять.
+     */
+    public function setKnownPrefixes(array $prefixes): void
+    {
+        $clean = [];
+        foreach ($prefixes as $prefix) {
+            $prefix = trim((string)$prefix);
+            if ($prefix !== '') {
+                $clean[$prefix] = true;
+            }
+        }
+        $this->knownPrefixes = $clean;
+        $this->prefixRegistryAttempted = true;
+    }
+
+    /** Реестр известных префиксов (диагностика и тесты). */
+    public function getKnownPrefixes(): array
+    {
+        return $this->knownPrefixes === null ? [] : array_keys($this->knownPrefixes);
+    }
+
+    /**
+     * Построить реестр, если он ещё не задан. Источники — ОБА, и оба доступны ДО
+     * первой очистки, чтобы результат не зависел от порядка обхода файлов:
+     *  1) вёрстка целиком (`pathToSrc`) — все секции текущего прогона, включая
+     *     ещё не обработанные;
+     *  2) сохранённые префиксы манифеста `mpc_tracked_fields` — секции, которых
+     *     в текущем дереве шаблонов может уже не быть.
+     *
+     * Скан вёрстки пустой (каталога нет, доступ закрыт) — реестр считаем
+     * неполным и возвращаем false: чистка не идёт, устаревшие ключи переживут
+     * прогон. Это осознанный размен: лишний ключ безвреден, потерянный перевод
+     * не восстановить.
+     */
+    private function ensurePrefixRegistry(): bool
+    {
+        if ($this->prefixRegistryAttempted) {
+            return $this->knownPrefixes !== null;
+        }
+        $this->prefixRegistryAttempted = true;
+
+        $fromTemplates = $this->collectTemplatePrefixes();
+        if (!$fromTemplates) {
+            $this->modx->log(
+                \modX::LOG_LEVEL_WARN,
+                '[mpc lexicon] реестр префиксов секций пуст — чистка статик-ключей пропущена'
+            );
+            return false;
+        }
+        $registry = $fromTemplates;
+        foreach ($this->collectTrackedPrefixes() as $prefix) {
+            $registry[$prefix] = true;
+        }
+        $this->knownPrefixes = $registry;
+        return true;
+    }
+
+    /**
+     * Префиксы всех секций вёрстки. Читаем текстом, а не парсером DOM: нужен
+     * только набор значений маркеров, и обход сотен шаблонов DiDom'ом ради этого
+     * неоправдан. Префикс секции = `data-mpc-lexicon`, при его отсутствии —
+     * `data-mpc-section` (тот же фолбэк, что в `SectionProcessor::grabSection`),
+     * поэтому собираем оба маркера.
+     */
+    private function collectTemplatePrefixes(): array
+    {
+        $dir = (string)($this->properties['pdotoolsElementsPath'] ?? '')
+            . (string)($this->properties['pathToSrc'] ?? '');
+        if ($dir === '' || !is_dir($dir)) {
+            return [];
+        }
+        $prefixes = [];
+        try {
+            $iterator = new \RecursiveIteratorIterator(
+                new \RecursiveDirectoryIterator(rtrim($dir, '/\\'), \RecursiveDirectoryIterator::SKIP_DOTS)
+            );
+            foreach ($iterator as $file) {
+                if (!$file->isFile()) {
+                    continue;
+                }
+                $html = @file_get_contents($file->getPathname());
+                if ($html === false || $html === '') {
+                    continue;
+                }
+                if (!preg_match_all(
+                    '/data-mpc-(?:lexicon|section)\s*=\s*([\'"])(.*?)\1/i',
+                    $html,
+                    $matches
+                )) {
+                    continue;
+                }
+                foreach ($matches[2] as $value) {
+                    $value = trim($value);
+                    if ($value !== '') {
+                        $prefixes[$value] = true;
+                    }
+                }
+            }
+        } catch (\Throwable $ex) {
+            $this->modx->log(\modX::LOG_LEVEL_WARN, '[mpc lexicon] обход вёрстки: ' . $ex->getMessage());
+            return [];
+        }
+        return $prefixes;
+    }
+
+    /** Сохранённые префиксы манифеста трекаемых полей; недоступен — пустой список. */
+    private function collectTrackedPrefixes(): array
+    {
+        try {
+            return (new \MpcServices\Handlers\TrackedFields($this->modx))->prefixes();
+        } catch (\Throwable $ex) {
+            return [];
         }
     }
 

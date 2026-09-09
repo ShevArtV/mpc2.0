@@ -108,6 +108,23 @@ class TrackedFields
         }
     }
 
+    /**
+     * Сохранённые префиксы лексикона всех секций манифеста.
+     * Нужны нарезке как часть реестра известных префиксов: секции, которой уже
+     * нет в текущем дереве шаблонов, иначе в реестре не будет, и её ключи снесёт
+     * чистка соседа с более коротким префиксом.
+     */
+    public function prefixes(): array
+    {
+        $this->ensureTable();
+        try {
+            $stmt = $this->modx->query("SELECT DISTINCT lexicon_prefix FROM {$this->table} WHERE lexicon_prefix <> ''");
+            return $stmt ? ($stmt->fetchAll(\PDO::FETCH_COLUMN) ?: []) : [];
+        } catch (\Throwable $ex) {
+            return [];
+        }
+    }
+
     /** Весь манифест (DISTINCT-союз) — для модалки/диагностики. */
     public function all(): array
     {
