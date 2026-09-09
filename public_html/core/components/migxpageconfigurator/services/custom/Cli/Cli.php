@@ -444,6 +444,10 @@ class Cli
                 return $this->lexiconRelease((string)($args[0] ?? ''), $opts, false, $out);
             case 'release-apply':
                 return $this->lexiconRelease((string)($args[0] ?? ''), $opts, true, $out);
+            case 'snapshot-take':
+                return $this->lexiconSnapshotTake($opts, $out);
+            case 'release-new':
+                return $this->lexiconReleaseNew($opts, $out);
             case 'prune':
                 return $this->lexiconPrune($opts, $out);
             default:
@@ -451,6 +455,8 @@ class Cli
                     'success' => false,
                     'message' => 'lexicon: export-all | export-untranslated [filename] | list'
                         . ' | plan <файл.xlsx|zip> | apply <файл.xlsx|zip> --force'
+                        . ' | snapshot-take [--langs=de,fi] [--rids=aula]'
+                        . ' | release-new (--snapshot=id|--base=каталог) [--out=manifest.json]'
                         . ' | release-plan <manifest.json> | release-apply <manifest.json> --force'
                         . ' | prune --lang=ru',
                 ]);
@@ -576,6 +582,202 @@ class Cli
     }
 
     /**
+     * Зафиксировать базу перед работой над задачей. Снимок — то состояние, от
+     * которого потом отсчитывается правка: без него `release-new` не отличит
+     * «я изменил текст» от «текст на сервере и так был другим», и в `expected`
+     * уехало бы текущее значение, а вместе с ним затёрлась бы правка менеджера.
+     */
+    private function lexiconSnapshotTake(array $opts, Output $out): int
+    {
+        $service = $this->lexiconService();
+        $store   = $service->store();
+
+        $langs = self::listOpt($opts['langs'] ?? '') ?: $store->languages();
+        $rids  = self::listOpt($opts['rids'] ?? '');
+        if (!$rids) {
+            $seen = [];
+            foreach ($langs as $lang) {
+                foreach ($store->existingRids((string)$lang) as $rid) {
+                    $seen[$rid] = true;
+                }
+            }
+            $rids = array_keys($seen);
+            sort($rids, SORT_STRING);
+        }
+        if (!$langs || !$rids) {
+            return $out->result(['success' => false, 'message' => 'нечего снимать: не найдено ни языков, ни файлов словаря']);
+        }
+
+        $snapshot = $service->snapshot($rids, $langs, 'cli-release');
+
+        return $out->result([
+            'success' => true,
+            'message' => 'снимок ' . $snapshot['id'] . ': языков ' . count($langs) . ', файлов ' . count($rids),
+            'data'    => ['snapshot' => $snapshot['id'], 'langs' => $langs, 'rids' => count($rids)],
+        ]);
+    }
+
+    /**
+     * Сборка релизного манифеста из базы и текущего состояния словаря.
+     * Раньше `expected`/`desired` писали руками, и опечатка в базе не портила
+     * словарь, а роняла выкладку конфликтом.
+     *
+     * База — снимок (`--snapshot=<id>`) или каталог словарей на момент начала
+     * работ (`--base=<путь>`, например выложенное git-состояние). Текущее
+     * состояние — словари инстанса или `--head=<путь>`.
+     */
+    private function lexiconReleaseNew(array $opts, Output $out): int
+    {
+        $service = $this->lexiconService();
+
+        $langs = self::listOpt($opts['langs'] ?? '');
+        $rids  = self::listOpt($opts['rids'] ?? '');
+        $keys  = self::listOpt($opts['keys'] ?? '');
+
+        $snapshotId = (string)($opts['snapshot'] ?? '');
+        $baseDir    = (string)($opts['base'] ?? '');
+        if (($snapshotId === '') === ($baseDir === '')) {
+            return $out->result([
+                'success' => false,
+                'message' => 'нужна ровно одна база: --snapshot=<id> или --base=<каталог словарей>',
+            ]);
+        }
+
+        if ($snapshotId !== '') {
+            $snapshot = $service->snapshots()->load($snapshotId);
+            if ($snapshot === null) {
+                return $out->result(['success' => false, 'message' => 'снимок не найден: ' . $snapshotId]);
+            }
+            $base = \MpcServices\Handlers\Lexicon\LexiconBatchService::baseFromSnapshot($snapshot);
+        } else {
+            if (!is_dir($baseDir)) {
+                return $out->result(['success' => false, 'message' => 'каталог базы не найден: ' . $baseDir]);
+            }
+            $base = $this->lexiconState(new \MpcServices\Handlers\Lexicon\LexiconStore($baseDir), $langs, $rids);
+        }
+
+        $headDir = (string)($opts['head'] ?? '');
+        if ($headDir !== '' && !is_dir($headDir)) {
+            return $out->result(['success' => false, 'message' => 'каталог текущего состояния не найден: ' . $headDir]);
+        }
+        $headStore = $headDir !== ''
+            ? new \MpcServices\Handlers\Lexicon\LexiconStore($headDir)
+            : $service->store();
+
+        // Под блокировкой писателей: иначе в срез попадёт файл в момент записи
+        // админкой, и в манифест уедет наполовину сохранённое значение.
+        $head = $headStore->withLock(function (\MpcServices\Handlers\Lexicon\LexiconStore $s) use ($langs, $rids): array {
+            return $this->lexiconState($s, $langs, $rids);
+        });
+
+        $built = \MpcServices\Handlers\Lexicon\ReleaseManifestBuilder::build($base, $head, [
+            'withClears' => !empty($opts['with-clears']),
+            'langs'      => $langs,
+            'rids'       => $rids,
+            'keys'       => $keys,
+        ]);
+        $summary = $built['summary'];
+        if ((int)$summary['total'] === 0) {
+            return $out->result([
+                'success' => true,
+                'message' => 'расхождений с базой нет — доставлять нечего',
+                'data'    => ['summary' => $summary],
+            ]);
+        }
+
+        $counts = 'адресов ' . (int)$summary['total']
+            . ' (новых ' . (int)$summary['added']
+            . ', изменённых ' . (int)$summary['changed']
+            . ', очисток ' . (int)$summary['cleared'] . ')';
+        $json = \MpcServices\Handlers\Lexicon\ReleaseManifestBuilder::encode($built['manifest']);
+        $data = ['summary' => $summary, 'addresses' => $built['addresses'], 'manifest' => $built['manifest']];
+
+        $path = (string)($opts['out'] ?? '');
+        if ($path === '') {
+            $out->line($json);
+            return $out->result(['success' => true, 'message' => 'манифест построен: ' . $counts, 'data' => $data]);
+        }
+
+        // Перезапись манифеста — не мелочь: журнал релизов считает отпечаток по
+        // содержимому, поэтому изменённый файл станет НОВЫМ релизом и поедет
+        // на сервер ещё раз.
+        if (is_file($path) && empty($opts['force'])) {
+            return $out->result([
+                'success' => false,
+                'message' => 'манифест уже существует, перезапись только с --force: ' . $path,
+            ]);
+        }
+        if (!is_dir(dirname($path))) {
+            return $out->result(['success' => false, 'message' => 'каталог для манифеста не найден: ' . dirname($path)]);
+        }
+        if (@file_put_contents($path, $json) === false) {
+            return $out->result(['success' => false, 'message' => 'не удалось записать манифест: ' . $path]);
+        }
+
+        return $out->result([
+            'success' => true,
+            'message' => 'манифест записан: ' . $path . '; ' . $counts,
+            'data'    => $data,
+        ]);
+    }
+
+    /** Пакетный фасад словаря с поднятым автозагрузчиком пакета. */
+    private function lexiconService(): \MpcServices\Handlers\Lexicon\LexiconBatchService
+    {
+        $corePath = $this->modx->getOption(
+            'migxpageconfigurator_core_path',
+            null,
+            $this->modx->getOption('core_path') . 'components/migxpageconfigurator/'
+        );
+        require_once rtrim($corePath, '/') . '/services/vendor/autoload.php';
+
+        return \MpcServices\Handlers\Lexicon\LexiconBatchService::fromModx($this->modx);
+    }
+
+    /**
+     * Срез хранилища: lang => rid => key => value. Несуществующий файл в срез
+     * НЕ попадает — иначе он был бы неотличим от пустого словаря, и сборщик
+     * манифеста счёл бы все его ключи удалёнными.
+     *
+     * @param string[] $langs пусто — все языки хранилища
+     * @param string[] $rids  пусто — все файлы языка
+     */
+    private function lexiconState(\MpcServices\Handlers\Lexicon\LexiconStore $store, array $langs, array $rids): array
+    {
+        $state = [];
+        foreach ($langs ?: $store->languages() as $lang) {
+            foreach ($rids ?: $store->existingRids((string)$lang) as $rid) {
+                if (!is_file($store->path((string)$lang, (string)$rid))) {
+                    continue;
+                }
+                $state[(string)$lang][(string)$rid] = $store->read((string)$lang, (string)$rid);
+            }
+        }
+
+        return $state;
+    }
+
+    /**
+     * Список из опции `--langs=de,fi`.
+     *
+     * @param mixed $value
+     *
+     * @return string[]
+     */
+    private static function listOpt($value): array
+    {
+        $out = [];
+        foreach (is_array($value) ? $value : explode(',', (string)$value) as $item) {
+            $item = trim((string)$item);
+            if ($item !== '') {
+                $out[] = $item;
+            }
+        }
+
+        return $out;
+    }
+
+    /**
      * Чистка мёртвых ключей по реестру кандидатов (.orphan). Dry-run всегда,
      * пока не передан --force: удаление словарных ключей необратимо для
      * менеджера, поэтому список сначала показывается.
@@ -648,6 +850,9 @@ class Cli
             '  lexicon   plan <файл.xlsx|zip>   — трёхсторонний план импорта книги (ничего не пишет)',
             '  lexicon   apply <файл.xlsx|zip> --force [--conflicts=mine|server]   — применить план',
             '  lexicon   prune --lang=ru [--older-than=N] [--force]   — чистка мёртвых ключей по реестру',
+            '  lexicon   snapshot-take [--langs=de,fi] [--rids=aula]   — зафиксировать базу перед правками, печатает id снимка',
+            '  lexicon   release-new (--snapshot=<id>|--base=<каталог>) [--head=<каталог>] [--langs=] [--rids=] [--keys=] [--with-clears] [--out=<файл>]',
+            '                                          — собрать релизный манифест из базы и текущего состояния',
             '  lexicon   release-plan <manifest.json>   — план доставки релизного манифеста (ничего не пишет)',
             '  lexicon   release-apply <manifest.json> --force   — доставить манифест: всё или ничего, повтор пропускается',
             '',

@@ -12,7 +12,7 @@ namespace MpcServices\Cli;
 class ArgvParser
 {
     /** Опции, которые ВСЕГДА булевы (следующий токен не съедается как значение). */
-    private const BOOL_FLAGS = ['force', 'json', 'dry-run', 'help', 'h', 'quiet', 'yes'];
+    private const BOOL_FLAGS = ['force', 'json', 'dry-run', 'help', 'h', 'quiet', 'yes', 'with-clears'];
 
     /**
      * @param array $argv весь $argv (argv[0] — имя скрипта, игнорируется)
