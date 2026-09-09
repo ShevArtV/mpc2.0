@@ -173,11 +173,13 @@ class LexiconSync
         if ($original === '') {
             return;
         }
-        $existing = $this->readLexicon($this->defaultLang, $identifier);
-        if (array_key_exists($key, $existing)) {
-            return;
-        }
-        $existing[$key] = $original;
-        $this->writeLexicon($this->defaultLang, $identifier, $existing);
+        $this->store->withLock(function () use ($identifier, $key, $original): void {
+            $existing = $this->readLexicon($this->defaultLang, $identifier);
+            if (array_key_exists($key, $existing)) {
+                return;
+            }
+            $existing[$key] = $original;
+            $this->writeLexicon($this->defaultLang, $identifier, $existing);
+        });
     }
 }
