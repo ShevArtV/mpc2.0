@@ -156,6 +156,35 @@ class LexiconBatchService
     }
 
     /**
+     * План доставки из релизного манифеста. Базовые значения фиксируются в
+     * Git вместе с задачей, поэтому CI не подменяет их свежим состоянием
+     * сервера и честно показывает конфликт с правкой менеджера.
+     *
+     * @param array $base    lang => rid => key => value|null
+     * @param array $desired lang => rid => key => value
+     * @return array{ops:array,summary:array,conflicts:array}
+     */
+    public function planRelease(array $base, array $desired): array
+    {
+        $ops = $this->store->withLock(function (LexiconStore $s) use ($base, $desired): array {
+            $current = [];
+            foreach ($desired as $lang => $byRid) {
+                foreach ((array)$byRid as $rid => $_) {
+                    $current[(string)$lang][(string)$rid] = $s->read((string)$lang, (string)$rid);
+                }
+            }
+
+            return LexiconMerge::plan($base, $desired, $current);
+        });
+
+        return [
+            'ops'       => $ops,
+            'summary'   => LexiconMerge::summary($ops),
+            'conflicts' => LexiconMerge::conflicts($ops),
+        ];
+    }
+
+    /**
      * Применить план. Решения по конфликтам (`address => 'mine'|'server'`)
      * пересчитываются на СВЕЖЕМ значении файла: изменилось после показа —
      * запись не делается, запись возвращается как конфликт снова.

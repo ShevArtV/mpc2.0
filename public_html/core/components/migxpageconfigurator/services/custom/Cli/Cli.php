@@ -440,13 +440,19 @@ class Cli
                 return $this->lexiconPlan((string)($args[0] ?? ''), $opts, false, $out);
             case 'apply':
                 return $this->lexiconPlan((string)($args[0] ?? ''), $opts, true, $out);
+            case 'release-plan':
+                return $this->lexiconRelease((string)($args[0] ?? ''), $opts, false, $out);
+            case 'release-apply':
+                return $this->lexiconRelease((string)($args[0] ?? ''), $opts, true, $out);
             case 'prune':
                 return $this->lexiconPrune($opts, $out);
             default:
                 return $out->result([
                     'success' => false,
                     'message' => 'lexicon: export-all | export-untranslated [filename] | list'
-                        . ' | plan <файл.xlsx|zip> | apply <файл.xlsx|zip> --force | prune --lang=ru',
+                        . ' | plan <файл.xlsx|zip> | apply <файл.xlsx|zip> --force'
+                        . ' | release-plan <manifest.json> | release-apply <manifest.json> --force'
+                        . ' | prune --lang=ru',
                 ]);
         }
     }
@@ -507,6 +513,39 @@ class Cli
             'message' => 'записано: ' . (int)$res['applied'] . ', очищено: ' . (int)$res['cleared']
                 . ', конфликтов: ' . count($res['conflicts']) . ', устаревших: ' . count($res['stale']),
             'data'    => $res + $data,
+        ]);
+    }
+
+    /**
+     * Применение task-manifest в CI. Формат намеренно содержит только
+     * `expected` и `desired`: отсутствие адреса ничего не удаляет.
+     */
+    private function lexiconRelease(string $path, array $opts, bool $write, Output $out): int
+    {
+        if ($path === '' || !is_file($path)) {
+            return $out->result(['success' => false, 'message' => 'нужен release manifest: mpc lexicon release-plan <manifest.json>']);
+        }
+        $manifest = json_decode((string)file_get_contents($path), true);
+        if (!is_array($manifest) || !is_array($manifest['expected'] ?? null) || !is_array($manifest['desired'] ?? null)) {
+            return $out->result(['success' => false, 'message' => 'release manifest должен содержать expected и desired']);
+        }
+
+        $service = \MpcServices\Handlers\Lexicon\LexiconBatchService::fromModx($this->modx);
+        $plan = $service->planRelease($manifest['expected'], $manifest['desired']);
+        $data = ['summary' => $plan['summary'], 'conflicts' => $plan['conflicts']];
+        if (!$write || empty($opts['force'])) {
+            return $out->result(['success' => empty($plan['conflicts']), 'message' => 'release-план построен', 'data' => $data]);
+        }
+        if (!empty($plan['conflicts'])) {
+            return $out->result(['success' => false, 'message' => 'release остановлен: есть конфликты', 'data' => $data]);
+        }
+
+        $result = $service->apply($plan['ops'], [], ['tag' => 'release']);
+        $this->modx->getCacheManager()->refresh(['lexicon_topics' => []]);
+        return $out->result([
+            'success' => empty($result['failed']) && empty($result['stale']),
+            'message' => 'release применён: ' . (int)$result['applied'],
+            'data' => $result + $data,
         ]);
     }
 
