@@ -436,9 +436,106 @@ class Cli
             case 'list':
                 $r = $this->modx->runProcessor('lexicons/getlist', [], $pp);
                 return $out->result($this->fromProcessor($r, ''));
+            case 'plan':
+                return $this->lexiconPlan((string)($args[0] ?? ''), $opts, false, $out);
+            case 'apply':
+                return $this->lexiconPlan((string)($args[0] ?? ''), $opts, true, $out);
+            case 'prune':
+                return $this->lexiconPrune($opts, $out);
             default:
-                return $out->result(['success' => false, 'message' => 'lexicon: export-all | export-untranslated [filename] | list']);
+                return $out->result([
+                    'success' => false,
+                    'message' => 'lexicon: export-all | export-untranslated [filename] | list'
+                        . ' | plan <файл.xlsx|zip> | apply <файл.xlsx|zip> --force | prune --lang=ru',
+                ]);
         }
+    }
+
+    /**
+     * Импорт книги из CI/CD. Тот же трёхсторонний план, что в админке
+     * (LexiconBatchService), поэтому релиз и менеджер получают одинаковый
+     * результат. Без --force идёт только план: запись — явное действие.
+     */
+    private function lexiconPlan(string $path, array $opts, bool $write, Output $out): int
+    {
+        if ($path === '' || !is_file($path)) {
+            return $out->result(['success' => false, 'message' => 'нужен путь к файлу книги: mpc lexicon plan <файл.xlsx|zip>']);
+        }
+        $corePath = $this->modx->getOption('migxpageconfigurator_core_path', null,
+            $this->modx->getOption('core_path') . 'components/migxpageconfigurator/');
+        require_once $corePath . 'services/vendor/autoload.php';
+
+        $service = \MpcServices\Handlers\Lexicon\LexiconBatchService::fromModx($this->modx);
+        $sheets  = \MpcServices\Handlers\Lexicon\WorkbookReader::read($path, sys_get_temp_dir());
+        if (empty($sheets)) {
+            return $out->result(['success' => false, 'message' => 'книга не прочитана или пуста']);
+        }
+
+        $snapshotId = \MpcServices\Handlers\Lexicon\LexiconBatchService::snapshotIdFrom($sheets);
+        $plan       = $service->planImport($service->desiredFromPlan($service->sheetPlan($sheets)), $snapshotId);
+        if ($plan['error'] !== '') {
+            return $out->result([
+                'success' => false,
+                'message' => \MpcServices\Handlers\Lexicon\LexiconBatchService::snapshotErrorText($plan['error']),
+            ]);
+        }
+
+        $data = ['summary' => $plan['summary'], 'conflicts' => $plan['conflicts'], 'snapshot' => $plan['snapshot']];
+        if (!$write || empty($opts['force'])) {
+            return $out->result([
+                'success' => true,
+                'message' => $write ? 'план построен; запись требует --force' : 'план построен',
+                'data'    => $data,
+            ]);
+        }
+
+        // Конфликты по умолчанию НЕ решаются автоматически: молчаливый выбор
+        // стороны в релизе — это ровно тот сценарий, из-за которого правки
+        // менеджера и терялись. Разрешить одну сторону можно только явно.
+        $decision   = (string)($opts['conflicts'] ?? '');
+        $resolutions = [];
+        if ($decision === 'mine' || $decision === 'server') {
+            foreach ($plan['conflicts'] as $op) {
+                $resolutions[\MpcServices\Handlers\Lexicon\LexiconBatchService::address($op)] = $decision;
+            }
+        }
+        $res = $service->apply($plan['ops'], $resolutions, ['tag' => 'cli-import']);
+
+        $this->modx->getCacheManager()->refresh(['lexicon_topics' => []]);
+        return $out->result([
+            'success' => empty($res['failed']),
+            'message' => 'записано: ' . (int)$res['applied'] . ', очищено: ' . (int)$res['cleared']
+                . ', конфликтов: ' . count($res['conflicts']) . ', устаревших: ' . count($res['stale']),
+            'data'    => $res + $data,
+        ]);
+    }
+
+    /**
+     * Чистка мёртвых ключей по реестру кандидатов (.orphan). Dry-run всегда,
+     * пока не передан --force: удаление словарных ключей необратимо для
+     * менеджера, поэтому список сначала показывается.
+     */
+    private function lexiconPrune(array $opts, Output $out): int
+    {
+        $lang = (string)($opts['lang'] ?? '');
+        if ($lang === '' || !preg_match('/^[a-z]{2,8}$/', $lang)) {
+            return $out->result(['success' => false, 'message' => 'нужен язык: mpc lexicon prune --lang=ru']);
+        }
+        $corePath = $this->modx->getOption('migxpageconfigurator_core_path', null,
+            $this->modx->getOption('core_path') . 'components/migxpageconfigurator/');
+        require_once $corePath . 'services/vendor/autoload.php';
+
+        $service = \MpcServices\Handlers\Lexicon\LexiconBatchService::fromModx($this->modx);
+        $res     = $service->prune($lang, [], empty($opts['force']), (int)($opts['older-than'] ?? 0));
+
+        $count = empty($opts['force']) ? count($res['candidates']) : (int)$res['cleared'];
+        return $out->result([
+            'success' => true,
+            'message' => empty($opts['force'])
+                ? 'кандидатов на удаление: ' . $count . ' (удаление — с --force)'
+                : 'удалено ключей: ' . $count . ', бэкап: ' . (string)($res['backup'] ?? ''),
+            'data'    => $res,
+        ]);
     }
 
     private function fromProcessor($resp, string $okMsg): array
@@ -483,6 +580,9 @@ class Cli
             '  cache clear [id,…]       — очистить запечённые parsed/ (без id — все)',
             '  theme set <name> [--template=ID] | clear [--template=ID] | status   — переключение темы оформления',
             '  lexicon   export-all | export-untranslated <filename> | list',
+            '  lexicon   plan <файл.xlsx|zip>   — трёхсторонний план импорта книги (ничего не пишет)',
+            '  lexicon   apply <файл.xlsx|zip> --force [--conflicts=mine|server]   — применить план',
+            '  lexicon   prune --lang=ru [--older-than=N] [--force]   — чистка мёртвых ключей по реестру',
             '',
             'Флаги: --dry-run (только план), --force (деструктив), --only=ref (точечно), --json',
         ]);

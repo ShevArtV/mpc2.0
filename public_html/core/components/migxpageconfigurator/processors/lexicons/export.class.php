@@ -53,15 +53,30 @@ class MigxpageconfiguratorLexiconsExportProcessor extends modProcessor
             return strcmp($a, $b);
         });
 
-        // Строки считаем ДО открытия writer: режим probe (лёгкий XHR из UI)
-        // лишь сообщает, есть ли что отдавать — чтобы для «непереведённых» при
-        // пустом результате показать сообщение, а не навигировать на пустой файл.
-        $resourceRows = $this->loadRows($lexiconBase, $filename, $languages);
-        $staticRows   = $this->loadRows($lexiconBase, $staticFile, $languages);
-
+        // Probe (лёгкий XHR из UI): считаем строки прямым чтением файлов —
+        // снимок создавать не нужно, это ещё не настоящая выгрузка книги
+        // (см. exportallinone, там probe тоже отвечает раньше snapshot()).
         if ($this->getProperty('probe')) {
+            $resourceRows = $this->loadRows($this->readLangData($lexiconBase, $filename, $languages), $languages, $filename);
+            $staticRows   = $this->loadRows($this->readLangData($lexiconBase, $staticFile, $languages), $languages, $staticFile);
             return $this->success('', ['found' => count($resourceRows) + count($staticRows)]);
         }
+
+        // Снимок выгружаемых значений: без него импорт этой книги не сможет
+        // отличить правку менеджера от старого значения (см. exportallinone).
+        // Рид покрывает ОБА файла (Resource и Static) сразу — так снимок
+        // остаётся верным паспортом книги независимо от того, попал ли Static
+        // на отдельный лист.
+        $service  = \MpcServices\Handlers\Lexicon\LexiconBatchService::fromModx($this->modx);
+        $snapshot = $service->snapshot(
+            [$filename, $staticFile],
+            $languages,
+            'export',
+            $this->modx->user ? (int)$this->modx->user->get('id') : null
+        );
+
+        $resourceRows = $this->loadRows($snapshot['entries'][$filename] ?? [], $languages, $filename);
+        $staticRows   = $this->loadRows($snapshot['entries'][$staticFile] ?? [], $languages, $staticFile);
 
         // Стримим XLSX прямо в браузер (см. ExportStreamer): публичного файла
         // в assets больше нет — отдача идёт через коннектор с проверкой прав.
@@ -81,6 +96,15 @@ class MigxpageconfiguratorLexiconsExportProcessor extends modProcessor
                 $writer->addNewSheetAndMakeItCurrent()->setName('Static');
                 $this->writeSheet($writer, $staticRows, $languages);
             }
+
+            // Вкладки названы 'Resource'/'Static', а не по rid, поэтому карта
+            // «вкладка → файл лексикона» обязательна: без неё импорт угадывает
+            // адрес по имени листа и на переименованном ресурсе промахнётся.
+            $this->writeManifest($writer, [
+                ['Resource', $filename],
+                ['Static', $staticFile],
+            ]);
+            $this->writeMeta($writer, (string)$snapshot['id']);
         } catch (\Throwable $e) {
             $writer->close(); // уберёт temp-папку writer'а при обрыве
             throw $e;
@@ -89,11 +113,10 @@ class MigxpageconfiguratorLexiconsExportProcessor extends modProcessor
         \MpcServices\Helpers\ExportStreamer::finishAndExit($writer);
     }
 
-    private function loadRows(string $base, string $filename, array $languages): array
+    /** Прямое чтение файлов лексикона — только для probe, снимок там не нужен. */
+    private function readLangData(string $base, string $filename, array $languages): array
     {
-        $defaultLang = $this->modx->getOption('mpc_default_language', null, 'ru');
-        $incFile     = $filename . '.inc.php';
-
+        $incFile  = $filename . '.inc.php';
         $langData = [];
         foreach ($languages as $lang) {
             $_lang    = [];
@@ -103,8 +126,18 @@ class MigxpageconfiguratorLexiconsExportProcessor extends modProcessor
             }
             $langData[$lang] = $_lang;
         }
+        return $langData;
+    }
 
-        $allKeys = array_keys($langData[$defaultLang] ?? []);
+    /**
+     * Строки одной вкладки: [lexicon_key, <по языкам>]. Для реального экспорта
+     * источник значений — снимок (lang => key => value), а не повторное чтение
+     * файлов: книга обязана совпадать со снимком запись в запись (см.
+     * exportallinone). Для probe сюда передаётся результат readLangData().
+     */
+    private function loadRows(array $langData, array $languages, string $filename): array
+    {
+        $allKeys = array_keys($langData[$this->defaultLang] ?? []);
 
         if ($this->onlyUntranslated && $this->pending !== null) {
             $pendingKeys = [];
@@ -157,6 +190,38 @@ class MigxpageconfiguratorLexiconsExportProcessor extends modProcessor
     private function createRow(array $values): \OpenSpout\Common\Entity\Row
     {
         return \OpenSpout\Writer\Common\Creator\WriterEntityFactory::createRowFromArray($values);
+    }
+
+    /** Скрытый служебный лист `__mpc`: карта «вкладка → файл лексикона». */
+    private function writeManifest(\OpenSpout\Writer\XLSX\Writer $writer, array $pairs): void
+    {
+        $sheet = $writer->addNewSheetAndMakeItCurrent();
+        $sheet->setName(\MpcServices\Handlers\LexiconImport::MANIFEST_SHEET);
+        $sheet->setIsVisible(false);
+
+        $writer->addRow($this->createRow(['sheet', 'rid']));
+        foreach ($pairs as $pair) {
+            $writer->addRow($this->createRow($pair));
+        }
+    }
+
+    /**
+     * Скрытый служебный лист `_meta` — паспорт выгрузки для импорта (снимок,
+     * версия формата, время). Формат тот же, что в exportallinone::writeMeta.
+     */
+    private function writeMeta(\OpenSpout\Writer\XLSX\Writer $writer, string $snapshotId): void
+    {
+        $sheet = $writer->addNewSheetAndMakeItCurrent();
+        $sheet->setName(\MpcServices\Handlers\LexiconImport::META_SHEET);
+        $sheet->setIsVisible(false);
+
+        $writer->addRow($this->createRow(['key', 'value']));
+        $writer->addRow($this->createRow(['snapshot_id', $snapshotId]));
+        $writer->addRow($this->createRow([
+            'format_version',
+            (string)\MpcServices\Handlers\Lexicon\SnapshotStore::FORMAT_VERSION,
+        ]));
+        $writer->addRow($this->createRow(['exported_at', date('c')]));
     }
 }
 return 'MigxpageconfiguratorLexiconsExportProcessor';

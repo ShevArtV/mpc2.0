@@ -34,29 +34,47 @@ class MigxpageconfiguratorLexiconsUpdatekeyProcessor extends modProcessor
 
         $lexiconBase = $this->modx->getOption('core_path')
             . $this->modx->getOption('mpc_lexicon_path', null, 'components/migxpageconfigurator/lexicon/');
-        $langDir     = $lexiconBase . $lang . '/';
-        $filePath    = $langDir . $filename . '.inc.php';
 
-        if (!is_dir($langDir)) {
-            mkdir($langDir, 0777, true);
+        $corePath = $this->modx->getOption('migxpageconfigurator_core_path', null,
+            $this->modx->getOption('core_path') . 'components/migxpageconfigurator/');
+        require_once $corePath . 'services/vendor/autoload.php';
+
+        // Запись идёт через общий писатель: та же блокировка и та же сверка
+        // ожидаемого значения, что у импорта книги. Свойство `expected` — то
+        // значение, которое видел менеджер в форме; если файл с тех пор
+        // изменился, правка НЕ применяется и возвращается актуальное значение.
+        $service  = \MpcServices\Handlers\Lexicon\LexiconBatchService::fromModx($this->modx);
+        $store    = $service->store();
+        $hasExpected = $this->getProperty('expected', null) !== null;
+
+        $result = $store->withLock(function ($s) use ($lang, $filename, $key, $value, $hasExpected) {
+            $current = $s->read($lang, $filename);
+            $actual  = array_key_exists($key, $current) ? (string)$current[$key] : null;
+            if ($hasExpected) {
+                $expected = (string)$this->getProperty('expected', '');
+                if ($actual !== $expected) {
+                    return ['stale' => true, 'actual' => $actual];
+                }
+            }
+            $op = [
+                'lang' => $lang, 'rid' => $filename, 'key' => $key,
+                'current' => $actual, 'desired' => $value,
+                'action' => \MpcServices\Handlers\Lexicon\LexiconMerge::isClear($value)
+                    ? \MpcServices\Handlers\Lexicon\LexiconMerge::CLEAR
+                    : \MpcServices\Handlers\Lexicon\LexiconMerge::WRITE,
+                'reason' => 'updatekey',
+            ];
+            return $s->apply([$op], ['tag' => 'updatekey']);
+        });
+
+        if (!empty($result['stale'])) {
+            // Устаревшая форма: значение поменял другой писатель.
+            return $this->failure(
+                $this->modx->lexicon('mpc_err_lexicon_stale'),
+                ['actual' => $result['actual']]
+            );
         }
-
-        $_lang = [];
-        if (file_exists($filePath)) {
-            include $filePath;
-        }
-
-        $_lang[$key] = $value;
-        ksort($_lang);
-
-        $content = '<?php' . PHP_EOL;
-        foreach ($_lang as $k => $v) {
-            // var_export ключа И значения — безопасный PHP-литерал (защита от
-            // инъекции через ключ и поломки файла бэкслешем в значении).
-            $content .= '$_lang[' . var_export((string)$k, true) . '] = '
-                . var_export((string)$v, true) . ';' . PHP_EOL;
-        }
-        if (file_put_contents($filePath, $content, LOCK_EX) === false) {
+        if (!empty($result['failed'])) {
             return $this->failure($this->modx->lexicon('mpc_err_write_failed'));
         }
 

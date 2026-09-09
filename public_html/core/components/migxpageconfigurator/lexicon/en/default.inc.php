@@ -104,6 +104,8 @@ $_lang['mpc_err_zip_create']       = 'Cannot create ZIP archive';
 $_lang['mpc_err_missing_params']   = 'Missing required parameters';
 $_lang['mpc_err_invalid_lang']     = 'Invalid language code';
 $_lang['mpc_err_file_not_found']   = 'File [[+file]] not found, check the filename';
+$_lang['mpc_err_write_failed']     = 'Failed to write the lexicon file';
+$_lang['mpc_err_lexicon_stale']    = 'The value was changed by someone else. Reload the page and repeat your edit.';
 
 $_lang['setting_mpc_edit_mode'] = 'Edit mode (mpcVisualEditor)';
 $_lang['setting_mpc_edit_mode_desc'] = 'When enabled, the cutter also writes _edit variants of section chunks keeping data-mpc-* markers (needed by the mpcVE frontend editor). Re-cut after enabling. Does not affect production render.';

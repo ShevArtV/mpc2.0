@@ -277,6 +277,12 @@ MPC.grid.LexiconKeys = Ext.extend(Ext.grid.EditorGridPanel, {
                     handler: this.importFile,
                     scope:   this,
                 },
+                {
+                    text:    'Мёртвые ключи',
+                    tooltip: 'Ключи, пропавшие из вёрстки. Нарезка их не удаляет — удаление только отсюда',
+                    handler: this.showOrphans,
+                    scope:   this,
+                },
             ],
         });
 
@@ -369,6 +375,10 @@ MPC.grid.LexiconKeys = Ext.extend(Ext.grid.EditorGridPanel, {
         var lang = e.field;
         if (lang === 'key' || lang === 'context') { return; }
 
+        // expected — значение, которое было в ячейке ДО правки. Сервер пишет
+        // только если файл всё ещё содержит его: иначе правку успел сделать
+        // импорт книги или нарезка, и затирать её молча нельзя.
+        var expected = typeof e.originalValue === 'undefined' ? '' : e.originalValue;
         Ext.Ajax.request({
             url:    MPC.config.connector_url,
             params: {
@@ -377,6 +387,16 @@ MPC.grid.LexiconKeys = Ext.extend(Ext.grid.EditorGridPanel, {
                 key:      rec.get('key'),
                 lang:     lang,
                 value:    e.value,
+                expected: expected,
+            },
+            scope: this,
+            success: function (resp) {
+                var o = Ext.decode(resp.responseText);
+                if (o.success) { return; }
+                rec.set(lang, (o.object && typeof o.object.actual !== 'undefined' && o.object.actual !== null)
+                    ? o.object.actual : expected);
+                rec.commit();
+                MODx.msg.alert('Значение не сохранено', o.message || 'Значение изменил кто-то ещё');
             },
             failure: function () {
                 MODx.msg.alert('Ошибка', 'Не удалось сохранить значение');
@@ -551,6 +571,97 @@ MPC.grid.LexiconKeys = Ext.extend(Ext.grid.EditorGridPanel, {
         win.show();
     },
 
+    // Мёртвые ключи: список кандидатов из реестра .orphan. Нарезка их не
+    // удаляет, поэтому удаление живёт здесь — отмеченное удаляется с бэкапом,
+    // а ключ, который после пометки кто-то поправил, сервер пропустит.
+    showOrphans: function () {
+        var grid = this;
+        Ext.Ajax.request({
+            url:    MPC.config.connector_url,
+            params: { action: 'lexicons/orphans', mode: 'list' },
+            success: function (resp) {
+                var o = Ext.decode(resp.responseText);
+                if (!o.success) { MODx.msg.alert('Ошибка', o.message); return; }
+
+                var rows = (o.object && o.object.rows) || [];
+                if (!rows.length) {
+                    MODx.msg.alert('Мёртвые ключи', 'Кандидатов на удаление нет.');
+                    return;
+                }
+                var recs = [];
+                for (var i = 0; i < rows.length; i++) {
+                    var r = rows[i];
+                    recs.push([r.address, r.lang, r.rid, r.key, r.value, r.seen_at]);
+                }
+                var store = new Ext.data.ArrayStore({
+                    fields: ['address', 'lang', 'rid', 'key', 'value', 'seen_at'],
+                    data:   recs,
+                });
+                var sm = new Ext.grid.CheckboxSelectionModel();
+                var ogrid = new Ext.grid.GridPanel({
+                    store: store, sm: sm, border: false, autoScroll: true,
+                    colModel: new Ext.grid.ColumnModel({ columns: [
+                        sm,
+                        { header: 'Язык', dataIndex: 'lang', width: 50 },
+                        { header: 'Файл', dataIndex: 'rid',  width: 90 },
+                        { header: 'Ключ', dataIndex: 'key',  width: 200, renderer: Ext.util.Format.htmlEncode },
+                        { header: 'Значение', dataIndex: 'value', width: 320, renderer: Ext.util.Format.htmlEncode },
+                        { header: 'Пропал из вёрстки', dataIndex: 'seen_at', width: 150 },
+                    ]}),
+                });
+
+                var win = new Ext.Window({
+                    title:  'Мёртвые ключи — ' + rows.length,
+                    modal:  true, width: 900, height: 480, layout: 'fit', items: [ogrid],
+                    buttons: [
+                        {
+                            text: 'Удалить отмеченные',
+                            cls:  'primary-button',
+                            handler: function () {
+                                var sel = sm.getSelections();
+                                if (!sel.length) {
+                                    MODx.msg.alert('Внимание', 'Отметьте ключи для удаления');
+                                    return;
+                                }
+                                var addresses = [];
+                                for (var k = 0; k < sel.length; k++) { addresses.push(sel[k].get('address')); }
+                                MODx.msg.confirm({
+                                    title: 'Удаление ключей',
+                                    text:  'Удалить отмеченных ключей: ' + addresses.length
+                                        + '? Копия словаря сохраняется на сервере.',
+                                    handler: function (btn) {
+                                        if (btn !== 'yes') { return; }
+                                        Ext.Ajax.request({
+                                            url:    MPC.config.connector_url,
+                                            params: {
+                                                action:    'lexicons/orphans',
+                                                mode:      'prune',
+                                                addresses: Ext.encode(addresses),
+                                            },
+                                            success: function (r2) {
+                                                var o2 = Ext.decode(r2.responseText);
+                                                win.close();
+                                                if (!o2.success) { MODx.msg.alert('Ошибка', o2.message); return; }
+                                                if (grid.currentFile) {
+                                                    grid.loadFile(grid.currentFile, grid.activeLanguages);
+                                                }
+                                                MODx.msg.status({ title: 'Готово', message: o2.message });
+                                            },
+                                            failure: function () { MODx.msg.alert('Ошибка', 'Запрос не выполнен'); },
+                                        });
+                                    },
+                                });
+                            },
+                        },
+                        { text: 'Закрыть', handler: function () { win.close(); } },
+                    ],
+                });
+                win.show();
+            },
+            failure: function () { MODx.msg.alert('Ошибка', 'Запрос не выполнен'); },
+        });
+    },
+
     // Превью импорта: план «вкладка → ресурс» с галочками, ремапом нераспознанных
     // вкладок и счётчиками; запись только после «Импортировать выбранное».
     showImportPreview: function (data) {
@@ -560,10 +671,12 @@ MPC.grid.LexiconKeys = Ext.extend(Ext.grid.EditorGridPanel, {
         var recs = [];
         for (var i = 0; i < plan.length; i++) {
             var p = plan[i];
-            recs.push([p.id, p.sheet, p.file, p.target, p.recognized, p.langs, p.keys, p['new'], p.changed]);
+            recs.push([p.id, p.sheet, p.file, p.target, p.recognized, p.langs, p.keys,
+                p.apply, p.clear, p.noop, p.skip, p.conflicts]);
         }
         var store = new Ext.data.ArrayStore({
-            fields: ['id', 'sheet', 'file', 'target', 'recognized', 'langs', 'keys', 'new', 'changed'],
+            fields: ['id', 'sheet', 'file', 'target', 'recognized', 'langs', 'keys',
+                'apply', 'clear', 'noop', 'skip', 'conflicts'],
             data:   recs,
         });
 
@@ -605,20 +718,83 @@ MPC.grid.LexiconKeys = Ext.extend(Ext.grid.EditorGridPanel, {
                                  : '<span style="color:#c00">выберите ресурс…</span>';
                     },
                 },
-                { header: 'Ключей',   dataIndex: 'keys',    width: 60 },
-                { header: 'Новых',    dataIndex: 'new',     width: 60 },
-                { header: 'Изменён.', dataIndex: 'changed', width: 70 },
-                { header: 'Языки',    dataIndex: 'langs',   width: 90 },
+                { header: 'Ключей',    dataIndex: 'keys',      width: 60 },
+                { header: 'Запишем',   dataIndex: 'apply',     width: 70 },
+                { header: 'Очистим',   dataIndex: 'clear',     width: 70 },
+                { header: 'Без изм.',  dataIndex: 'noop',      width: 70 },
+                { header: 'Пропуск',   dataIndex: 'skip',      width: 70 },
+                {
+                    header: 'Конфликты', dataIndex: 'conflicts', width: 80,
+                    renderer: function (v) {
+                        return v > 0 ? '<span style="color:#c00">' + v + '</span>' : v;
+                    },
+                },
+                { header: 'Языки',     dataIndex: 'langs',     width: 90 },
+            ]}),
+        });
+
+        // Конфликты: строки, где книга и сервер разошлись независимо. Показываем
+        // все три значения (было при выгрузке / сейчас на сервере / предлагается)
+        // и требуем решения по каждой — молча писать поверх чужой правки нельзя.
+        var conflicts = data.conflicts || [];
+        var cRecs = [];
+        for (var c = 0; c < conflicts.length; c++) {
+            var cf = conflicts[c];
+            cRecs.push([cf.address, cf.lang, cf.rid, cf.key, cf.base, cf.current, cf.desired, cf.reason, '']);
+        }
+        var cStore = new Ext.data.ArrayStore({
+            fields: ['address', 'lang', 'rid', 'key', 'base', 'current', 'desired', 'reason', 'decision'],
+            data:   cRecs,
+        });
+        var decisionCombo = new Ext.form.ComboBox({
+            store: new Ext.data.ArrayStore({
+                fields: ['value', 'label'],
+                data:   [['', 'не решено — пропустить'], ['mine', 'взять из файла'], ['server', 'оставить на сервере']],
+            }),
+            displayField:   'label',
+            valueField:     'value',
+            mode:           'local',
+            triggerAction:  'all',
+            editable:       false,
+            forceSelection: true,
+        });
+        var cellText = function (v) {
+            if (v === null || typeof v === 'undefined') { return '<span style="color:#888">— нет ключа —</span>'; }
+            return Ext.util.Format.htmlEncode(v);
+        };
+        var cgrid = new Ext.grid.EditorGridPanel({
+            store:        cStore,
+            clicksToEdit: 1,
+            autoScroll:   true,
+            border:       false,
+            title:        'Конфликты — требуется решение (' + cRecs.length + ')',
+            colModel: new Ext.grid.ColumnModel({ columns: [
+                { header: 'Язык', dataIndex: 'lang', width: 50 },
+                { header: 'Файл', dataIndex: 'rid',  width: 90 },
+                { header: 'Ключ', dataIndex: 'key',  width: 160, renderer: Ext.util.Format.htmlEncode },
+                { header: 'Было при выгрузке', dataIndex: 'base',    width: 200, renderer: cellText },
+                { header: 'Сейчас на сервере', dataIndex: 'current', width: 200, renderer: cellText },
+                { header: 'Предлагается',      dataIndex: 'desired', width: 200, renderer: cellText },
+                { header: 'Решение', dataIndex: 'decision', width: 170, editor: decisionCombo,
+                  renderer: function (v) {
+                      if (v === 'mine')   { return 'взять из файла'; }
+                      if (v === 'server') { return 'оставить на сервере'; }
+                      return '<span style="color:#c00">не решено</span>';
+                  },
+                },
             ]}),
         });
 
         var win = new Ext.Window({
             title:  'Импорт — предпросмотр и подтверждение',
             modal:  true,
-            width:  820,
-            height: 470,
-            layout: 'fit',
-            items:  [pgrid],
+            width:  980,
+            height: cRecs.length ? 640 : 470,
+            layout: 'border',
+            items:  cRecs.length
+                ? [Ext.apply(pgrid, { region: 'center' }),
+                   Ext.apply(cgrid, { region: 'south', height: 220, split: true })]
+                : [Ext.apply(pgrid, { region: 'center' })],
             buttons: [
                 {
                     text: 'Импортировать выбранное',
@@ -639,13 +815,22 @@ MPC.grid.LexiconKeys = Ext.extend(Ext.grid.EditorGridPanel, {
                             }
                             selections.push({ id: sel[k].get('id'), target: t });
                         }
+                        // Вместе с решением шлём значение, которое менеджеру
+                        // ПОКАЗАЛИ: если файл переписали, пока окно было
+                        // открыто, сервер вернёт строку конфликтом снова.
+                        var resolutions = {};
+                        cStore.each(function (rec) {
+                            var d = rec.get('decision');
+                            if (d) { resolutions[rec.get('address')] = { decision: d, seen: rec.get('current') }; }
+                        });
                         Ext.Ajax.request({
                             url:     MPC.config.connector_url,
                             params:  {
                                 action:     'lexicons/import',
                                 mode:       'apply',
-                                token:      data.token,
-                                selections: Ext.encode(selections),
+                                token:       data.token,
+                                selections:  Ext.encode(selections),
+                                resolutions: Ext.encode(resolutions),
                             },
                             timeout: 120000,
                             success: function (resp) {

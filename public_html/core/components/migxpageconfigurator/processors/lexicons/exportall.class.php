@@ -62,6 +62,18 @@ class MigxpageconfiguratorLexiconsExportallProcessor extends modProcessor
             return $this->failure($this->modx->lexicon('mpc_err_no_lexicons'));
         }
 
+        // Один снимок на всю выгрузку: все ресурсы этого ZIP описывают одно и
+        // то же состояние словаря, поэтому им нужен ОДИН snapshot_id — тот же
+        // паспорт кладём в каждую книгу архива (см. exportallinone).
+        $rids     = array_map(static fn($f) => basename($f, '.inc.php'), $files);
+        $service  = \MpcServices\Handlers\Lexicon\LexiconBatchService::fromModx($this->modx);
+        $snapshot = $service->snapshot(
+            $rids,
+            $languages,
+            'exportall',
+            $this->modx->user ? (int)$this->modx->user->get('id') : null
+        );
+
         // ZIP собираем во временный файл (ZipArchive умеет писать только в
         // реальный путь) в системном temp, затем стримим в браузер и удаляем —
         // публичного файла в assets нет (см. ExportStreamer, закрывает S9).
@@ -81,7 +93,13 @@ class MigxpageconfiguratorLexiconsExportallProcessor extends modProcessor
         try {
             foreach ($files as $file) {
                 $name    = basename($file, '.inc.php');
-                $content = $this->generateExcel($lexiconBase, $name, $languages, $defaultLang);
+                $content = $this->generateExcel(
+                    $snapshot['entries'][$name] ?? [],
+                    $languages,
+                    $defaultLang,
+                    (string)$snapshot['id'],
+                    $name
+                );
                 if ($content !== null) {
                     $zip->addFromString($name . '.xlsx', $content);
                 }
@@ -96,43 +114,32 @@ class MigxpageconfiguratorLexiconsExportallProcessor extends modProcessor
         \MpcServices\Helpers\ExportStreamer::streamFileAndExit($zipPath, $zipFilename, 'application/zip');
     }
 
+    /**
+     * Книга одного ресурса. Значения — из снимка (lang => key => value), а не
+     * из повторного чтения файлов: книга обязана совпадать со снимком запись
+     * в запись (см. exportallinone). Пустой снимок (ключей в default-языке
+     * нет) — как и раньше, файл в архив не кладём.
+     */
     private function generateExcel(
-        string $base,
-        string $filename,
+        array  $langData,
         array  $languages,
-        string $defaultLang
+        string $defaultLang,
+        string $snapshotId,
+        string $rid
     ): ?string {
-        $incFile     = $filename . '.inc.php';
-        $defaultFile = $base . $defaultLang . '/' . $incFile;
-        if (!file_exists($defaultFile)) {
-            return null;
-        }
-
-        $_lang = [];
-        include $defaultFile;
-        $allKeys = array_keys($_lang);
+        $allKeys = array_keys($langData[$defaultLang] ?? []);
         if (empty($allKeys)) {
             return null;
-        }
-        $defaultData = $_lang;
-
-        $langData = [$defaultLang => $defaultData];
-        foreach ($languages as $lang) {
-            if ($lang === $defaultLang) {
-                continue;
-            }
-            $_lang    = [];
-            $langFile = $base . $lang . '/' . $incFile;
-            if (file_exists($langFile)) {
-                include $langFile;
-            }
-            $langData[$lang] = $_lang;
         }
 
         $tmpFile = tempnam(sys_get_temp_dir(), 'mpc_xlsx_');
 
         $writer = \OpenSpout\Writer\Common\Creator\WriterEntityFactory::createXLSXWriter();
         $writer->openToFile($tmpFile);
+        // Имя вкладки по общему правилу экспорта и импорта (лимит 31 символ,
+        // хеш-хвост), точный адрес — в скрытом манифесте ниже.
+        $sheetName = \MpcServices\Handlers\LexiconImport::sheetNameFor($rid);
+        $writer->getCurrentSheet()->setName($sheetName);
 
         // Header
         $header = array_merge(['lexicon_key'], $languages);
@@ -147,6 +154,9 @@ class MigxpageconfiguratorLexiconsExportallProcessor extends modProcessor
             $writer->addRow($this->createRow($values));
         }
 
+        $this->writeManifest($writer, $sheetName, $rid);
+        $this->writeMeta($writer, $snapshotId);
+
         $writer->close();
 
         $content = file_get_contents($tmpFile);
@@ -158,6 +168,37 @@ class MigxpageconfiguratorLexiconsExportallProcessor extends modProcessor
     private function createRow(array $values): \OpenSpout\Common\Entity\Row
     {
         return \OpenSpout\Writer\Common\Creator\WriterEntityFactory::createRowFromArray($values);
+    }
+
+    /** Скрытый служебный лист `__mpc`: карта «вкладка → файл лексикона». */
+    private function writeManifest(\OpenSpout\Writer\XLSX\Writer $writer, string $sheetName, string $rid): void
+    {
+        $sheet = $writer->addNewSheetAndMakeItCurrent();
+        $sheet->setName(\MpcServices\Handlers\LexiconImport::MANIFEST_SHEET);
+        $sheet->setIsVisible(false);
+
+        $writer->addRow($this->createRow(['sheet', 'rid']));
+        $writer->addRow($this->createRow([$sheetName, $rid]));
+    }
+
+    /**
+     * Скрытый служебный лист `_meta` — паспорт выгрузки для импорта (снимок,
+     * версия формата, время). Формат тот же, что в exportallinone::writeMeta;
+     * snapshot_id один на весь ZIP — во все книги пишется одно и то же значение.
+     */
+    private function writeMeta(\OpenSpout\Writer\XLSX\Writer $writer, string $snapshotId): void
+    {
+        $sheet = $writer->addNewSheetAndMakeItCurrent();
+        $sheet->setName(\MpcServices\Handlers\LexiconImport::META_SHEET);
+        $sheet->setIsVisible(false);
+
+        $writer->addRow($this->createRow(['key', 'value']));
+        $writer->addRow($this->createRow(['snapshot_id', $snapshotId]));
+        $writer->addRow($this->createRow([
+            'format_version',
+            (string)\MpcServices\Handlers\Lexicon\SnapshotStore::FORMAT_VERSION,
+        ]));
+        $writer->addRow($this->createRow(['exported_at', date('c')]));
     }
 }
 return 'MigxpageconfiguratorLexiconsExportallProcessor';

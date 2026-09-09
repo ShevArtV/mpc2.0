@@ -28,6 +28,8 @@ class LexiconImport
 
     /** Имя служебного (скрытого) листа-манифеста «вкладка → файл лексикона». */
     public const MANIFEST_SHEET = '__mpc';
+    /** Имя служебного (скрытого) листа с паспортом выгрузки. */
+    public const META_SHEET = '_meta';
     /** Жёсткий лимит Excel на длину имени листа. */
     private const SHEET_NAME_LIMIT = 31;
     /** Длина hex-хвоста sha1 в укороченном имени листа. */
@@ -91,6 +93,48 @@ class LexiconImport
             $map[mb_strtolower($sheet, 'UTF-8')] = $rid;
         }
         return $map;
+    }
+
+    /**
+     * Разбор листа-паспорта (`_meta`, колонки `key | value`) в карту полей
+     * выгрузки: snapshot_id, format_version, exported_at.
+     *
+     * Паспорт — то, что делает импорт трёхсторонним: по snapshot_id сервер
+     * поднимает СВОЙ снимок выгруженных значений и отличает правку менеджера от
+     * просто старого значения в файле. Нет паспорта — нет и слепого импорта.
+     * PURE.
+     */
+    public static function parseMeta(array $headers, array $rows): array
+    {
+        $keyIdx = null;
+        $valIdx = null;
+        foreach ($headers as $i => $h) {
+            $hl = mb_strtolower(trim((string)$h), 'UTF-8');
+            if (($hl === 'key' || $hl === 'ключ') && $keyIdx === null) {
+                $keyIdx = (int)$i;
+            } elseif (($hl === 'value' || $hl === 'значение') && $valIdx === null) {
+                $valIdx = (int)$i;
+            }
+        }
+        if ($keyIdx === null || $valIdx === null) {
+            return [];
+        }
+
+        $out = [];
+        foreach ($rows as $r) {
+            $k = mb_strtolower(trim((string)($r[$keyIdx] ?? '')), 'UTF-8');
+            if ($k === '') {
+                continue;
+            }
+            $out[$k] = trim((string)($r[$valIdx] ?? ''));
+        }
+        return $out;
+    }
+
+    /** Служебный лист (паспорт или манифест) — данными не является. */
+    public static function isServiceSheet(string $sheetName): bool
+    {
+        return $sheetName === self::MANIFEST_SHEET || $sheetName === self::META_SHEET;
     }
 
     /**

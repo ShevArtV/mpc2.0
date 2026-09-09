@@ -19,6 +19,8 @@ class LexiconWriter
     private \modX $modx;
     private LexiconManager $lm;
     private string $basePath;
+    private \MpcServices\Handlers\Lexicon\LexiconStore $store;
+    private string $lang;
 
     /**
      * @param array $properties culture, corePath, lexiconPath, lexiconFilenameField,
@@ -36,6 +38,10 @@ class LexiconWriter
             'allowModxTags'        => $properties['allowModxTags'] ?? false,
             'useLexicons'          => true,
         ]);
+        // Запись — через общий писатель словаря: та же блокировка и та же
+        // атомарная запись, что у импорта книги и нарезки.
+        $this->lang  = basename(rtrim($this->basePath, '/'));
+        $this->store = new \MpcServices\Handlers\Lexicon\LexiconStore(dirname(rtrim($this->basePath, '/')));
     }
 
     /** Идентификатор файла лексикона ресурса (id/alias/uri — как в гребере). */
@@ -72,23 +78,16 @@ class LexiconWriter
         if ($identifier === '' || $key === '') {
             return false;
         }
-        $entries = $this->lm->getLexicons($identifier, $this->basePath);
-        $entries[$key] = $value;
 
-        $content = '<?php' . PHP_EOL;
-        foreach ($entries as $k => $v) {
-            // var_export для ключа И значения: всегда синтаксически корректный
-            // PHP-литерал с экранированием ' и \. Ручная сборка '$_lang[\'k\']'
-            // допускала инъекцию PHP-кода через ключ и поломку файла бэкслешем
-            // в значении (sanitizeValue экранирует ' но не \).
-            $content .= '$_lang[' . var_export((string)$k, true) . '] = '
-                . var_export($this->lm->sanitizeValue((string)$v), true) . ';' . PHP_EOL;
-        }
-
-        if (!is_dir($this->basePath)) {
-            @mkdir($this->basePath, 0755, true);
-        }
-        $ok = file_put_contents($this->basePath . $identifier . '.inc.php', $content, LOCK_EX) !== false;
+        // Читаем и пишем под ОДНОЙ блокировкой: между чтением и записью в файл
+        // мог написать импорт книги, и его правка исчезла бы молча.
+        $ok = $this->store->withLock(function ($s) use ($identifier, $key, $value): bool {
+            $entries       = $s->read($this->lang, $identifier);
+            // Санитизуется только записываемое значение: остальные ключи файла
+            // свой санитайз уже прошли.
+            $entries[$key] = $this->lm->sanitizeValue($value);
+            return $s->write($this->lang, $identifier, $entries);
+        });
 
         // Сброс кэша лексиконов — best-effort, на результат записи не влияет.
         if ($ok) {

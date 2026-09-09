@@ -21,10 +21,9 @@ class LexiconManagerTest extends TestCase
 
     protected function tearDown(): void
     {
-        foreach (glob($this->tmpDir . '/*') as $f) {
-            unlink($f);
-        }
-        rmdir($this->tmpDir);
+        // removeTree, а не glob+unlink: нарезка теперь заводит подкаталог
+        // .orphan с реестром кандидатов на удаление.
+        $this->removeTree($this->tmpDir);
         foreach ($this->scratchDirs as $dir) {
             $this->removeTree($dir);
         }
@@ -931,15 +930,73 @@ class LexiconManagerTest extends TestCase
         $this->assertStringContainsString('$_lang[\'hero_text\'] = \'It&apos;s great\';', $content);
     }
 
-    public function testCreateLexiconsDeletesFileForEmptyLexicons(): void
+    /**
+     * Ключ нарезанной секции, пропавший из вёрстки, остаётся в файле и
+     * попадает в реестр кандидатов на удаление; ключ без известного префикса
+     * (ручной или чужой) остаётся, но кандидатом не становится.
+     */
+    public function testCreateLexiconsRecordsOrphanCandidatesInsteadOfDeleting(): void
+    {
+        $m = $this->makeManager();
+        $m->setKnownPrefixes(['hero']);
+        $m->setContext('hero', false);
+
+        $file = $this->tmpDir . '/55.inc.php';
+        file_put_contents(
+            $file,
+            "<?php\n\$_lang['hero_title'] = 'Заголовок';\n"
+            . "\$_lang['hero_gone'] = 'Ушло из вёрстки';\n"
+            . "\$_lang['manual_note'] = 'Ручной ключ';\n"
+        );
+
+        $m->createLexicons(['55' => ['hero_title' => 'Заголовок']]);
+
+        $_lang = [];
+        include $file;
+        $this->assertSame('Ушло из вёрстки', $_lang['hero_gone'], 'ключ не удаляется молча');
+        $this->assertSame('Ручной ключ', $_lang['manual_note']);
+
+        $registry = new \MpcServices\Handlers\Lexicon\OrphanRegistry(dirname($this->tmpDir));
+        $entries  = $registry->load(basename($this->tmpDir), '55');
+        $this->assertSame(['hero_gone'], array_keys($entries));
+        $this->assertSame('Ушло из вёрстки', $entries['hero_gone']['value']);
+    }
+
+    /** Вернувшийся в вёрстку ключ снимается с учёта кандидатов. */
+    public function testCreateLexiconsForgetsCandidateWhenKeyReturns(): void
+    {
+        $m = $this->makeManager();
+        $m->setKnownPrefixes(['hero']);
+        $m->setContext('hero', false);
+
+        $file = $this->tmpDir . '/56.inc.php';
+        file_put_contents($file, "<?php\n\$_lang['hero_gone'] = 'Ушло';\n");
+        $m->createLexicons(['56' => []]);
+
+        $registry = new \MpcServices\Handlers\Lexicon\OrphanRegistry(dirname($this->tmpDir));
+        $this->assertNotEmpty($registry->load(basename($this->tmpDir), '56'));
+
+        $m->createLexicons(['56' => ['hero_gone' => 'Вернулось']]);
+        $this->assertSame([], $registry->load(basename($this->tmpDir), '56'));
+    }
+
+    /**
+     * Пустой набор НЕ удаляет словарь ресурса: сбой разбора вёрстки или
+     * страница без переводимых полей сносили файл целиком вместе с принятыми
+     * переводами (инцидент 01.09.2026).
+     */
+    public function testCreateLexiconsKeepsFileForEmptyLexicons(): void
     {
         $filePath = $this->tmpDir . '/page99.inc.php';
-        file_put_contents($filePath, '<?php $_lang["key"] = "val";');
+        file_put_contents($filePath, "<?php\n\$_lang['key'] = 'val';\n");
 
         $m = $this->makeManager();
         $m->createLexicons(['page99' => []]);
 
-        $this->assertFileDoesNotExist($filePath);
+        $this->assertFileExists($filePath);
+        $_lang = [];
+        include $filePath;
+        $this->assertSame('val', $_lang['key']);
     }
 
     public function testCreateLexiconsIncPhpIsLoadable(): void
@@ -1123,10 +1180,11 @@ class LexiconManagerTest extends TestCase
 
     /**
      * Без overwrite: значение живого поля сохраняется (не перезаписывается
-     * шаблоном); новый ключ берёт значение из шаблона; ключ удалённого поля
-     * (нет в текущей нарезке) ВЫПАДАЕТ — иначе orphan маскировал бы новое значение.
+     * шаблоном); новый ключ берёт значение из шаблона; ключ поля, ушедшего из
+     * вёрстки, ОСТАЁТСЯ в файле — удаление стало отдельным явным действием,
+     * а нарезка только помечает такой ключ кандидатом.
      */
-    public function testCreateLexiconsPreservesLiveDropsOrphanWithoutOverwrite(): void
+    public function testCreateLexiconsPreservesLiveAndKeepsOrphanWithoutOverwrite(): void
     {
         $lm = $this->makeManager();
         $file = $this->tmpDir . '/7.inc.php';
@@ -1139,7 +1197,7 @@ class LexiconManagerTest extends TestCase
         include $file;
         $this->assertSame('admin перевод', $_lang['k_shared']);    // живое → значение сохранено
         $this->assertSame('новое поле', $_lang['k_new']);          // новое → из шаблона
-        $this->assertArrayNotHasKey('k_old', $_lang);              // удалённое поле → orphan выпал
+        $this->assertSame('удалённое поле', $_lang['k_old']);      // ушло из вёрстки → значение цело
     }
 
     /**
@@ -1217,8 +1275,11 @@ class LexiconManagerTest extends TestCase
         $lm->createLexicons(['7' => ['title' => 'Заголовок', 'lead' => 'Лид', 'cta' => 'Кнопка']], true);
 
         $pending = new \MpcServices\Handlers\PendingTranslations($base);
-        // lead/cta — новые (не было в en) → pending; title уже переведён → нет
-        $this->assertSame(['lead', 'cta'], $pending->load('en', '7'));
+        // lead/cta — новые (не было в en) → pending; title уже переведён → нет.
+        // Порядок задаёт файл дефолтного языка, а он пишется отсортированным.
+        $actual = $pending->load('en', '7');
+        sort($actual);
+        $this->assertSame(['cta', 'lead'], $actual);
         // en-файл получил все ключи (новые — плейсхолдер дефолта)
         $_lang = [];
         include $base . 'en/7.inc.php';

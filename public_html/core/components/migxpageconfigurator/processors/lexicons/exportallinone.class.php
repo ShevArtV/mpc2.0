@@ -62,12 +62,24 @@ class MigxpageconfiguratorLexiconsExportallinoneProcessor extends modProcessor
 
         $context = new \MpcServices\Handlers\LexiconContext($this->modx);
 
+        // Снимок выгружаемых значений: без него импорт этой книги не сможет
+        // отличить правку менеджера от старого значения и затрёт чужие тексты.
+        // Строки вкладок берём ИЗ снимка — так книга и снимок гарантированно
+        // описывают одно и то же состояние, даже если кто-то пишет параллельно.
+        $service  = \MpcServices\Handlers\Lexicon\LexiconBatchService::fromModx($this->modx);
+        $snapshot = $service->snapshot(
+            $files,
+            $languages,
+            'exportallinone',
+            $this->modx->user ? (int)$this->modx->user->get('id') : null
+        );
+
         // Строки собираем ДО открытия writer: openToBrowser шлёт заголовки сразу,
         // поэтому решение «есть ли что отдавать» принимаем заранее.
         $sheets         = [];
         $usedSheetNames = [];
         foreach ($files as $rid) {
-            $rows = $this->loadRows($lexiconBase, $rid, $languages, $defaultLang, $context);
+            $rows = $this->loadRows($snapshot['entries'][$rid] ?? [], $languages, $defaultLang, $context);
             if (empty($rows)) {
                 continue;
             }
@@ -109,6 +121,7 @@ class MigxpageconfiguratorLexiconsExportallinoneProcessor extends modProcessor
                 $this->writeSheet($writer, $s['rows'], $languages);
             }
             $this->writeManifest($writer, $sheets);
+            $this->writeMeta($writer, (string)$snapshot['id']);
         } catch (\Throwable $e) {
             $writer->close(); // уберёт temp-папку writer'а при обрыве
             throw $e;
@@ -159,26 +172,17 @@ class MigxpageconfiguratorLexiconsExportallinoneProcessor extends modProcessor
         return $rids;
     }
 
-    /** Строки одной вкладки: [Контекст, key, <по языкам>]. */
+    /**
+     * Строки одной вкладки: [Контекст, key, <по языкам>].
+     * Источник значений — снимок (lang => key => value), а не повторное чтение
+     * файлов: книга обязана совпадать со снимком запись в запись.
+     */
     private function loadRows(
-        string $base,
-        string $rid,
+        array $langData,
         array $languages,
         string $defaultLang,
         \MpcServices\Handlers\LexiconContext $context
     ): array {
-        $incFile = $rid . '.inc.php';
-
-        $langData = [];
-        foreach ($languages as $lang) {
-            $_lang    = [];
-            $langFile = $base . $lang . '/' . $incFile;
-            if (file_exists($langFile)) {
-                include $langFile;
-            }
-            $langData[$lang] = is_array($_lang) ? $_lang : [];
-        }
-
         $allKeys = array_keys($langData[$defaultLang] ?? []);
         $rows    = [];
         foreach ($allKeys as $key) {
@@ -254,6 +258,29 @@ class MigxpageconfiguratorLexiconsExportallinoneProcessor extends modProcessor
         foreach ($sheets as $s) {
             $writer->addRow($this->createRow([$s['name'], $s['rid']]));
         }
+    }
+
+    /**
+     * Скрытый служебный лист `_meta`: паспорт выгрузки (идентификатор снимка,
+     * версия формата, время). Импорт по нему поднимает снимок и сравнивает три
+     * стороны — снимок, книгу и текущее состояние файлов.
+     *
+     * Идентификатор снимка НЕ является авторизацией: права и область проверяет
+     * процессор импорта, здесь это только адрес записи.
+     */
+    private function writeMeta(\OpenSpout\Writer\XLSX\Writer $writer, string $snapshotId): void
+    {
+        $sheet = $writer->addNewSheetAndMakeItCurrent();
+        $sheet->setName(\MpcServices\Handlers\LexiconImport::META_SHEET);
+        $sheet->setIsVisible(false);
+
+        $writer->addRow($this->createRow(['key', 'value'], $this->headerStyle()));
+        $writer->addRow($this->createRow(['snapshot_id', $snapshotId]));
+        $writer->addRow($this->createRow([
+            'format_version',
+            (string)\MpcServices\Handlers\Lexicon\SnapshotStore::FORMAT_VERSION,
+        ]));
+        $writer->addRow($this->createRow(['exported_at', date('c')]));
     }
 
     /**

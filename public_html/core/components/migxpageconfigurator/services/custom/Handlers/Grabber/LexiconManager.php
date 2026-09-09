@@ -34,6 +34,9 @@ class LexiconManager
     /** Попытка построить реестр уже была (второй раз не читаем диск и БД). */
     private bool $prefixRegistryAttempted = false;
 
+    /** Префиксы секций, обработанные текущим проходом нарезки: prefix => true. */
+    private array $processedPrefixes = [];
+
     public function __construct(\modX $modx, array $properties)
     {
         $this->modx       = $modx;
@@ -79,6 +82,12 @@ class LexiconManager
     {
         $this->sectionLexiconPrefix = $prefix;
         $this->sectionIsStatic      = $isStatic;
+        if ($prefix !== '') {
+            // Префиксы, которые этот проход реально нарезал. Только их ключи
+            // createLexicons вправе считать «пропавшими из вёрстки»; чужие
+            // секции и ручные ключи проход не видел и судить о них не может.
+            $this->processedPrefixes[$prefix] = true;
+        }
 
         if (!$isStatic || $isCopy || $prefix === '') {
             return;
@@ -600,42 +609,55 @@ class LexiconManager
     public function createLexicons(array $allLexicons, bool $overwrite = true): void
     {
         $basePathToLexiconFile = $this->properties['basePathToLexiconFile'];
+        // basePathToLexiconFile — всегда каталог ОДНОГО языка, поэтому язык и
+        // корень словаря берутся из самого пути.
+        $lang  = basename(rtrim($basePathToLexiconFile, '/'));
+        $store = new \MpcServices\Handlers\Lexicon\LexiconStore(dirname(rtrim($basePathToLexiconFile, '/')));
 
-        foreach ($allLexicons as $rid => $lexicons) {
-            $pathToLexiconFile = $basePathToLexiconFile . $rid . '.inc.php';
-            if (!$overwrite && file_exists($pathToLexiconFile)) {
-                // Без updContent: сохраняем ЗНАЧЕНИЯ существующих переводов, но
-                // ТОЛЬКО для ключей, которые ещё есть в текущей нарезке (поле
-                // живо). Ключи удалённых полей НЕ переносим — иначе orphan-перевод
-                // оставался бы в файле и маскировал новое значение при повторном
-                // добавлении поля. Новые поля берут значение из шаблона.
-                $_lang = [];
-                include $pathToLexiconFile;
-                if (is_array($_lang)) {
+        // Нарезка — такой же писатель словаря, как импорт XLSX и правка ключа,
+        // поэтому идёт под ОБЩЕЙ блокировкой и пишет атомарно (temp + rename).
+        // Иначе параллельный импорт читал бы файл в момент перезаписи.
+        $store->withLock(function () use ($allLexicons, $overwrite, $basePathToLexiconFile, $lang, $store): void {
+            foreach ($allLexicons as $rid => $lexicons) {
+                $pathToLexiconFile = $basePathToLexiconFile . $rid . '.inc.php';
+                // Санитизируем ТОЛЬКО свежую нарезку: значения, уже лежащие в
+                // файле, прошли санитайз при своей записи, а повторный проход
+                // по ним менял бы чужие тексты без причины.
+                $lexicons = array_map(function ($v): string {
+                    return $this->sanitizeValue((string)$v);
+                }, $lexicons);
+                // Ключи, которых нарезка не встретила, БОЛЬШЕ НЕ УДАЛЯЮТСЯ: файл
+                // пересобирался целиком, и переводы принятых, но не затронутых этим
+                // проходом ключей исчезали вместе с ним (инцидент 01.09.2026 —
+                // потерянный набор ключей на живом сервере). Такие ключи остаются в
+                // файле, а те из них, что принадлежат нарезанным секциям,
+                // записываются кандидатами на удаление; чистит их отдельное явное
+                // действие с бэкапом.
+                $lexicons = $this->keepUntouchedKeys($pathToLexiconFile, $lexicons, (string)$rid);
+                if (!$overwrite && file_exists($pathToLexiconFile)) {
+                    // Без updContent: сохраняем ЗНАЧЕНИЯ существующих переводов, но
+                    // ТОЛЬКО для ключей, которые ещё есть в текущей нарезке (поле
+                    // живо). Ключи полей, ушедших из вёрстки, сюда уже добавил
+                    // keepUntouchedKeys со своими прежними значениями — они
+                    // сохраняются и помечены кандидатами на удаление.
+                    // Новые поля берут значение из шаблона.
+                    $existing = $store->read($lang, (string)$rid);
                     foreach ($lexicons as $k => $v) {
-                        if (array_key_exists($k, $_lang)) {
-                            $lexicons[$k] = $_lang[$k];
+                        if (array_key_exists($k, $existing)) {
+                            $lexicons[$k] = $existing[$k];
                         }
                     }
                 }
-            }
 
-            if (!empty($lexicons)) {
-                $content = '<?php' . PHP_EOL;
-                foreach ($lexicons as $k => $v) {
-                    // var_export ключа И значения — безопасный PHP-литерал (см.
-                    // LexiconWriter::set): защита от инъекции через ключ и поломки
-                    // файла бэкслешем в значении.
-                    $content .= '$_lang[' . var_export((string)$k, true) . '] = '
-                        . var_export($this->sanitizeValue($v), true) . ';' . PHP_EOL;
+                if (!empty($lexicons)) {
+                    // var_export ключа И значения делает LexiconStore.
+                    $store->write($lang, (string)$rid, $lexicons);
                 }
-                file_put_contents($pathToLexiconFile, $content, LOCK_EX);
-            } else {
-                if (file_exists($pathToLexiconFile)) {
-                    unlink($pathToLexiconFile);
-                }
+                // Пустой набор больше НЕ удаляет файл: раньше сбой разбора вёрстки
+                // или страница без переводимых полей сносили словарь ресурса
+                // целиком. Нечего писать — файл остаётся как есть.
             }
-        }
+        });
 
         // Синк остальных языков (mpc_available_languages): набор ключей приводится
         // к дефолтному, существующие переводы сохраняются, НОВЫЕ ключи получают
@@ -688,22 +710,87 @@ class LexiconManager
         }
     }
 
-    /** Записать лексиконы в файл (или удалить файл, если массив пуст). */
-    private function writeLexiconFile(string $path, array $lexicons): void
+    /**
+     * Переносит в новый набор ключи, которые уже лежат в файле, но в этом
+     * проходе нарезки не встретились.
+     *
+     * Ключ, принадлежащий нарезанной секции (правило «самого длинного известного
+     * префикса», то же, что у wipe статики), отмечается кандидатом на удаление:
+     * поле, похоже, ушло из вёрстки. Ключ БЕЗ такого префикса — ручной или
+     * чужой, и кандидатом не становится вовсе. Удаление в обоих случаях —
+     * отдельное явное действие, здесь только пометка.
+     *
+     * @return array новый набор ключей файла (нарезанные + сохранённые)
+     */
+    private function keepUntouchedKeys(string $path, array $lexicons, string $rid): array
     {
-        if (empty($lexicons)) {
-            if (is_file($path)) {
-                unlink($path);
+        if (!is_file($path)) {
+            return $lexicons;
+        }
+        $_lang = [];
+        include $path;
+        if (!is_array($_lang) || empty($_lang)) {
+            return $lexicons;
+        }
+
+        $candidates = [];
+        $revived    = [];
+        foreach ($_lang as $key => $value) {
+            if (array_key_exists($key, $lexicons)) {
+                $revived[] = (string)$key; // поле снова в вёрстке
+                continue;
             }
+            $lexicons[$key] = $value;
+            $prefix = $this->owningProcessedPrefix((string)$key);
+            if ($prefix !== null) {
+                $candidates[(string)$key] = (string)$value;
+            }
+        }
+
+        $this->updateOrphanRegistry($path, $rid, $candidates, $revived);
+        return $lexicons;
+    }
+
+    /**
+     * Префикс нарезанной секции, которому принадлежит ключ, или null. Реестр
+     * префиксов обязателен: без него «принадлежность» вырождается в сравнение
+     * начала строки и ключ соседней секции с более длинным префиксом попал бы
+     * в кандидаты на удаление.
+     */
+    private function owningProcessedPrefix(string $key): ?string
+    {
+        if (empty($this->processedPrefixes) || !$this->ensurePrefixRegistry()) {
+            return null;
+        }
+        foreach (array_keys($this->processedPrefixes) as $prefix) {
+            if ($this->ownsLexiconKey($key, (string)$prefix)) {
+                return (string)$prefix;
+            }
+        }
+        return null;
+    }
+
+    /** Отметить кандидатов и снять с учёта вернувшиеся в вёрстку ключи. */
+    private function updateOrphanRegistry(string $path, string $rid, array $candidates, array $revived): void
+    {
+        if (empty($candidates) && empty($revived)) {
             return;
         }
-        $content = '<?php' . PHP_EOL;
-        foreach ($lexicons as $k => $v) {
-            // var_export ключа И значения — безопасный PHP-литерал (см. выше).
-            $content .= '$_lang[' . var_export((string)$k, true) . '] = '
-                . var_export($this->sanitizeValue($v), true) . ';' . PHP_EOL;
+        // basePathToLexiconFile всегда указывает на каталог одного языка,
+        // поэтому язык и корень словаря достаём из пути файла.
+        $lang = basename(dirname($path));
+        $base = dirname(dirname($path));
+        if ($lang === '' || $base === '') {
+            return;
         }
-        file_put_contents($path, $content, LOCK_EX);
+
+        $registry = new \MpcServices\Handlers\Lexicon\OrphanRegistry($base);
+        if (!empty($candidates)) {
+            $registry->record($lang, $rid, $candidates);
+        }
+        if (!empty($revived)) {
+            $registry->forget($lang, $rid, $revived);
+        }
     }
 
     /**
