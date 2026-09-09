@@ -16,12 +16,40 @@ class LexiconManagerTest extends TestCase
         mkdir($this->tmpDir, 0777, true);
     }
 
+    /** Каталоги вёрстки, созданные тестом реестра префиксов. */
+    private array $scratchDirs = [];
+
     protected function tearDown(): void
     {
         foreach (glob($this->tmpDir . '/*') as $f) {
             unlink($f);
         }
         rmdir($this->tmpDir);
+        foreach ($this->scratchDirs as $dir) {
+            $this->removeTree($dir);
+        }
+        $this->scratchDirs = [];
+    }
+
+    private function removeTree(string $dir): void
+    {
+        if (!is_dir($dir)) {
+            return;
+        }
+        @chmod($dir, 0777);
+        foreach (scandir($dir) ?: [] as $entry) {
+            if ($entry === '.' || $entry === '..') {
+                continue;
+            }
+            $path = $dir . '/' . $entry;
+            if (is_dir($path)) {
+                $this->removeTree($path);
+                continue;
+            }
+            @chmod($path, 0666);
+            @unlink($path);
+        }
+        @rmdir($dir);
     }
 
     private function makeManager(array $extraProps = []): LexiconManager
@@ -515,6 +543,172 @@ class LexiconManagerTest extends TestCase
         $m->setContext('difference', true);
 
         $this->assertEquals($this->siblingLexicons(), $m->lexicons['static']);
+    }
+
+    // ---------------------------------------------------------------
+    // Неполный реестр префиксов: ошибка источника ≠ пустой результат
+    // ---------------------------------------------------------------
+
+    /** Каталог вёрстки с одним шаблоном на секцию. */
+    private function makeTemplateDir(array $prefixesByFile): string
+    {
+        $dir = sys_get_temp_dir() . '/mpc_test_tpl_' . uniqid();
+        mkdir($dir, 0777, true);
+        $this->scratchDirs[] = $dir;
+        foreach ($prefixesByFile as $file => $prefix) {
+            file_put_contents(
+                $dir . '/' . $file,
+                '<section data-mpc-lexicon="' . $prefix . '" data-mpc-static="1"></section>'
+            );
+        }
+
+        return $dir;
+    }
+
+    /** modX, у которого манифест трекаемых полей читается успешно. */
+    private function modxWithTracked(array $prefixes): \modX
+    {
+        return new class($prefixes) extends ModxStub {
+            private array $prefixes;
+
+            public function __construct(array $prefixes)
+            {
+                parent::__construct();
+                $this->prefixes = $prefixes;
+            }
+
+            public function exec(string $sql): int
+            {
+                return 0;
+            }
+
+            public function query(string $sql): object
+            {
+                return new class($this->prefixes) {
+                    private array $rows;
+
+                    public function __construct(array $rows)
+                    {
+                        $this->rows = $rows;
+                    }
+
+                    public function fetchAll(int $mode = 0): array
+                    {
+                        return $this->rows;
+                    }
+                };
+            }
+        };
+    }
+
+    private function foreignKeyLexicons(): array
+    {
+        return [
+            'x_title'   => 'своё значение',
+            'x_y_title' => 'EDITOR VALUE',
+        ];
+    }
+
+    /**
+     * Скан вёрстки непустой, а манифест трекаемых полей прочитать не удалось
+     * (`ModxStub` не умеет exec/query). До правки ошибка приходила пустым
+     * массивом, реестр объявлялся полным по одной вёрстке — и `x` сносил чужой
+     * `x_y_title`. Теперь чистки нет вовсе.
+     */
+    public function testTrackedManifestFailureBlocksWipe(): void
+    {
+        $dir = $this->makeTemplateDir(['x.tpl' => 'x']);
+        $m = $this->makeManager([
+            'pdotoolsElementsPath' => $dir . '/',
+            'pathToSrc'            => '',
+        ]);
+        $m->lexicons['static'] = $this->foreignKeyLexicons();
+
+        $m->setContext('x', true);
+
+        $this->assertEquals($this->foreignKeyLexicons(), $m->lexicons['static']);
+        $this->assertSame([], $m->getKnownPrefixes());
+    }
+
+    /**
+     * Манифест читается, но один шаблон недоступен: реестр всё равно неполон —
+     * секции из непрочитанного файла в нём нет, и её ключи снёс бы сосед.
+     */
+    public function testUnreadableTemplateBlocksWipe(): void
+    {
+        $dir = $this->makeTemplateDir(['x.tpl' => 'x', 'y.tpl' => 'x_y']);
+        chmod($dir . '/y.tpl', 0000);
+        if (is_readable($dir . '/y.tpl')) {
+            $this->markTestSkipped('права на файл не действуют (запуск под root)');
+        }
+
+        $manager = new LexiconManager($this->modxWithTracked(['x']), [
+            'useLexicons'                     => true,
+            'excludeLexiconFields'            => [],
+            'lexiconFilenameField'            => 'id',
+            'staticBlocksPageLexiconFilename' => 'static',
+            'basePathToLexiconFile'           => $this->tmpDir . '/',
+            'pdotoolsElementsPath'            => $dir . '/',
+            'pathToSrc'                       => '',
+        ]);
+        $manager->lexicons['static'] = $this->foreignKeyLexicons();
+
+        $manager->setContext('x', true);
+
+        $this->assertEquals($this->foreignKeyLexicons(), $manager->lexicons['static']);
+    }
+
+    /** Нечитаемая подпапка вёрстки роняет обход — тот же неполный реестр. */
+    public function testUnreadableTemplateSubdirectoryBlocksWipe(): void
+    {
+        $dir = $this->makeTemplateDir(['x.tpl' => 'x']);
+        $nested = $dir . '/nested';
+        mkdir($nested, 0777, true);
+        file_put_contents($nested . '/y.tpl', '<section data-mpc-lexicon="x_y"></section>');
+        chmod($nested, 0000);
+        if (is_readable($nested)) {
+            $this->markTestSkipped('права на каталог не действуют (запуск под root)');
+        }
+
+        $manager = new LexiconManager($this->modxWithTracked(['x']), [
+            'useLexicons'                     => true,
+            'excludeLexiconFields'            => [],
+            'lexiconFilenameField'            => 'id',
+            'staticBlocksPageLexiconFilename' => 'static',
+            'basePathToLexiconFile'           => $this->tmpDir . '/',
+            'pdotoolsElementsPath'            => $dir . '/',
+            'pathToSrc'                       => '',
+        ]);
+        $manager->lexicons['static'] = $this->foreignKeyLexicons();
+
+        $manager->setContext('x', true);
+
+        $this->assertEquals($this->foreignKeyLexicons(), $manager->lexicons['static']);
+    }
+
+    /**
+     * Оба источника отработали — реестр полон, чистка идёт: своё поле уходит,
+     * чужое остаётся. Контрольный тест к трём предыдущим: они доказывают отказ
+     * от чистки, этот — что отказ не превратился в «не чистим никогда».
+     */
+    public function testCompleteRegistryWipesOwnKeysOnly(): void
+    {
+        $dir = $this->makeTemplateDir(['x.tpl' => 'x', 'y.tpl' => 'x_y']);
+        $manager = new LexiconManager($this->modxWithTracked(['x', 'x_y']), [
+            'useLexicons'                     => true,
+            'excludeLexiconFields'            => [],
+            'lexiconFilenameField'            => 'id',
+            'staticBlocksPageLexiconFilename' => 'static',
+            'basePathToLexiconFile'           => $this->tmpDir . '/',
+            'pdotoolsElementsPath'            => $dir . '/',
+            'pathToSrc'                       => '',
+        ]);
+        $manager->lexicons['static'] = $this->foreignKeyLexicons();
+
+        $manager->setContext('x', true);
+
+        $this->assertArrayNotHasKey('x_title', $manager->lexicons['static']);
+        $this->assertEquals('EDITOR VALUE', $manager->lexicons['static']['x_y_title']);
     }
 
     // ---------------------------------------------------------------

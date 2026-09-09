@@ -165,10 +165,17 @@ class LexiconManager
      *  2) сохранённые префиксы манифеста `mpc_tracked_fields` — секции, которых
      *     в текущем дереве шаблонов может уже не быть.
      *
-     * Скан вёрстки пустой (каталога нет, доступ закрыт) — реестр считаем
-     * неполным и возвращаем false: чистка не идёт, устаревшие ключи переживут
-     * прогон. Это осознанный размен: лишний ключ безвреден, потерянный перевод
-     * не восстановить.
+     * Реестр считается полным, только если ОБА источника отработали без ошибок.
+     * Ошибка любого из них (каталога вёрстки нет, отдельный шаблон не читается,
+     * запрос к манифесту упал) и пустой скан вёрстки дают false: чистка не идёт,
+     * устаревшие ключи переживут прогон. Это осознанный размен — лишний ключ
+     * безвреден, потерянный перевод не восстановить.
+     *
+     * ⚠️ Отличать «источник вернул пусто» от «источник не смог ответить»
+     * обязательно: пока `prefixes()` глушила ошибку пустым массивом, сбой чтения
+     * манифеста выглядел как «сохранённых префиксов нет», реестр объявлялся
+     * полным по одной вёрстке и чужой ключ `x_y_title` при известном только `x`
+     * уходил под нож. Поэтому оба сборщика отдают `null` на ошибке.
      */
     private function ensurePrefixRegistry(): bool
     {
@@ -178,16 +185,38 @@ class LexiconManager
         $this->prefixRegistryAttempted = true;
 
         $fromTemplates = $this->collectTemplatePrefixes();
-        if (!$fromTemplates) {
+        if ($fromTemplates === null) {
+            $this->modx->log(
+                \modX::LOG_LEVEL_WARN,
+                '[mpc lexicon] вёрстку прочитать не удалось — реестр префиксов неполон,'
+                . ' чистка статик-ключей пропущена'
+            );
+            return false;
+        }
+        if ($fromTemplates === []) {
             $this->modx->log(
                 \modX::LOG_LEVEL_WARN,
                 '[mpc lexicon] реестр префиксов секций пуст — чистка статик-ключей пропущена'
             );
             return false;
         }
+
+        $fromTracked = $this->collectTrackedPrefixes();
+        if ($fromTracked === null) {
+            $this->modx->log(
+                \modX::LOG_LEVEL_WARN,
+                '[mpc lexicon] манифест трекаемых полей недоступен — реестр префиксов неполон,'
+                . ' чистка статик-ключей пропущена'
+            );
+            return false;
+        }
+
         $registry = $fromTemplates;
-        foreach ($this->collectTrackedPrefixes() as $prefix) {
-            $registry[$prefix] = true;
+        foreach ($fromTracked as $prefix) {
+            $prefix = trim((string)$prefix);
+            if ($prefix !== '') {
+                $registry[$prefix] = true;
+            }
         }
         $this->knownPrefixes = $registry;
         return true;
@@ -199,13 +228,20 @@ class LexiconManager
      * неоправдан. Префикс секции = `data-mpc-lexicon`, при его отсутствии —
      * `data-mpc-section` (тот же фолбэк, что в `SectionProcessor::grabSection`),
      * поэтому собираем оба маркера.
+     *
+     * `null` — обход НЕ УДАЛСЯ целиком или частично: каталога нет, итератор
+     * упал на нечитаемой подпапке, отдельный шаблон не прочитался. Частично
+     * прочитанный каталог — тот же неполный реестр, что и полностью нечитаемый:
+     * секции из пропущенного файла в нём не окажется, и её ключи снесёт сосед с
+     * более коротким префиксом. Пустой файл ошибкой не считается — там просто
+     * нет маркеров.
      */
-    private function collectTemplatePrefixes(): array
+    private function collectTemplatePrefixes(): ?array
     {
         $dir = (string)($this->properties['pdotoolsElementsPath'] ?? '')
             . (string)($this->properties['pathToSrc'] ?? '');
         if ($dir === '' || !is_dir($dir)) {
-            return [];
+            return null;
         }
         $prefixes = [];
         try {
@@ -216,8 +252,16 @@ class LexiconManager
                 if (!$file->isFile()) {
                     continue;
                 }
-                $html = @file_get_contents($file->getPathname());
-                if ($html === false || $html === '') {
+                $path = $file->getPathname();
+                $html = @file_get_contents($path);
+                if ($html === false) {
+                    $this->modx->log(
+                        \modX::LOG_LEVEL_WARN,
+                        '[mpc lexicon] шаблон не прочитан: ' . $path
+                    );
+                    return null;
+                }
+                if ($html === '') {
                     continue;
                 }
                 if (!preg_match_all(
@@ -236,18 +280,23 @@ class LexiconManager
             }
         } catch (\Throwable $ex) {
             $this->modx->log(\modX::LOG_LEVEL_WARN, '[mpc lexicon] обход вёрстки: ' . $ex->getMessage());
-            return [];
+            return null;
         }
         return $prefixes;
     }
 
-    /** Сохранённые префиксы манифеста трекаемых полей; недоступен — пустой список. */
-    private function collectTrackedPrefixes(): array
+    /**
+     * Сохранённые префиксы манифеста трекаемых полей. `null` — манифест
+     * недоступен (в отличие от пустого массива «манифест пуст»); по `null`
+     * вызывающий обязан признать реестр неполным.
+     */
+    private function collectTrackedPrefixes(): ?array
     {
         try {
             return (new \MpcServices\Handlers\TrackedFields($this->modx))->prefixes();
         } catch (\Throwable $ex) {
-            return [];
+            $this->modx->log(\modX::LOG_LEVEL_WARN, '[mpc lexicon] манифест трекаемых полей: ' . $ex->getMessage());
+            return null;
         }
     }
 

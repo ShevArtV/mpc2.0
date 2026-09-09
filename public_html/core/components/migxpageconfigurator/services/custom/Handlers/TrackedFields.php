@@ -30,10 +30,10 @@ class TrackedFields
         $this->table = $modx->getOption('table_prefix', null, 'modx_') . 'mpc_tracked_fields';
     }
 
-    private function ensureTable(): void
+    private function ensureTable(): bool
     {
         if (self::$ensured) {
-            return;
+            return true;
         }
         try {
             $this->modx->exec(
@@ -53,6 +53,8 @@ class TrackedFields
         } catch (\Throwable $ex) {
             $this->modx->log(\modX::LOG_LEVEL_WARN, '[mpc tracked_fields] ensureTable: ' . $ex->getMessage());
         }
+
+        return self::$ensured;
     }
 
     /**
@@ -113,15 +115,30 @@ class TrackedFields
      * Нужны нарезке как часть реестра известных префиксов: секции, которой уже
      * нет в текущем дереве шаблонов, иначе в реестре не будет, и её ключи снесёт
      * чистка соседа с более коротким префиксом.
+     *
+     * `null` — прочитать манифест НЕ УДАЛОСЬ (таблицы нет и создать не вышло,
+     * запрос упал). Пустой массив — манифест прочитан и пуст. Разница
+     * принципиальна: по `null` нарезка обязана считать реестр неполным и
+     * отказаться от чистки, иначе ошибка чтения выглядела бы как «префиксов нет»
+     * и чужие ключи ушли бы под нож.
      */
-    public function prefixes(): array
+    public function prefixes(): ?array
     {
-        $this->ensureTable();
+        if (!$this->ensureTable()) {
+            return null; // таблицы нет и создать не вышло — о префиксах ничего не известно
+        }
         try {
             $stmt = $this->modx->query("SELECT DISTINCT lexicon_prefix FROM {$this->table} WHERE lexicon_prefix <> ''");
-            return $stmt ? ($stmt->fetchAll(\PDO::FETCH_COLUMN) ?: []) : [];
+            if (!$stmt) {
+                return null;
+            }
+            $rows = $stmt->fetchAll(\PDO::FETCH_COLUMN);
+
+            return $rows === false ? null : $rows;
         } catch (\Throwable $ex) {
-            return [];
+            $this->modx->log(\modX::LOG_LEVEL_WARN, '[mpc tracked_fields] prefixes: ' . $ex->getMessage());
+
+            return null;
         }
     }
 
