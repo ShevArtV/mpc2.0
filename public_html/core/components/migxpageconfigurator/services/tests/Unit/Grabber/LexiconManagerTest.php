@@ -86,6 +86,93 @@ class LexiconManagerTest extends TestCase
     // ---------------------------------------------------------------
 
     // ---------------------------------------------------------------
+    // Нарезка в культуре перевода — #2609-155
+    // ---------------------------------------------------------------
+
+    /** Менеджер, пишущий в культуру перевода: язык записи ≠ язык вёрстки. */
+    private function makeForeignCultureManager(): LexiconManager
+    {
+        return $this->makeManager([
+            'baseLanguageKey'    => 'en',
+            'defaultLanguageKey' => 'de',
+        ]);
+    }
+
+    public function testForeignCultureKeepsOwnTranslationInsteadOfMarkupValue(): void
+    {
+        file_put_contents(
+            $this->tmpDir . '/42.inc.php',
+            "<?php\n\$_lang['hero_title'] = 'Deutscher Titel';\n"
+        );
+
+        $m = $this->makeForeignCultureManager();
+        $m->setContext('hero', false);
+        $m->setLexicons('English title', ['fieldName' => 'title']);
+
+        $this->assertSame('Deutscher Titel', $m->lexicons['42']['hero_title']);
+    }
+
+    public function testForeignCultureDoesNotWriteKeyTranslatedAtTypeLevel(): void
+    {
+        $m = $this->makeForeignCultureManager();
+        $m->setCultureBaseline(['hero_title']);
+        $m->setContext('hero', false);
+
+        // Ключ вернулся плейсхолдером — чанк остаётся лексиконным…
+        $this->assertSame('hero_title', $m->setLexicons('English title', ['fieldName' => 'title']));
+        // …но ресурсный словарь культуры его не получает: на рендере он перебил
+        // бы перевод из словаря типа страницы английским значением вёрстки.
+        $this->assertSame([], $m->lexicons);
+        $this->assertSame([], $m->getTouchedLexicons());
+    }
+
+    public function testForeignCultureWritesKeyUnknownToThisCulture(): void
+    {
+        $m = $this->makeForeignCultureManager();
+        $m->setCultureBaseline(['other_title']);
+        $m->setContext('hero', false);
+        $m->setLexicons('English title', ['fieldName' => 'title']);
+
+        // Перебивать нечего: без записи страница показывала бы голый ключ.
+        $this->assertSame('English title', $m->lexicons['42']['hero_title']);
+    }
+
+    public function testBaseCultureStillTakesValueFromMarkup(): void
+    {
+        file_put_contents(
+            $this->tmpDir . '/42.inc.php',
+            "<?php\n\$_lang['hero_title'] = 'Old title';\n"
+        );
+
+        $m = $this->makeManager(['baseLanguageKey' => 'en', 'defaultLanguageKey' => 'en']);
+        $m->setCultureBaseline(['hero_title']);
+        $m->setContext('hero', false);
+        $m->setLexicons('English title', ['fieldName' => 'title']);
+
+        $this->assertSame('English title', $m->lexicons['42']['hero_title']);
+    }
+
+    public function testForeignCultureDoesNotSyncOtherLanguages(): void
+    {
+        $base = $this->tmpDir . '/de/';
+        mkdir($base, 0777, true);
+
+        $m = $this->makeManager([
+            'baseLanguageKey'       => 'en',
+            'defaultLanguageKey'    => 'de',
+            'basePathToLexiconFile' => $base,
+            'corePath'              => $this->tmpDir . '/',
+            'lexiconPath'           => '',
+        ]);
+        $m->createLexicons(['42' => ['hero_title' => 'Deutscher Titel']]);
+
+        $this->assertFileExists($base . '42.inc.php');
+        // Перевод одной культуры не растекается по остальным языкам.
+        $this->assertDirectoryDoesNotExist($this->tmpDir . '/en');
+        $this->assertDirectoryDoesNotExist($this->tmpDir . '/fi');
+    }
+
+    // ---------------------------------------------------------------
     // getTouchedLexicons() — #2609-151
     // ---------------------------------------------------------------
 
