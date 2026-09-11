@@ -6,6 +6,7 @@
 
 namespace MpcServices\Plugins;
 
+use MpcServices\Handlers\Grabber\LexiconPrefixMatcher;
 use MpcServices\Mpc;
 
 /**
@@ -43,11 +44,30 @@ class OnDocFormSave extends PluginHandler
             // Имя файла типа: новое каноничное поле file_name (mpc_type),
             // фоллбэк на introtext для ещё не перенарезанных типов.
             $fileName = $typeResource->get('file_name') ?: $typeResource->get('introtext');
-            $Mpc->cutter->staticSectionNames = $Mpc->grabber->staticSectionNames = $Mpc->cutter->getStaticSectionNames($this->scriptProperties['id']);
+
+            /* Сам ли сохраняемый ресурс — тип страницы. Проверяем по class_key, а
+             * не по родителю: контекстные клоны типов лежат под клоном коллекции
+             * (у latam-ex это 25320, а не 472), поэтому поиск типа по parent из
+             * настройки всегда отдаёт веб-оригинал, и сравнение id для клона врёт.
+             * Типу наследовать не от кого — ресурсный словарь за него не пишем:
+             * алиас у клона тот же, что у оригинала, и запись уходила прямиком в
+             * словарь типа страницы (#2609-151). */
+            $rid = (int)$this->scriptProperties['id'];
+            $isTypeItself = $this->scriptProperties['resource']->get('class_key') === 'mpcType'
+                || (int)$typeResource->get('id') === $rid;
+
+            /* Конфиг, которым страница рендерится: тип — база, ресурс перекрывает
+             * одноимённые секции (как в Render::parseConfig). Решение о статике
+             * писатель и читатель обязаны принимать по одному конфигу. */
+            $config = $isTypeItself
+                ? $Mpc->cutter->getSectionConfig($rid)
+                : $Mpc->cutter->getMergedSectionConfig((int)$typeResource->get('id'), $rid);
+
+            $Mpc->cutter->staticSectionNames = $Mpc->grabber->staticSectionNames = $Mpc->cutter->getStaticSectionNamesFromConfig($config);
             $Mpc->handleFile($fileName);
 
-            if($typeResource->get('id') !== $this->scriptProperties['id']){
-                $this->manageResourceLexicons($this->scriptProperties['resource'], $Mpc, $typeResource->get('id'));
+            if (!$isTypeItself) {
+                $this->manageResourceLexicons($this->scriptProperties['resource'], $Mpc, $config);
             }
         }
         if ($this->scriptProperties['id'] === $Mpc->grabber->properties['staticBlocksPageId']) {
@@ -86,9 +106,17 @@ class OnDocFormSave extends PluginHandler
             return;
         }
         $lexiconsFiltered[$staticBlocksPageLexiconFilename] = [];
-        $config = json_decode($config, true);
+        $config = json_decode($config, true) ?: [];
+        // Реестр — префиксы всех секций этой же страницы: `features` не должна
+        // забирать ключи соседней `features_aula`, иначе одна и та же запись
+        // попадает в выдачу дважды и владелец ключа зависит от порядка обхода.
+        $matcher = new LexiconPrefixMatcher($this->collectPrefixes($config));
         foreach ($config as $item) {
-            $result = $this->filterByPrefix($lexicons[$staticBlocksPageLexiconFilename], $item['lexicon_prefix'] ?? $item['MIGX_formname']);
+            $prefix = (string)($item['lexicon_prefix'] ?? $item['MIGX_formname'] ?? '');
+            if ($prefix === '') {
+                continue;
+            }
+            $result = $matcher->filter($lexicons[$staticBlocksPageLexiconFilename], $prefix);
             $lexiconsFiltered[$staticBlocksPageLexiconFilename] = array_merge($result, $lexiconsFiltered[$staticBlocksPageLexiconFilename]);
         }
 
@@ -112,9 +140,18 @@ class OnDocFormSave extends PluginHandler
             return;
         }
         $lexiconsFiltered[$contactsPageLexiconFilename] = [];
-        $config = json_decode($contacts, true);
+        $config = json_decode($contacts, true) ?: [];
+        $prefixes = [];
         foreach ($config as $item) {
-            $result = $this->filterByPrefix($lexicons[$contactsPageLexiconFilename], 'contact_'.$item['ckey']);
+            if (!empty($item['ckey'])) {
+                $prefixes[] = 'contact_' . $item['ckey'];
+            }
+        }
+        // Тот же спор коротких и длинных ключей, что у секций: `contact_phone`
+        // не должен забирать ключи `contact_phone_extra`, если такой контакт есть.
+        $matcher = new LexiconPrefixMatcher($prefixes);
+        foreach ($prefixes as $prefix) {
+            $result = $matcher->filter($lexicons[$contactsPageLexiconFilename], $prefix);
             $lexiconsFiltered[$contactsPageLexiconFilename] = array_merge($result, $lexiconsFiltered[$contactsPageLexiconFilename]);
         }
 
@@ -122,33 +159,41 @@ class OnDocFormSave extends PluginHandler
     }
 
     /**
+     * Разложить свежие ключи страницы по словарям: статичные секции — в словарь
+     * типов страниц, остальные — в словарь ресурса.
+     *
+     * Источник ключей — только то, что записал ЭТОТ прогон нарезки
+     * (`getTouchedLexicons`). Раньше фильтровался `array_merge` по всем
+     * `grabber->lexicons`, куда при инициализации граббера предзагружается
+     * `page-types.inc.php` культуры целиком — словарь всех лендингов сразу, и его
+     * ключи уезжали в словарь сохраняемой страницы (#2609-151).
+     *
      * @param \modResource $resource
      * @param Mpc $Mpc
-     * @param int $typeResourceId
+     * @param array $config конфиг секций страницы (тип + ресурс поверх)
      * @return void
      */
-    private function manageResourceLexicons(\modResource $resource, Mpc $Mpc, int $typeResourceId): void
+    private function manageResourceLexicons(\modResource $resource, Mpc $Mpc, array $config): void
     {
-        if (!$Mpc->grabber->properties['useLexicons']) {
+        if (!$Mpc->grabber->properties['useLexicons'] || empty($config)) {
             return;
         }
 
-        if (!$config = $resource->getTVValue($Mpc->grabber->properties['commonConfigTvName'])) {
-            return;
-        }
-        $config = json_decode($config, true);
         $resourceLexiconFilename = $Mpc->grabber->getResourceIdentifierById($resource->get('id'));
-        $typeResourceLexiconFilename = $Mpc->grabber->getResourceIdentifierById($typeResourceId);
         $staticBlocksPageLexiconFilename = $Mpc->grabber->properties['staticBlocksPageLexiconFilename'];
         $lexicons[$resourceLexiconFilename] = $Mpc->grabber->getLexicons($resourceLexiconFilename, $Mpc->grabber->properties['basePathToLexiconFile']);
         $lexicons[$staticBlocksPageLexiconFilename] = $Mpc->grabber->getLexicons($staticBlocksPageLexiconFilename, $Mpc->grabber->properties['basePathToLexiconFile']);
 
-        $allGrabberLexicons = array_merge(...array_values($Mpc->grabber->lexicons ?: [[]]));
+        $freshLexicons = $Mpc->grabber->getTouchedLexicons();
+        $matcher = $this->getPrefixMatcher($Mpc, $config);
 
         foreach ($config as $item) {
-            $prefix = $item['lexicon_prefix'] ?? $item['MIGX_formname'];
-            $result = $this->filterByPrefix($allGrabberLexicons, $prefix);
-            if ($item['is_static']) {
+            $prefix = $item['lexicon_prefix'] ?? $item['MIGX_formname'] ?? '';
+            if ($prefix === '') {
+                continue;
+            }
+            $result = $matcher->filter($freshLexicons, $prefix);
+            if (!empty($item['is_static'])) {
                 $lexicons[$staticBlocksPageLexiconFilename] = array_merge($result, $lexicons[$staticBlocksPageLexiconFilename]);
                 // Секция статична → её переводы живут на уровне page-types. При
                 // рендере ресурсный лексикон перебивает page-types (resource > type
@@ -159,7 +204,7 @@ class OnDocFormSave extends PluginHandler
                 // диска (выше), а createLexicons перепишет файл этим массивом.
                 $lexicons[$resourceLexiconFilename] = array_diff_key(
                     $lexicons[$resourceLexiconFilename],
-                    $this->filterByPrefix($lexicons[$resourceLexiconFilename], $prefix)
+                    $matcher->filter($lexicons[$resourceLexiconFilename], $prefix)
                 );
             } else {
                 $lexicons[$resourceLexiconFilename] = array_merge($result, $lexicons[$resourceLexiconFilename]);
@@ -169,14 +214,40 @@ class OnDocFormSave extends PluginHandler
     }
 
     /**
-     * @param array $array
-     * @param string $prefix
-     * @return array
+     * Матчер префиксов с реестром всех известных секций: конфиг страницы плюс
+     * конфиг страницы статичных блоков. Без реестра граница ключа не спасает —
+     * `features_aula_title` начинается с `features_`, но принадлежит секции
+     * `features_aula`, и только более длинный известный префикс это показывает.
+     *
+     * @param Mpc $Mpc
+     * @param array $config конфиг секций страницы
+     * @return LexiconPrefixMatcher
      */
-    private function filterByPrefix(array $array, string $prefix): array
+    private function getPrefixMatcher(Mpc $Mpc, array $config): LexiconPrefixMatcher
     {
-        return array_filter($array, function ($key) use ($prefix) {
-            return strpos($key, $prefix) === 0;
-        }, ARRAY_FILTER_USE_KEY);
+        $prefixes = $this->collectPrefixes($config);
+        $staticConfig = $Mpc->grabber->getSectionConfig((int)$Mpc->grabber->properties['staticBlocksPageId']);
+        $prefixes = array_merge($prefixes, $this->collectPrefixes($staticConfig));
+
+        return new LexiconPrefixMatcher(array_unique($prefixes));
+    }
+
+    /**
+     * @param array $config конфиг секций
+     * @return array префиксы лексиконов секций
+     */
+    private function collectPrefixes(array $config): array
+    {
+        $output = [];
+        foreach ($config as $item) {
+            if (!is_array($item)) {
+                continue;
+            }
+            $prefix = (string)($item['lexicon_prefix'] ?? $item['MIGX_formname'] ?? '');
+            if ($prefix !== '') {
+                $output[] = $prefix;
+            }
+        }
+        return $output;
     }
 }

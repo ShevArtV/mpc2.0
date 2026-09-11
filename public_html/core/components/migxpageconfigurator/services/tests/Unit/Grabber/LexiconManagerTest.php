@@ -85,6 +85,48 @@ class LexiconManagerTest extends TestCase
     // setLexicons()
     // ---------------------------------------------------------------
 
+    // ---------------------------------------------------------------
+    // getTouchedLexicons() — #2609-151
+    // ---------------------------------------------------------------
+
+    public function testTouchedLexiconsHoldOnlyKeysWrittenByThisRun(): void
+    {
+        $m = $this->makeManager();
+        // Так граббер предзагружает page-types.inc.php культуры: словарь всех
+        // лендингов сразу, ни один ключ этим прогоном не записан.
+        $m->lexicons['static'] = ['features_aula_title' => 'Aula', 'difference_title' => 'Difference'];
+
+        $m->setContext('hero', false);
+        $m->setLexicons('Hello World', ['fieldName' => 'title']);
+
+        $this->assertSame(['hero_title' => 'Hello World'], $m->getTouchedLexicons());
+    }
+
+    public function testTouchedLexiconsSeparateStaticAndResourceFiles(): void
+    {
+        $m = $this->makeManager();
+
+        $m->setContext('hero', true); // статичная секция пишет в словарь типов
+        $m->setLexicons('Static title', ['fieldName' => 'title']);
+        $m->setContext('promo', false); // динамическая — в словарь ресурса
+        $m->setLexicons('Promo title', ['fieldName' => 'title']);
+
+        $this->assertSame(['hero_title' => 'Static title'], $m->getTouchedLexicons('static'));
+        $this->assertSame(['promo_title' => 'Promo title'], $m->getTouchedLexicons('42'));
+        $this->assertCount(2, $m->getTouchedLexicons());
+    }
+
+    public function testTouchedLexiconsDropKeyRemovedAfterWrite(): void
+    {
+        $m = $this->makeManager();
+        $m->setContext('hero', false);
+        $m->setLexicons('Hello World', ['fieldName' => 'title']);
+
+        unset($m->lexicons['42']['hero_title']);
+
+        $this->assertSame([], $m->getTouchedLexicons());
+    }
+
     public function testSetLexiconsReturnsLexiconKey(): void
     {
         $m = $this->makeManager();

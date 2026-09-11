@@ -56,6 +56,16 @@ class Grabber extends Base
         }
     }
 
+    /**
+     * Ключи со значениями, записанные текущим прогоном (см.
+     * `LexiconManager::getTouchedLexicons`). Нужны плагину сохранения ресурса:
+     * `lexicons` несут ещё и предзагруженный с диска словарь статики целиком.
+     */
+    public function getTouchedLexicons(?string $rid = null): array
+    {
+        return $this->lexiconManager->getTouchedLexicons($rid);
+    }
+
     // -----------------------------------------------------------------------
     // Инициализация
     // -----------------------------------------------------------------------

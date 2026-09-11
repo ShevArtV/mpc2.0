@@ -301,6 +301,17 @@ class Base
      */
     public function getStaticSectionNames(int $rid, bool $all = false): array
     {
+        return $this->getStaticSectionNamesFromConfig($this->getSectionConfig($rid), $all);
+    }
+
+    /**
+     * Конфиг секций ресурса (TV `mpc_config`) как массив записей.
+     *
+     * @param int $rid id ресурса
+     * @return array список записей конфига; пусто, если TV нет или JSON битый
+     */
+    public function getSectionConfig(int $rid): array
+    {
         $config = '';
         $q = $this->modx->newQuery('modTemplateVarResource');
         $q->leftJoin('modTemplateVar', 'TV', 'modTemplateVarResource.tmplvarid=TV.id');
@@ -310,9 +321,6 @@ class Base
         if($q->stmt->execute()){
             $config = $q->stmt->fetchColumn();
         }
-        /*if (!$config = $resource->getTVValue($this->properties['commonConfigTvName'])) {
-            return [];
-        }*/
 
         if (!$config) {
             return [];
@@ -322,12 +330,71 @@ class Base
         if (!is_array($config)) { // невалидный непустой не-JSON → не падаем на foreach (V8)
             return [];
         }
+        return $config;
+    }
+
+    /**
+     * Конфиг, которым СТРАНИЦА рендерится: тип страницы — база, ресурс
+     * перекрывает одноимённые секции. Порядок и правило те же, что у
+     * `Render::parseConfig` (`array_merge($typeConfig, $resourceConfig)` по
+     * `section_name`) — читатель и писатель обязаны видеть один конфиг.
+     *
+     * До #2609-151 плагин сохранения решал о статике по конфигу самого ресурса:
+     * у контекстной копии с устаревшим снимком секции числились динамическими,
+     * и ключи статики уезжали в словарь ресурса.
+     *
+     * @param int $typeRid     id ресурса-типа страницы (mpcType)
+     * @param int $resourceRid id самого ресурса
+     * @return array записи конфига в порядке «тип, затем добавленные ресурсом»
+     */
+    public function getMergedSectionConfig(int $typeRid, int $resourceRid): array
+    {
+        $typeConfig     = $typeRid ? $this->getSectionConfig($typeRid) : [];
+        $resourceConfig = $resourceRid ? $this->getSectionConfig($resourceRid) : [];
+        if ($typeRid === $resourceRid) {
+            return $resourceConfig;
+        }
+        return $this->mergeSectionConfigs($typeConfig, $resourceConfig);
+    }
+
+    /**
+     * Слияние двух конфигов по `section_name`: запись ресурса перекрывает
+     * одноимённую запись типа целиком, безымянные записи идут как есть.
+     */
+    public function mergeSectionConfigs(array $typeConfig, array $resourceConfig): array
+    {
+        $byName = [];
+        $extra  = [];
+        foreach ([$typeConfig, $resourceConfig] as $config) {
+            foreach ($config as $item) {
+                if (!is_array($item)) {
+                    continue;
+                }
+                $name = (string)($item['section_name'] ?? '');
+                if ($name === '') {
+                    $extra[] = $item;
+                    continue;
+                }
+                $byName[$name] = $item;
+            }
+        }
+        return array_merge(array_values($byName), $extra);
+    }
+
+    /**
+     * Имена статичных секций (или всех при `$all`) по готовому конфигу.
+     */
+    public function getStaticSectionNamesFromConfig(array $config, bool $all = false): array
+    {
         $output = [];
         foreach ($config as $item) {
-            if (!$item['is_static'] && !$all) {
+            if (!is_array($item)) {
                 continue;
             }
-            $output[] = $item['section_name'];
+            if (empty($item['is_static']) && !$all) {
+                continue;
+            }
+            $output[] = $item['section_name'] ?? '';
         }
         return $output;
     }

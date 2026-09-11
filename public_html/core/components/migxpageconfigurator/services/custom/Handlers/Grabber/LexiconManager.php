@@ -37,6 +37,19 @@ class LexiconManager
     /** Префиксы секций, обработанные текущим проходом нарезки: prefix => true. */
     private array $processedPrefixes = [];
 
+    /** Матчер по реестру `knownPrefixes`; сбрасывается при смене реестра. */
+    private ?LexiconPrefixMatcher $prefixMatcher = null;
+
+    /**
+     * Ключи, записанные ЭТИМ прогоном: rid => [key => true]. Отличают результат
+     * нарезки текущей страницы от предзагруженного с диска словаря (весь
+     * `page-types.inc.php` культуры кладётся в `lexicons` при инициализации
+     * граббера). Потребитель — плагин сохранения ресурса: раскладывать по файлам
+     * он вправе только свежие ключи, иначе в словарь страницы уезжают ключи
+     * чужих лендингов.
+     */
+    private array $touchedKeys = [];
+
     public function __construct(\modX $modx, array $properties)
     {
         $this->modx       = $modx;
@@ -125,22 +138,14 @@ class LexiconManager
      */
     private function ownsLexiconKey(string $key, string $prefix): bool
     {
-        $needle = $prefix . '_';
-        if (strpos($key, $needle) !== 0) {
-            return false;
+        // Сравнение живёт в LexiconPrefixMatcher: тем же правилом пользуется
+        // плагин сохранения ресурса, у которого реестр свой (конфиги типа
+        // страницы и страницы статичных блоков). Матчер кэшируется — метод
+        // зовётся в цикле по всем ключам файла.
+        if ($this->prefixMatcher === null) {
+            $this->prefixMatcher = new LexiconPrefixMatcher(array_keys($this->knownPrefixes ?: []));
         }
-        foreach ($this->knownPrefixes as $known => $_) {
-            if (strlen($known) <= strlen($prefix)) {
-                continue;
-            }
-            if (strpos($known, $needle) !== 0) {
-                continue; // не вложен в наш префикс — к этому ключу отношения не имеет
-            }
-            if (strpos($key, $known . '_') === 0) {
-                return false; // ключ принадлежит более длинному префиксу
-            }
-        }
-        return true;
+        return $this->prefixMatcher->owns($key, $prefix);
     }
 
     /**
@@ -157,7 +162,32 @@ class LexiconManager
             }
         }
         $this->knownPrefixes = $clean;
+        $this->prefixMatcher = null;
         $this->prefixRegistryAttempted = true;
+    }
+
+    /**
+     * Ключи со значениями, записанные ЭТИМ прогоном (по всем файлам или по
+     * одному). В отличие от `lexicons`, сюда не попадает предзагруженное с
+     * диска: `page-types.inc.php` культуры несёт ключи всех лендингов сразу.
+     *
+     * @param string|null $rid идентификатор файла лексикона; null — все файлы
+     * @return array key => value
+     */
+    public function getTouchedLexicons(?string $rid = null): array
+    {
+        $output = [];
+        foreach ($this->touchedKeys as $file => $keys) {
+            if ($rid !== null && (string)$file !== $rid) {
+                continue;
+            }
+            foreach (array_keys($keys) as $key) {
+                if (array_key_exists($key, $this->lexicons[$file] ?? [])) {
+                    $output[$key] = $this->lexicons[$file][$key];
+                }
+            }
+        }
+        return $output;
     }
 
     /** Реестр известных префиксов (диагностика и тесты). */
@@ -228,6 +258,7 @@ class LexiconManager
             }
         }
         $this->knownPrefixes = $registry;
+        $this->prefixMatcher = null;
         return true;
     }
 
@@ -530,6 +561,7 @@ class LexiconManager
         }
 
         $this->lexicons[$rid][$lexiconKey] = $this->sanitizeValue($value);
+        $this->touchedKeys[$rid][$lexiconKey] = true;
 
         // Возвращаем сам ключ. Cutter на своей стороне добавит `| lexicon` к плейсхолдеру,
         // если поле лексиконное. Так значение в БД остаётся «чистыми данными»,
@@ -565,6 +597,7 @@ class LexiconManager
                 continue;
             }
             $this->lexicons[$rid][$base . $opt['value']] = $this->sanitizeValue($opt['lexValue']);
+            $this->touchedKeys[$rid][$base . $opt['value']] = true;
         }
     }
 
@@ -603,6 +636,7 @@ class LexiconManager
                 continue;
             }
             $this->lexicons[$rid][$base . $opt['value']] = $this->sanitizeValue($opt['lexValue']);
+            $this->touchedKeys[$rid][$base . $opt['value']] = true;
         }
     }
 
