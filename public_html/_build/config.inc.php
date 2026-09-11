@@ -17,7 +17,7 @@ return [
     'name' => 'MigxPageConfigurator',
     'name_lower' => 'migxpageconfigurator',
     'version' => '2.6.7',
-    'release' => 'rc',
+    'release' => 'pl',
     // Install package to site right after build
     'install' => false,
     // Which elements should be updated on package upgrade
