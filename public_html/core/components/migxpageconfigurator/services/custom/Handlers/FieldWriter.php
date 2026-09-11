@@ -129,7 +129,7 @@ class FieldWriter
             $base    = $this->lexProps['corePath'] . $this->lexProps['lexiconPath'];
             $default = $this->defaultLanguage();
             $langs   = explode(',', (string)Support\Culture::contextSetting($this->modx, 'mpc_available_languages', ''));
-            $this->lexSyncInstance = new \MpcServices\Handlers\LexiconSync($base, $default, $langs);
+            $this->lexSyncInstance = new \MpcServices\Handlers\LexiconSync($base, $default, $langs, new \MpcServices\Helpers\Logging($this->modx));
         }
         return $this->lexSyncInstance;
     }

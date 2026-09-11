@@ -1332,6 +1332,88 @@ class LexiconManagerTest extends TestCase
         $this->rrmdir($base);
     }
 
+    /**
+     * #2609-156: нарезка не теряет правку контент-менеджера в переводе и
+     * оставляет след, когда перезаписывает живое значение по явному `1`.
+     *
+     * @return array{0: LexiconManager, 1: \MpcTests\Stubs\LoggingSpy, 2: string}
+     */
+    private function makeSliderCase(): array
+    {
+        $base = $this->tmpDir . '/lex/';
+        mkdir($base . 'ru', 0777, true);
+        mkdir($base . 'en', 0777, true);
+
+        $modx = new \MpcTests\Stubs\ModxStub(null, ['mpc_available_languages' => 'ru,en']);
+        $spy  = new \MpcTests\Stubs\LoggingSpy($modx);
+
+        $resource = new class {
+            public function get(string $k): mixed { return $k === 'id' ? 7 : null; }
+        };
+
+        $lm = new LexiconManager($modx, [
+            'useLexicons'             => true,
+            'excludeLexiconFields'    => [],
+            'allowModxTags'           => false,
+            'allowedTags'             => '',
+            'lexiconFilenameField'    => 'id',
+            'staticBlocksPageLexiconFilename' => 'static',
+            'contactsPageLexiconFilename'     => 'contacts',
+            'basePathToLexiconFile'   => $base . 'ru/',
+            'corePath'                => $this->tmpDir . '/',
+            'lexiconPath'             => 'lex/',
+            'defaultLanguageKey'      => 'ru',
+            'resourceLexiconKeysPath' => 'nonexistent_rlang.php',
+            'resource'                => $resource,
+        ], $spy);
+
+        return [$lm, $spy, $base];
+    }
+
+    /** Перевод, которого нет в дефолтном языке, переживает нарезку состава секции. */
+    public function testSliceKeepsTranslationOnlyKey(): void
+    {
+        [$lm, $spy, $base] = $this->makeSliderCase();
+        file_put_contents($base . 'ru/7.inc.php', "<?php\n\$_lang['slider_1_title'] = 'Slide 1';\n");
+        file_put_contents(
+            $base . 'en/7.inc.php',
+            "<?php\n\$_lang['slider_1_title'] = 'Slide 1 EN';\n\$_lang['slider_1_subtitle'] = 'CM EDIT';\n"
+        );
+
+        $lm->createLexicons(['7' => ['slider_1_title' => 'Slide 1']], false);
+
+        $_lang = [];
+        include $base . 'en/7.inc.php';
+        $this->assertSame('CM EDIT', $_lang['slider_1_subtitle']);
+        $this->assertNotEmpty($spy->rowsForKey('slider_1_subtitle'));
+
+        $this->rrmdir($base);
+    }
+
+    /** Перезапись по явному `1` остаётся, но каждая строка уходит в лог. */
+    public function testOverwriteLogsEveryReplacedValue(): void
+    {
+        [$lm, $spy, $base] = $this->makeSliderCase();
+        file_put_contents(
+            $base . 'ru/7.inc.php',
+            "<?php\n\$_lang['slider_1_title'] = 'Старое';\n\$_lang['slider_1_lead'] = 'Лид';\n"
+        );
+
+        $lm->createLexicons(['7' => ['slider_1_title' => 'Новое', 'slider_1_lead' => 'Лид']], true);
+
+        $_lang = [];
+        include $base . 'ru/7.inc.php';
+        $this->assertSame('Новое', $_lang['slider_1_title']); // право перезаписи не отнято
+
+        $rows = $spy->rowsForKey('slider_1_title');
+        $this->assertCount(1, $rows);
+        $this->assertSame('Старое', $rows[0]['context']['old']);
+        $this->assertSame('Новое', $rows[0]['context']['new']);
+        $this->assertSame([], $spy->rowsForKey('slider_1_lead')); // значение не менялось — молчим
+
+        $this->rrmdir($base);
+    }
+
     private function rrmdir(string $dir): void
     {
         if (!is_dir($dir)) {

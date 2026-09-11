@@ -86,7 +86,7 @@ class Cutter extends Base
         // ли `| lexicon` к плейсхолдеру: учитывает translatableContentTypes
         // и excludeLexiconFields (последнее — критично, иначе cutter ставит
         // `| lexicon` для полей, которые grabber пропускает → пусто на сайте).
-        $lexiconManager = new LexiconManager($this->modx, $this->properties);
+        $lexiconManager = new LexiconManager($this->modx, $this->properties, $this->logging);
         $this->lexiconManager = $lexiconManager;
 
         $this->placeholderProcessor = new PlaceholderProcessor(

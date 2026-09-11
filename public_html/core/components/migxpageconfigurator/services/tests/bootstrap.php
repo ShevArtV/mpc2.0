@@ -69,6 +69,7 @@ if (!class_exists('modResource')) {
 
 require_once __DIR__ . '/Stubs/ModxObjectStub.php';
 require_once __DIR__ . '/Stubs/ModxStub.php';
+require_once __DIR__ . '/Stubs/LoggingSpy.php';
 
 // PSR-4 для соседнего компонента mpcVisualEditor (другой namespace, своего
 // автолоадера в тестах нет). Тесты Unit/Mpcve грузят хендлеры, а те тянут

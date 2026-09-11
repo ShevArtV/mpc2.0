@@ -110,7 +110,7 @@ class Grabber extends Base
         // migx-пакет регистрируется в Base::initialize() (PackageBootstrap::ensure).
 
         // LexiconManager создаётся первым — нужен для getResourceIdentifierById в initialize
-        $this->lexiconManager = new LexiconManager($this->modx, $this->properties);
+        $this->lexiconManager = new LexiconManager($this->modx, $this->properties, $this->logging);
 
         if ($this->properties['useLexicons']) {
             $basePath = $this->properties['corePath']

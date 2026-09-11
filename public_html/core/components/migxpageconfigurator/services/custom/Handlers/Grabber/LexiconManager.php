@@ -2,6 +2,8 @@
 
 namespace MpcServices\Handlers\Grabber;
 
+use MpcServices\Helpers\Logging;
+
 /**
  * Управление лексиконами: запись, чтение, санитизация значений.
  */
@@ -13,6 +15,8 @@ class LexiconManager
     private bool   $sectionIsStatic      = false;
     private \modX  $modx;
     private array  $properties;
+    /** Логгер: перезапись живого значения обязана оставлять след (#2609-156). */
+    private Logging $logging;
 
     /**
      * Кэш rid → идентификатор лексикона за запрос. Метод зовётся per-resource
@@ -50,10 +54,11 @@ class LexiconManager
      */
     private array $touchedKeys = [];
 
-    public function __construct(\modX $modx, array $properties)
+    public function __construct(\modX $modx, array $properties, ?Logging $logging = null)
     {
         $this->modx       = $modx;
         $this->properties = $properties;
+        $this->logging    = $logging ?? new Logging($modx);
     }
 
     /**
@@ -668,6 +673,31 @@ class LexiconManager
                 // записываются кандидатами на удаление; чистит их отдельное явное
                 // действие с бэкапом.
                 $lexicons = $this->keepUntouchedKeys($pathToLexiconFile, $lexicons, (string)$rid);
+                if ($overwrite && file_exists($pathToLexiconFile)) {
+                    // Перезапись по явному `1` законна, но молчаливой быть не
+                    // должна: по этой строке лога правку контент-менеджера можно
+                    // вернуть (#2609-156).
+                    $existing = $store->read($lang, (string)$rid);
+                    foreach ($lexicons as $k => $v) {
+                        if (!array_key_exists($k, $existing) || (string)$existing[$k] === (string)$v) {
+                            continue;
+                        }
+                        $this->logging->write(
+                            __CLASS__,
+                            'Нарезка перезаписала значение ключа словаря',
+                            [
+                                'lang' => $lang,
+                                'file' => (string)$rid,
+                                'key'  => (string)$k,
+                                'old'  => mb_substr((string)$existing[$k], 0, 200),
+                                'new'  => mb_substr((string)$v, 0, 200),
+                            ],
+                            false,
+                            Logging::WARN,
+                            ['lexicon']
+                        );
+                    }
+                }
                 if (!$overwrite && file_exists($pathToLexiconFile)) {
                     // Без updContent: сохраняем ЗНАЧЕНИЯ существующих переводов, но
                     // ТОЛЬКО для ключей, которые ещё есть в текущей нарезке (поле
@@ -728,7 +758,7 @@ class LexiconManager
         }
         // Синхронизация языков + pending — через общий сервis (тот же, что зовёт
         // редактор), чтобы логика была единой.
-        $sync        = new \MpcServices\Handlers\LexiconSync($baseLexiconPath, $default, $langs);
+        $sync        = new \MpcServices\Handlers\LexiconSync($baseLexiconPath, $default, $langs, $this->logging);
         $defaultBase = rtrim($baseLexiconPath, '/') . '/' . $default . '/';
         foreach (array_keys($allLexicons) as $rid) {
             // Источник истины — ТОЛЬКО ЧТО записанный файл дефолтного языка

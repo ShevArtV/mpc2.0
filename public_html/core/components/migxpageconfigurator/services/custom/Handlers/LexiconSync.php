@@ -2,6 +2,8 @@
 
 namespace MpcServices\Handlers;
 
+use MpcServices\Helpers\Logging;
+
 /**
  * Синхронизация лексикон-ключей между языками + ведение списка непереведённых
  * ({@see PendingTranslations}). ЕДИНЫЙ сервис для нарезки и редактора:
@@ -23,6 +25,8 @@ class LexiconSync
     /** @var string[] */
     private array $languages;
     private PendingTranslations $pending;
+    /** Логгер: молчаливая потеря перевода — главный дефект этого сервиса (#2609-156). */
+    private ?Logging $logging;
     private \MpcServices\Handlers\Lexicon\LexiconStore $store;
 
     /**
@@ -30,8 +34,9 @@ class LexiconSync
      * @param string   $defaultLang     культура языка по умолчанию
      * @param string[] $languages       все доступные языки (mpc_available_languages)
      */
-    public function __construct(string $baseLexiconPath, string $defaultLang, array $languages)
+    public function __construct(string $baseLexiconPath, string $defaultLang, array $languages, ?Logging $logging = null)
     {
+        $this->logging         = $logging;
         $this->baseLexiconPath = rtrim($baseLexiconPath, '/') . '/';
         $this->defaultLang     = $defaultLang;
         $this->languages       = array_values(array_filter(array_map('trim', $languages)));
@@ -99,6 +104,25 @@ class LexiconSync
             foreach ($defaultLex as $k => $defVal) {
                 $out[$k] = array_key_exists($k, $existing) ? $existing[$k] : $defVal;
             }
+            // Ключ, который есть в переводе, но отсутствует в наборе дефолтного
+            // языка, РАНЬШЕ выбрасывался молча: файл перевода пересобирался
+            // строго по ключам дефолта. Так пропал сеанс правок контент-менеджера
+            // в pl (#2609-156) — правка config-поля пишется только в файл своего
+            // языка (FieldWriter::applyLexiconToConfigValue не зовёт syncKey), и
+            // первая же нарезка сносила ключ. Теперь перевод сохраняется, а факт
+            // расхождения уходит в лог: дефолтный язык ведёт себя так же
+            // (LexiconManager::keepUntouchedKeys), удаление — отдельное явное
+            // действие с бэкапом.
+            foreach ($existing as $k => $v) {
+                if (array_key_exists($k, $out)) {
+                    continue;
+                }
+                $out[$k] = $v;
+                $this->report(
+                    'Ключ перевода сохранён: в дефолтном языке его нет',
+                    ['lang' => $lang, 'file' => $identifier, 'key' => (string)$k, 'value' => $this->cut((string)$v)]
+                );
+            }
             $this->writeLexicon($lang, $identifier, $out);
 
                 $this->pending->sync(
@@ -109,6 +133,21 @@ class LexiconSync
                 );
             }
         });
+    }
+
+    /** Строка в лог: молчаливых расхождений в словаре быть не должно. */
+    private function report(string $message, array $context): void
+    {
+        if ($this->logging === null) {
+            return;
+        }
+        $this->logging->write(__CLASS__, $message, $context, false, Logging::WARN, ['lexicon']);
+    }
+
+    /** Обрезка значения для лога: тексты секций бывают длиной в абзац. */
+    private function cut(string $value): string
+    {
+        return mb_substr($value, 0, 200);
     }
 
     /**

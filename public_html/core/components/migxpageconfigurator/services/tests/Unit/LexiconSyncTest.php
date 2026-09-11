@@ -46,6 +46,35 @@ class LexiconSyncTest extends TestCase
         return new LexiconSync($this->base, 'ru', ['ru', 'en']);
     }
 
+    /**
+     * #2609-156: ключ, который есть только в переводе, синк больше НЕ выкидывает.
+     *
+     * Правка config-поля в редакторе пишется в файл своего языка и НЕ заводит
+     * ключ в дефолтном (FieldWriter::applyLexiconToConfigValue), поэтому старое
+     * поведение «файл перевода = набор ключей дефолта» стирало работу
+     * контент-менеджера первой же нарезкой, молча.
+     */
+    public function testSyncResourceKeepsTranslationOnlyKeyAndLogsIt(): void
+    {
+        $spy = new \MpcTests\Stubs\LoggingSpy(new \MpcTests\Stubs\ModxStub());
+        mkdir($this->base . 'en', 0777, true);
+        file_put_contents(
+            $this->base . 'en/5.inc.php',
+            "<?php\n\$_lang['howto_title'] = 'Title';\n\$_lang['howto_note'] = 'Manager note';\n"
+        );
+
+        (new LexiconSync($this->base, 'ru', ['ru', 'en'], $spy))
+            ->syncResource('5', ['howto_title' => 'Заголовок']);
+
+        $en = $this->readLex('en', '5');
+        $this->assertSame('Manager note', $en['howto_note']); // перевод на месте
+        $this->assertSame('Title', $en['howto_title']);
+
+        $rows = $spy->rowsForKey('howto_note');
+        $this->assertCount(1, $rows); // и расхождение не молчаливое
+        $this->assertSame('en', $rows[0]['context']['lang']);
+    }
+
     /** syncResource: ключи дефолта раскладываются в другие языки + pending. */
     public function testSyncResourcePropagatesAndMarksPending(): void
     {
