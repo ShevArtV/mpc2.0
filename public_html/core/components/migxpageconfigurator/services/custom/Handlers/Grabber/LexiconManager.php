@@ -2,6 +2,8 @@
 
 namespace MpcServices\Handlers\Grabber;
 
+use MpcServices\Helpers\Logging;
+
 /**
  * Управление лексиконами: запись, чтение, санитизация значений.
  */
@@ -13,6 +15,8 @@ class LexiconManager
     private bool   $sectionIsStatic      = false;
     private \modX  $modx;
     private array  $properties;
+    /** Логгер: перезапись живого значения обязана оставлять след (#2609-156). */
+    private Logging $logging;
 
     /**
      * Кэш rid → идентификатор лексикона за запрос. Метод зовётся per-resource
@@ -50,10 +54,21 @@ class LexiconManager
      */
     private array $touchedKeys = [];
 
-    public function __construct(\modX $modx, array $properties)
+    /**
+     * Ключи, уже переведённые в культуре записи НА УРОВНЕ ВЫШЕ ресурса (словарь
+     * типа страницы, словарь статичных блоков): `key => true`. Заполняет
+     * писатель, который знает имена этих файлов, — плагин сохранения ресурса.
+     */
+    private array $cultureBaseline = [];
+
+    /** Содержимое файлов культуры записи: rid => [key => value]. Читается раз. */
+    private array $cultureFileCache = [];
+
+    public function __construct(\modX $modx, array $properties, ?Logging $logging = null)
     {
         $this->modx       = $modx;
         $this->properties = $properties;
+        $this->logging    = $logging ?? new Logging($modx);
     }
 
     /**
@@ -188,6 +203,51 @@ class LexiconManager
             }
         }
         return $output;
+    }
+
+    /**
+     * Идёт ли запись в культуру перевода, а не в культуру вёрстки.
+     *
+     * `defaultLanguageKey` — язык записи, он читается с контекстным
+     * переопределением (2.5.62-rc), `baseLanguageKey` — системное значение той
+     * же настройки. Расхождение значит: страницу сохраняют в не-web контексте,
+     * а грабер разбирает тот же HTML-шаблон, где тексты на базовом языке.
+     */
+    public function isForeignCulture(): bool
+    {
+        $base  = trim((string)($this->properties['baseLanguageKey'] ?? ''));
+        $write = trim((string)($this->properties['defaultLanguageKey'] ?? ''));
+
+        return $base !== '' && $write !== '' && $base !== $write;
+    }
+
+    /**
+     * Ключи, переведённые в культуре записи выше ресурса (тип, статика).
+     * Значение из вёрстки такой ключ не получает: ресурсный словарь грузится
+     * последним и перебил бы перевод (#2609-155).
+     */
+    public function setCultureBaseline(array $keys): void
+    {
+        $this->cultureBaseline = [];
+        foreach ($keys as $key) {
+            $key = (string)$key;
+            if ($key !== '') {
+                $this->cultureBaseline[$key] = true;
+            }
+        }
+    }
+
+    /** Уже лежащие на диске значения файла культуры записи. */
+    private function cultureFileValues(string $rid): array
+    {
+        if (!array_key_exists($rid, $this->cultureFileCache)) {
+            $this->cultureFileCache[$rid] = $this->getLexicons(
+                $rid,
+                (string)($this->properties['basePathToLexiconFile'] ?? '')
+            );
+        }
+
+        return $this->cultureFileCache[$rid];
     }
 
     /** Реестр известных префиксов (диагностика и тесты). */
@@ -560,7 +620,24 @@ class LexiconManager
             $rid = $this->getResourceIdentifierById($this->properties['resource']->get('id'));
         }
 
-        $this->lexicons[$rid][$lexiconKey] = $this->sanitizeValue($value);
+        $value = $this->sanitizeValue($value);
+
+        // Нарезка в культуре перевода: значение в вёрстке — на базовом языке,
+        // переводом оно стать не вправе. Свой перевод этого ключа сохраняем как
+        // есть; ключ, переведённый выше (тип, статика), не пишем вовсе — иначе
+        // ресурсный словарь перебьёт его английским (#2609-155). Ключ, которого
+        // в культуре нет нигде, пишется из вёрстки: перебивать нечего, а
+        // страница без значений показывала бы голые ключи.
+        if ($this->isForeignCulture()) {
+            $existing = $this->cultureFileValues((string)$rid);
+            if (array_key_exists($lexiconKey, $existing)) {
+                $value = (string)$existing[$lexiconKey];
+            } elseif (isset($this->cultureBaseline[$lexiconKey])) {
+                return $lexiconKey;
+            }
+        }
+
+        $this->lexicons[$rid][$lexiconKey] = $value;
         $this->touchedKeys[$rid][$lexiconKey] = true;
 
         // Возвращаем сам ключ. Cutter на своей стороне добавит `| lexicon` к плейсхолдеру,
@@ -668,6 +745,31 @@ class LexiconManager
                 // записываются кандидатами на удаление; чистит их отдельное явное
                 // действие с бэкапом.
                 $lexicons = $this->keepUntouchedKeys($pathToLexiconFile, $lexicons, (string)$rid);
+                if ($overwrite && file_exists($pathToLexiconFile)) {
+                    // Перезапись по явному `1` законна, но молчаливой быть не
+                    // должна: по этой строке лога правку контент-менеджера можно
+                    // вернуть (#2609-156).
+                    $existing = $store->read($lang, (string)$rid);
+                    foreach ($lexicons as $k => $v) {
+                        if (!array_key_exists($k, $existing) || (string)$existing[$k] === (string)$v) {
+                            continue;
+                        }
+                        $this->logging->write(
+                            __CLASS__,
+                            'Нарезка перезаписала значение ключа словаря',
+                            [
+                                'lang' => $lang,
+                                'file' => (string)$rid,
+                                'key'  => (string)$k,
+                                'old'  => mb_substr((string)$existing[$k], 0, 200),
+                                'new'  => mb_substr((string)$v, 0, 200),
+                            ],
+                            false,
+                            Logging::WARN,
+                            ['lexicon']
+                        );
+                    }
+                }
                 if (!$overwrite && file_exists($pathToLexiconFile)) {
                     // Без updContent: сохраняем ЗНАЧЕНИЯ существующих переводов, но
                     // ТОЛЬКО для ключей, которые ещё есть в текущей нарезке (поле
@@ -700,7 +802,10 @@ class LexiconManager
         // пер-полевой правке в НЕ дефолтный язык (skipLexiconSync): тогда basePath
         // указывает на файл текущего языка, и распространять правку по другим
         // языкам нельзя (перевод утёк бы в дефолт/прочие). См. Grabber::handleContactsHtml.
-        if (empty($this->properties['skipLexiconSync'])) {
+        // Запись из не-web контекста (isForeignCulture) синк тоже не запускает:
+        // источником набора ключей и плейсхолдеров служит культура записи, и
+        // тексты одного перевода уехали бы во все остальные языки (#2609-155).
+        if (empty($this->properties['skipLexiconSync']) && !$this->isForeignCulture()) {
             $this->syncOtherLanguages($allLexicons);
         }
 
@@ -728,7 +833,7 @@ class LexiconManager
         }
         // Синхронизация языков + pending — через общий сервis (тот же, что зовёт
         // редактор), чтобы логика была единой.
-        $sync        = new \MpcServices\Handlers\LexiconSync($baseLexiconPath, $default, $langs);
+        $sync        = new \MpcServices\Handlers\LexiconSync($baseLexiconPath, $default, $langs, $this->logging);
         $defaultBase = rtrim($baseLexiconPath, '/') . '/' . $default . '/';
         foreach (array_keys($allLexicons) as $rid) {
             // Источник истины — ТОЛЬКО ЧТО записанный файл дефолтного языка

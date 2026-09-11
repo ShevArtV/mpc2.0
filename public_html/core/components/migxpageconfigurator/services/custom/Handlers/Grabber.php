@@ -66,6 +66,18 @@ class Grabber extends Base
         return $this->lexiconManager->getTouchedLexicons($rid);
     }
 
+    /** Идёт ли нарезка в культуре перевода (не-web контекст). */
+    public function isForeignCulture(): bool
+    {
+        return $this->lexiconManager->isForeignCulture();
+    }
+
+    /** Ключи, переведённые в культуре записи выше ресурса (тип, статика). */
+    public function setCultureBaseline(array $keys): void
+    {
+        $this->lexiconManager->setCultureBaseline($keys);
+    }
+
     // -----------------------------------------------------------------------
     // Инициализация
     // -----------------------------------------------------------------------
@@ -110,7 +122,7 @@ class Grabber extends Base
         // migx-пакет регистрируется в Base::initialize() (PackageBootstrap::ensure).
 
         // LexiconManager создаётся первым — нужен для getResourceIdentifierById в initialize
-        $this->lexiconManager = new LexiconManager($this->modx, $this->properties);
+        $this->lexiconManager = new LexiconManager($this->modx, $this->properties, $this->logging);
 
         if ($this->properties['useLexicons']) {
             $basePath = $this->properties['corePath']

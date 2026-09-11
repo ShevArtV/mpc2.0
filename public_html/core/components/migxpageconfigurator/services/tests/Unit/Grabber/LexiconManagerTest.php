@@ -86,6 +86,93 @@ class LexiconManagerTest extends TestCase
     // ---------------------------------------------------------------
 
     // ---------------------------------------------------------------
+    // Нарезка в культуре перевода — #2609-155
+    // ---------------------------------------------------------------
+
+    /** Менеджер, пишущий в культуру перевода: язык записи ≠ язык вёрстки. */
+    private function makeForeignCultureManager(): LexiconManager
+    {
+        return $this->makeManager([
+            'baseLanguageKey'    => 'en',
+            'defaultLanguageKey' => 'de',
+        ]);
+    }
+
+    public function testForeignCultureKeepsOwnTranslationInsteadOfMarkupValue(): void
+    {
+        file_put_contents(
+            $this->tmpDir . '/42.inc.php',
+            "<?php\n\$_lang['hero_title'] = 'Deutscher Titel';\n"
+        );
+
+        $m = $this->makeForeignCultureManager();
+        $m->setContext('hero', false);
+        $m->setLexicons('English title', ['fieldName' => 'title']);
+
+        $this->assertSame('Deutscher Titel', $m->lexicons['42']['hero_title']);
+    }
+
+    public function testForeignCultureDoesNotWriteKeyTranslatedAtTypeLevel(): void
+    {
+        $m = $this->makeForeignCultureManager();
+        $m->setCultureBaseline(['hero_title']);
+        $m->setContext('hero', false);
+
+        // Ключ вернулся плейсхолдером — чанк остаётся лексиконным…
+        $this->assertSame('hero_title', $m->setLexicons('English title', ['fieldName' => 'title']));
+        // …но ресурсный словарь культуры его не получает: на рендере он перебил
+        // бы перевод из словаря типа страницы английским значением вёрстки.
+        $this->assertSame([], $m->lexicons);
+        $this->assertSame([], $m->getTouchedLexicons());
+    }
+
+    public function testForeignCultureWritesKeyUnknownToThisCulture(): void
+    {
+        $m = $this->makeForeignCultureManager();
+        $m->setCultureBaseline(['other_title']);
+        $m->setContext('hero', false);
+        $m->setLexicons('English title', ['fieldName' => 'title']);
+
+        // Перебивать нечего: без записи страница показывала бы голый ключ.
+        $this->assertSame('English title', $m->lexicons['42']['hero_title']);
+    }
+
+    public function testBaseCultureStillTakesValueFromMarkup(): void
+    {
+        file_put_contents(
+            $this->tmpDir . '/42.inc.php',
+            "<?php\n\$_lang['hero_title'] = 'Old title';\n"
+        );
+
+        $m = $this->makeManager(['baseLanguageKey' => 'en', 'defaultLanguageKey' => 'en']);
+        $m->setCultureBaseline(['hero_title']);
+        $m->setContext('hero', false);
+        $m->setLexicons('English title', ['fieldName' => 'title']);
+
+        $this->assertSame('English title', $m->lexicons['42']['hero_title']);
+    }
+
+    public function testForeignCultureDoesNotSyncOtherLanguages(): void
+    {
+        $base = $this->tmpDir . '/de/';
+        mkdir($base, 0777, true);
+
+        $m = $this->makeManager([
+            'baseLanguageKey'       => 'en',
+            'defaultLanguageKey'    => 'de',
+            'basePathToLexiconFile' => $base,
+            'corePath'              => $this->tmpDir . '/',
+            'lexiconPath'           => '',
+        ]);
+        $m->createLexicons(['42' => ['hero_title' => 'Deutscher Titel']]);
+
+        $this->assertFileExists($base . '42.inc.php');
+        // Перевод одной культуры не растекается по остальным языкам.
+        $this->assertDirectoryDoesNotExist($this->tmpDir . '/en');
+        $this->assertDirectoryDoesNotExist($this->tmpDir . '/fi');
+    }
+
+    // ---------------------------------------------------------------
     // getTouchedLexicons() — #2609-151
     // ---------------------------------------------------------------
 
@@ -1329,6 +1416,88 @@ class LexiconManagerTest extends TestCase
         $this->assertSame('Лид', $_lang['lead']);          // новый ключ = дефолт-плейсхолдер
 
         // Плоский tearDown класса не умеет в подпапки — чистим дерево сами.
+        $this->rrmdir($base);
+    }
+
+    /**
+     * #2609-156: нарезка не теряет правку контент-менеджера в переводе и
+     * оставляет след, когда перезаписывает живое значение по явному `1`.
+     *
+     * @return array{0: LexiconManager, 1: \MpcTests\Stubs\LoggingSpy, 2: string}
+     */
+    private function makeSliderCase(): array
+    {
+        $base = $this->tmpDir . '/lex/';
+        mkdir($base . 'ru', 0777, true);
+        mkdir($base . 'en', 0777, true);
+
+        $modx = new \MpcTests\Stubs\ModxStub(null, ['mpc_available_languages' => 'ru,en']);
+        $spy  = new \MpcTests\Stubs\LoggingSpy($modx);
+
+        $resource = new class {
+            public function get(string $k): mixed { return $k === 'id' ? 7 : null; }
+        };
+
+        $lm = new LexiconManager($modx, [
+            'useLexicons'             => true,
+            'excludeLexiconFields'    => [],
+            'allowModxTags'           => false,
+            'allowedTags'             => '',
+            'lexiconFilenameField'    => 'id',
+            'staticBlocksPageLexiconFilename' => 'static',
+            'contactsPageLexiconFilename'     => 'contacts',
+            'basePathToLexiconFile'   => $base . 'ru/',
+            'corePath'                => $this->tmpDir . '/',
+            'lexiconPath'             => 'lex/',
+            'defaultLanguageKey'      => 'ru',
+            'resourceLexiconKeysPath' => 'nonexistent_rlang.php',
+            'resource'                => $resource,
+        ], $spy);
+
+        return [$lm, $spy, $base];
+    }
+
+    /** Перевод, которого нет в дефолтном языке, переживает нарезку состава секции. */
+    public function testSliceKeepsTranslationOnlyKey(): void
+    {
+        [$lm, $spy, $base] = $this->makeSliderCase();
+        file_put_contents($base . 'ru/7.inc.php', "<?php\n\$_lang['slider_1_title'] = 'Slide 1';\n");
+        file_put_contents(
+            $base . 'en/7.inc.php',
+            "<?php\n\$_lang['slider_1_title'] = 'Slide 1 EN';\n\$_lang['slider_1_subtitle'] = 'CM EDIT';\n"
+        );
+
+        $lm->createLexicons(['7' => ['slider_1_title' => 'Slide 1']], false);
+
+        $_lang = [];
+        include $base . 'en/7.inc.php';
+        $this->assertSame('CM EDIT', $_lang['slider_1_subtitle']);
+        $this->assertNotEmpty($spy->rowsForKey('slider_1_subtitle'));
+
+        $this->rrmdir($base);
+    }
+
+    /** Перезапись по явному `1` остаётся, но каждая строка уходит в лог. */
+    public function testOverwriteLogsEveryReplacedValue(): void
+    {
+        [$lm, $spy, $base] = $this->makeSliderCase();
+        file_put_contents(
+            $base . 'ru/7.inc.php',
+            "<?php\n\$_lang['slider_1_title'] = 'Старое';\n\$_lang['slider_1_lead'] = 'Лид';\n"
+        );
+
+        $lm->createLexicons(['7' => ['slider_1_title' => 'Новое', 'slider_1_lead' => 'Лид']], true);
+
+        $_lang = [];
+        include $base . 'ru/7.inc.php';
+        $this->assertSame('Новое', $_lang['slider_1_title']); // право перезаписи не отнято
+
+        $rows = $spy->rowsForKey('slider_1_title');
+        $this->assertCount(1, $rows);
+        $this->assertSame('Старое', $rows[0]['context']['old']);
+        $this->assertSame('Новое', $rows[0]['context']['new']);
+        $this->assertSame([], $spy->rowsForKey('slider_1_lead')); // значение не менялось — молчим
+
         $this->rrmdir($base);
     }
 

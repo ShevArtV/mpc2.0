@@ -52,6 +52,22 @@ class BaseSectionConfigTest extends TestCase
         $this->assertSame(['hero'], $this->base->getStaticSectionNamesFromConfig($merged));
     }
 
+    public function testMergeMarksSectionOwner(): void
+    {
+        // #2609-155: писателю словарей нужно знать, чья секция. Ключи секции,
+        // которую ресурс не перекрыл, принадлежат словарю типа страницы.
+        $type     = [$this->section('hero', false), $this->section('cards', false)];
+        $resource = [$this->section('cards', false)];
+
+        $merged = $this->base->mergeSectionConfigs($type, $resource);
+        $owners = array_combine(
+            array_column($merged, 'section_name'),
+            array_column($merged, \MpcServices\Handlers\Base::SECTION_OWNER_FIELD)
+        );
+
+        $this->assertSame(['hero' => 'type', 'cards' => 'resource'], $owners);
+    }
+
     public function testSectionsMissingInResourceKeepTypeStaticFlag(): void
     {
         // Ровно случай инцидента: у контекстной копии устаревший снимок из

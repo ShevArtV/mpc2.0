@@ -15,6 +15,12 @@ use MpcServices\Helpers\Response;
  */
 class Base
 {
+    /**
+     * Служебное поле записи слитого конфига: `type` — секция пришла из конфига
+     * типа страницы, `resource` — ресурс перекрыл её своим `mpc_config`.
+     * Живёт только в памяти: в TV конфиг из `mergeSectionConfigs` не пишется.
+     */
+    public const SECTION_OWNER_FIELD = 'mpc_config_owner';
 
     /**
      * @var \modX
@@ -173,6 +179,13 @@ class Base
             'assetsPath' => $this->modx->getOption('assets_path', null, ''),
             'useLexicons' => $this->modx->getOption('mpc_use_lexicons', '', false),
             'defaultLanguageKey' => $this->modx->getOption('mpc_default_language', '', 'ru'),
+            // Базовая культура сайта — системное значение `mpc_default_language`
+            // БЕЗ контекстного переопределения. `defaultLanguageKey` строкой выше
+            // читается с переопределением (2.5.62-rc: язык записи словаря — по
+            // контексту), поэтому в не-web контексте значения расходятся, и это
+            // расхождение — единственный надёжный признак «нарезка идёт в
+            // культуре перевода, а значения в вёрстке — на базовом языке».
+            'baseLanguageKey' => $this->getSystemDefaultLanguage(),
             'translatableContentTypes' => explode(',', $translatableContentTypes),
             'excludeLexiconFields' => $excludeLexiconFields,
             // Топики (имена файлов лексикона без .inc.php), куда каттер вырезает
@@ -305,6 +318,20 @@ class Base
     }
 
     /**
+     * Системное значение `mpc_default_language` — без контекстного
+     * переопределения. `getOption()` для этого не годится: он отдаёт значение
+     * ТЕКУЩЕГО контекста, а нам нужна культура, на которой написана вёрстка.
+     */
+    protected function getSystemDefaultLanguage(): string
+    {
+        $setting = $this->modx->getObject('modSystemSetting', ['key' => 'mpc_default_language']);
+        $value   = is_object($setting) && method_exists($setting, 'get')
+            ? trim((string)$setting->get('value')) : '';
+
+        return $value !== '' ? $value : trim((string)$this->modx->getOption('mpc_default_language', '', 'ru'));
+    }
+
+    /**
      * Конфиг секций ресурса (TV `mpc_config`) как массив записей.
      *
      * @param int $rid id ресурса
@@ -365,11 +392,16 @@ class Base
     {
         $byName = [];
         $extra  = [];
-        foreach ([$typeConfig, $resourceConfig] as $config) {
+        foreach (['type' => $typeConfig, 'resource' => $resourceConfig] as $owner => $config) {
             foreach ($config as $item) {
                 if (!is_array($item)) {
                     continue;
                 }
+                // Кто владеет секцией в слитом конфиге. Нужно писателю словарей:
+                // у секции, которую ресурс не перекрывает, значения ничем не
+                // отличаются от типа, и ресурсный словарь для неё — дубль,
+                // который на рендере перебивает словарь типа (#2609-155).
+                $item[self::SECTION_OWNER_FIELD] = $owner;
                 $name = (string)($item['section_name'] ?? '');
                 if ($name === '') {
                     $extra[] = $item;

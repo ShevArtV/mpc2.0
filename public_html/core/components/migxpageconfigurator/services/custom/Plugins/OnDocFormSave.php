@@ -64,6 +64,24 @@ class OnDocFormSave extends PluginHandler
                 : $Mpc->cutter->getMergedSectionConfig((int)$typeResource->get('id'), $rid);
 
             $Mpc->cutter->staticSectionNames = $Mpc->grabber->staticSectionNames = $Mpc->cutter->getStaticSectionNamesFromConfig($config);
+
+            /* Сохранение в не-web контексте режет тот же HTML-шаблон, где тексты
+             * на базовом языке. Показываем граберу, какие ключи в культуре этого
+             * контекста уже переведены выше ресурса — словарём типа страницы и
+             * словарём статичных блоков: их значения вёрстка не подменяет
+             * (#2609-155). */
+            if (!$isTypeItself && $Mpc->grabber->isForeignCulture()) {
+                $basePath = (string)$Mpc->grabber->properties['basePathToLexiconFile'];
+                $typeLexiconFilename = $Mpc->grabber->getResourceIdentifierById((int)$typeResource->get('id'));
+                $Mpc->grabber->setCultureBaseline(array_keys(
+                    $Mpc->grabber->getLexicons($typeLexiconFilename, $basePath)
+                    + $Mpc->grabber->getLexicons(
+                        (string)$Mpc->grabber->properties['staticBlocksPageLexiconFilename'],
+                        $basePath
+                    )
+                ));
+            }
+
             $Mpc->handleFile($fileName);
 
             if (!$isTypeItself) {
@@ -190,6 +208,16 @@ class OnDocFormSave extends PluginHandler
         foreach ($config as $item) {
             $prefix = $item['lexicon_prefix'] ?? $item['MIGX_formname'] ?? '';
             if ($prefix === '') {
+                continue;
+            }
+            /* Секция пришла из конфига типа и ресурсом не перекрыта — её ключи
+             * принадлежат словарю типа, который пишет сохранение самого типа.
+             * Дубль в ресурсном словаре на рендере перекрывал бы тип, и в
+             * культуре перевода это давало английский текст (#2609-155).
+             * Статику пропускать нельзя: её ветка ниже чистит осиротевшие ключи
+             * секции из ресурсного файла. */
+            $ownedByResource = ($item[\MpcServices\Handlers\Base::SECTION_OWNER_FIELD] ?? 'resource') === 'resource';
+            if (empty($item['is_static']) && !$ownedByResource) {
                 continue;
             }
             $result = $matcher->filter($freshLexicons, $prefix);
