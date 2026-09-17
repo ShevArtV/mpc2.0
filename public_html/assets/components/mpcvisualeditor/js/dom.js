@@ -262,3 +262,19 @@ export function confirmDialog(message, opts) {
         }
     });
 }
+
+/**
+ * Возвращает в поле исходный текст фрагментов, которые сайт показал в
+ * обработанном виде: `<span data-mpcve-raw="исходник">показанное</span>` →
+ * текст «исходник». Вызывается перед открытием редактора, чтобы тот прочитал и
+ * сохранил исходник, а не результат (например, метку единиц `[len:…|…]`).
+ */
+export function restoreRaw(el) {
+    if (!el || !el.querySelectorAll) { return; }
+    var nodes = el.querySelectorAll('[data-mpcve-raw]');
+    if (!nodes.length) { return; }
+    nodes.forEach(function (node) {
+        node.replaceWith(document.createTextNode(node.getAttribute('data-mpcve-raw')));
+    });
+    el.normalize();
+}

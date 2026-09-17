@@ -7,7 +7,7 @@
 import { S, setCookie, getCookie } from './state.js';
 import { SELECTOR, INFO_SELECTOR } from './constants.js';
 import { api, loadConfig } from './api.js';
-import { toast } from './dom.js';
+import { toast, restoreRaw } from './dom.js';
 import { markEl, markInfo, markContacts } from './mark.js';
 import { editors } from './editors/index.js';
 import { buildHiddenTriggers, removeHiddenTriggers } from './panels.js';
@@ -283,7 +283,7 @@ function bindClicks() {
             var ed = editors[type];
             if (ed && ed.open) {
                 markActivity(); // открытие редактора = активность (для idle-лока)
-                openForElement(el, function () { ed.open(el); });
+                openForElement(el, function () { restoreRaw(el); ed.open(el); });
             } else {
                 toast('Редактор «' + type + '» ещё в разработке', true);
             }
