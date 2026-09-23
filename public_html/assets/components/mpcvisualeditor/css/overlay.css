@@ -1119,6 +1119,37 @@ input.mpcve-ta__area {
     cursor: pointer;
 }
 
+/* Списки в richtext — всегда списками: сайт часто сбрасывает list-style у ul/ol
+   (или рисует свои маркеры через ::before), и в редакторе маркированный и
+   нумерованный список не отличить от абзацев. */
+.mpcve-rte__area ul,
+.mpcve-rte__area ol,
+.mpcve-editing[data-mpcve-type="richtext"] ul,
+.mpcve-editing[data-mpcve-type="richtext"] ol {
+    margin: .5em 0 !important;
+    padding-left: 1.5em !important;
+}
+.mpcve-rte__area ul,
+.mpcve-editing[data-mpcve-type="richtext"] ul {
+    list-style: disc outside !important;
+}
+.mpcve-rte__area ol,
+.mpcve-editing[data-mpcve-type="richtext"] ol {
+    list-style: decimal outside !important;
+}
+.mpcve-rte__area ul ul,
+.mpcve-editing[data-mpcve-type="richtext"] ul ul {
+    list-style-type: circle !important;
+}
+.mpcve-rte__area li,
+.mpcve-editing[data-mpcve-type="richtext"] li {
+    display: list-item !important;
+}
+.mpcve-rte__area li::before,
+.mpcve-editing[data-mpcve-type="richtext"] li::before {
+    content: none !important;
+}
+
 /* Диалог атрибутов картинки (поверх richtext-модалки/панели). */
 .mpcve-imgdlg {
     position: fixed;

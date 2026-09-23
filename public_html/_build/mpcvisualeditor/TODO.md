@@ -5,6 +5,15 @@
 
 ## ТРЕБУЕТ ПОРТА в линию MODX 3 (репозиторий mpc3)
 
+Ветка `v2.0.0`, релиз mpcVE 1.2.9-rc (23.09.2026) — списки в richtext всегда с маркерами
+и номерами, карточка mxBoard #2609-228. CSS переносится дословно.
+
+| Что портировать | Подробности |
+|---|---|
+| Блок «Списки в richtext» в `css/overlay.css` | После `.mpcve-rte__area img`: `ul`/`ol` внутри `.mpcve-rte__area` и `.mpcve-editing[data-mpcve-type="richtext"]` получают `list-style` disc/decimal, отступ, `li { display: list-item }`, `li::before { content: none }` — всё `!important` против сброса сайта |
+
+## ТРЕБУЕТ ПОРТА в линию MODX 3 (репозиторий mpc3)
+
 Ветка `v2.0.0`, релиз mpcVE 1.2.8-rc (17.09.2026) — исходник обработанного фрагмента
 (`data-mpcve-raw`), карточка mxBoard #2609-229. JS переносится дословно.
 
