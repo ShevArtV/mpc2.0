@@ -20,7 +20,7 @@ import { parseRecord, isScalar, fieldLabel, esc, toast, confirmDialog, openModal
 import { STRUCTURAL } from '../constants.js';
 import { findSectionInLevel } from '../address.js';
 import {
-    openBlockPanel, isImgRecord, recordKind, isSectionExcluded, lexValue, MIGX_SERVICE, _setRowsOpener
+    openBlockPanel, isImgRecord, isRowsRecord, recordKind, isSectionExcluded, lexValue, MIGX_SERVICE, _setRowsOpener
 } from '../panels.js';
 
 function rid() { return S.cfg.resourceId || 0; }
@@ -33,25 +33,6 @@ function boolOf(v) { return v === true || v === 1 || v === '1' || v === 'true'; 
 function recOf(v) {
     if (Array.isArray(v)) { return v; }
     return (typeof v === 'string') ? parseRecord(v) : null;
-}
-
-// Ключи, из которых состоит media-ЗАПИСЬ (picture/video/audio/img). Всё, что вне
-// набора, — пользовательское поле строки MIGX-списка.
-var MEDIA_KEYS = [
-    'MIGX_id', 'src', 'srcset', 'sources', 'img', 'alt', 'title', 'width', 'height',
-    'poster', 'type', 'media', 'class', 'id', 'style', 'loading', 'controls', 'autoplay',
-    'loop', 'muted', 'playsinline', 'preload'
-];
-
-// Список СТРОК, а не media-запись. Media-запись всегда одна (rec.length === 1) и
-// состоит только из MEDIA_KEYS; список строк — либо длиннее одной, либо несёт
-// собственные поля. Проверять ДО recordKind: строка с подполем `img` (частый
-// случай карточки с картинкой) иначе опознаётся как <picture> и список
-// становится нередактируемым.
-function isRowsRecord(rec) {
-    if (!Array.isArray(rec) || !rec.length || !rec[0] || typeof rec[0] !== 'object') { return false; }
-    if (rec.length > 1) { return true; }
-    return Object.keys(rec[0]).some(function (k) { return MEDIA_KEYS.indexOf(k) === -1; });
 }
 
 // Тип поля для панели: сначала карта типов mpc_base (надёжнее формы значения),

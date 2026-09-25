@@ -7,6 +7,7 @@ import { toast, bgUrl, hasBg, openModal } from '../dom.js';
 import { fieldAddress } from '../address.js';
 import { openFileManager } from '../filemanager.js';
 import { makeUrlButton } from './urlrow.js';
+import { mpcAttr } from '../constants.js';
 
 function currentImageSrc(el) {
     if (el.tagName.toLowerCase() === 'img') {
@@ -47,7 +48,7 @@ function setImageSrc(el, url) {
 function isRecordImage(el) {
     if (el.tagName.toLowerCase() !== 'img' || hasBg(el)) { return false; }
     if (el.hasAttribute('data-mpc-tv')) { return false; }
-    var ftype = el.getAttribute('data-mpc-ftype') || '';
+    var ftype = mpcAttr(el, 'ftype') || '';
     return ftype !== 'bg_img';
 }
 

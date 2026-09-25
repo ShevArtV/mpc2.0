@@ -17,6 +17,7 @@ import { api } from '../api.js';
 import { S } from '../state.js';
 import { toast, esc, openModal } from '../dom.js';
 import { fieldAddress } from '../address.js';
+import { mpcAttr } from '../constants.js';
 
 // "Caption==key||Caption2==key2" → [{label,value}]. @SELECT/динамика/неключевой → null.
 function parseOptions(raw) {
@@ -48,7 +49,7 @@ export function openListboxEditor(el) {
     var addr = fieldAddress(el);
     if (!addr) { toast('Нет адреса поля', true); return; }
 
-    var etype = el.getAttribute('data-mpcve-type') || el.getAttribute('data-mpc-ftype') || 'listbox';
+    var etype = el.getAttribute('data-mpcve-type') || mpcAttr(el, 'ftype') || 'listbox';
     var multiple = etype === 'listbox-multiple' || etype === 'checkbox';
     var rawValues = el.getAttribute('data-mpc-values') || '';
     var localOpts = parseOptions(rawValues);

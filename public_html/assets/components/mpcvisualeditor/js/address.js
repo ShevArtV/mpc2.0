@@ -4,6 +4,7 @@
  */
 import { S } from './state.js';
 import { isMedia, hasBg, parseRecord } from './dom.js';
+import { hasMpc, mpcAttr, mpcAttrName, mpcSel, closestMpc, fieldLevelOf } from './constants.js';
 
 // Тип редактора для стандартных полей ресурса MODX (rfield). Не перечисленные
 // (pagetitle/longtitle/menutitle/…) → text по умолчанию. data-mpc-ftype на
@@ -54,7 +55,7 @@ export function resolveAddress(el) {
     } else {
         for (var i = 0; i < el.attributes.length; i++) {
             var a = el.attributes[i];
-            if (a.name === 'data-mpc-field' || /^data-mpc-field-\d+$/.test(a.name)) {
+            if (fieldLevelOf(a.name) >= 0) { // data-mpc(ve)-field / -field-N
                 type = 'field';
                 fieldName = a.value;
                 break;
@@ -94,18 +95,15 @@ export function fieldAddress(el) {
         }
     }
 
-    // Вложенное поле строки списка: data-mpc-field-N. Собираем ПОЛНЫЙ путь
+    // Вложенное поле строки списка: data-mpc(ve)-field-N. Собираем ПОЛНЫЙ путь
     // [{field,idx}, …] от секции к строке (вложенность любой глубины), т.к.
     // поле уровня 2 лежит на 2 уровня глубже: cfg[sec][L1][i][L2][j][field].
-    var nestAttr = null;
+    var lvl = 0;
     for (var i = 0; i < el.attributes.length; i++) {
-        if (/^data-mpc-field-\d+$/.test(el.attributes[i].name)) {
-            nestAttr = el.attributes[i].name;
-            break;
-        }
+        lvl = fieldLevelOf(el.attributes[i].name);
+        if (lvl > 0) { break; }
     }
-    if (nestAttr) {
-        var lvl = parseInt(nestAttr.replace('data-mpc-field-', ''), 10);
+    if (lvl > 0) {
         var path = buildRowPath(el, lvl);
         if (path && path.length) {
             addr.path = path;
@@ -135,31 +133,32 @@ export function isGhostRow(el) {
 // ОРИГИНАЛА, верный и на клоне; поэтому он в приоритете. Фолбэк — счёт соседей
 // без призраков (для клона slick, у которого нет своего индекса, остаётся
 // неточность — он адресуется как ближайший оригинал).
-export function rowIndexOf(itemEl, itemAttr) {
+// itemName — имя маркера строки без префикса: 'item' | 'item-N'.
+export function rowIndexOf(itemEl, itemName) {
     var si = itemEl.getAttribute ? itemEl.getAttribute('data-swiper-slide-index') : null;
     if (si !== null && si !== '' && !isNaN(parseInt(si, 10))) { return parseInt(si, 10); }
     var idx = 0, sib = itemEl.previousElementSibling;
     while (sib) {
-        if (sib.hasAttribute(itemAttr) && !isGhostRow(sib)) { idx++; }
+        if (hasMpc(sib, itemName) && !isGhostRow(sib)) { idx++; }
         sib = sib.previousElementSibling;
     }
     return idx;
 }
 
-// Путь [{field,idx}, …] от секции к строке для поля уровня lvl (data-mpc-field-lvl).
-// Уровень N: ряд = data-mpc-item-(N-1) (data-mpc-item для N=1), контейнер
-// списка = data-mpc-field-(N-1) (data-mpc-field для N=1).
+// Путь [{field,idx}, …] от секции к строке для поля уровня lvl (field-lvl).
+// Уровень N: ряд = item-(N-1) (item для N=1), контейнер списка = field-(N-1)
+// (field для N=1). Префикс каждого звена любой: data-mpc-* или data-mpcve-*.
 export function buildRowPath(el, lvl) {
     var path = [];
     var base = el;
     for (var L = lvl; L >= 1; L--) {
-        var itemAttr = L > 1 ? 'data-mpc-item-' + (L - 1) : 'data-mpc-item';
-        var listAttr = L > 1 ? 'data-mpc-field-' + (L - 1) : 'data-mpc-field';
-        var itemEl = base.closest('[' + itemAttr + ']');
+        var itemName = L > 1 ? 'item-' + (L - 1) : 'item';
+        var listName = L > 1 ? 'field-' + (L - 1) : 'field';
+        var itemEl = closestMpc(base, itemName);
         if (!itemEl) { return null; }
-        var listEl = itemEl.closest('[' + listAttr + ']');
+        var listEl = closestMpc(itemEl, listName);
         if (!listEl || listEl === itemEl) { return null; }
-        path.unshift({ field: listEl.getAttribute(listAttr), idx: rowIndexOf(itemEl, itemAttr) });
+        path.unshift({ field: mpcAttr(listEl, listName), idx: rowIndexOf(itemEl, itemName) });
         base = listEl;
     }
     return path;
@@ -187,24 +186,23 @@ export function ftypeToEditor(ftype) {
     return 'text'; // text/email/url — инлайн-текст
 }
 
-// Атрибут-маркер списка + его уровень вложенности (0 = top-level data-mpc-field,
-// N = data-mpc-field-N). Ряды списка уровня N помечены data-mpc-item-N
-// (data-mpc-item для top). null — не список-контейнер.
+// Маркер списка + его уровень вложенности (0 = top-level field, N = field-N).
+// attr — реальное имя атрибута на el (data-mpc-* или data-mpcve-*), name — без
+// префикса. Ряды списка уровня N помечены item-N (item для top). null — не список.
 export function listFieldAttr(el) {
-    if (el.hasAttribute && el.hasAttribute('data-mpc-field')) {
-        return { attr: 'data-mpc-field', lvl: 0 };
-    }
-    for (var n = 1; n <= 3; n++) {
-        if (el.hasAttribute && el.hasAttribute('data-mpc-field-' + n)) {
-            return { attr: 'data-mpc-field-' + n, lvl: n };
+    for (var n = 0; n <= 3; n++) {
+        var name = n > 0 ? 'field-' + n : 'field';
+        var attr = mpcAttrName(el, name);
+        if (attr) {
+            return { attr: attr, name: name, lvl: n };
         }
     }
     return null;
 }
 
-// Имя item-атрибута строк списка уровня lvl.
+// Имя маркера строк списка уровня lvl (без префикса): item | item-N.
 export function itemAttrForLevel(lvl) {
-    return lvl > 0 ? 'data-mpc-item-' + lvl : 'data-mpc-item';
+    return lvl > 0 ? 'item-' + lvl : 'item';
 }
 
 // Контейнер-список? = есть СВОИ строки (data-mpc-item уровня этого поля).
@@ -213,16 +211,16 @@ export function itemAttrForLevel(lvl) {
 export function isListEl(el) {
     var fa = listFieldAttr(el);
     if (!fa) {
-        return !!(el.querySelector && el.querySelector('[data-mpc-item]'));
+        return !!(el.querySelector && el.querySelector(mpcSel('item')));
     }
-    return !!(el.querySelector && el.querySelector('[' + itemAttrForLevel(fa.lvl) + ']'));
+    return !!(el.querySelector && el.querySelector(mpcSel(itemAttrForLevel(fa.lvl))));
 }
 
 export function editorTypeFor(el, addr) {
     // Произвольный лексикон: инлайн-правка содержимого (текст/HTML). Автор может
     // переопределить редактор через data-mpc-ftype (textarea/richtext); иначе text.
     if (addr && addr.type === 'lexicon') {
-        return ftypeToEditor(el.getAttribute('data-mpc-ftype')) || 'text';
+        return ftypeToEditor(mpcAttr(el, 'ftype')) || 'text';
     }
     // Маркер НА самом теге <a>/<link> → каттер кладёт плейсхолдер в href
     // (Cutter.php), значит значение поля — это АДРЕС ссылки. Правим href
@@ -234,7 +232,7 @@ export function editorTypeFor(el, addr) {
     }
     // Тип, заявленный автором через data-mpc-ftype (в edit-mode маркеры
     // сохраняются), — самый точный сигнал, важнее карты mpc_base.
-    var byFtype = ftypeToEditor(el.getAttribute('data-mpc-ftype'));
+    var byFtype = ftypeToEditor(mpcAttr(el, 'ftype'));
     if (byFtype) {
         return byFtype;
     }
@@ -315,15 +313,15 @@ export function rowPreview(itemEl) {
 // (повторяющиеся одноимённые соседи img/picture/video/audio — у них нет item).
 export function listRows(el, field) {
     var fa = listFieldAttr(el);
-    var itemAttr = itemAttrForLevel(fa ? fa.lvl : 0);
-    var listSel = fa ? fa.attr : 'data-mpc-field';
+    var itemName = itemAttrForLevel(fa ? fa.lvl : 0);
+    var listName = fa ? fa.name : 'field';
     // Клоны слайдеров отбрасываем: иначе строк «больше», чем в конфиге, а порядок
     // для add/move/delete не совпадает с данными (см. isGhostRow).
-    var items = Array.prototype.slice.call(el.querySelectorAll('[' + itemAttr + ']'))
-        .filter(function (it) { return it.closest('[' + listSel + ']') === el && !isGhostRow(it); });
+    var items = Array.prototype.slice.call(el.querySelectorAll(mpcSel(itemName)))
+        .filter(function (it) { return closestMpc(it, listName) === el && !isGhostRow(it); });
     if (!items.length && isMedia(el) && el.parentElement) {
         items = Array.prototype.slice.call(el.parentElement.children).filter(function (c) {
-            return c.getAttribute && c.getAttribute('data-mpc-field') === field && !isGhostRow(c);
+            return mpcAttr(c, 'field') === field && !isGhostRow(c);
         });
     }
     return items;

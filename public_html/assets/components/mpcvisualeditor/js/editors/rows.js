@@ -15,6 +15,7 @@ import { api } from '../api.js';
 import { toast, esc, isMedia, confirmDialog, openModal } from '../dom.js';
 import { listAddress, listRows, configRowCount, rowPreview, isListEl } from '../address.js';
 import { markFieldsWithin } from '../mark.js';
+import { FIELD_ATTRS, mpcAttr } from '../constants.js';
 import { openImageEditor } from './image.js';
 
 var BLANK_IMG = 'data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==';
@@ -30,6 +31,10 @@ function blankImg(m) {
     if (m.tagName && m.tagName.toLowerCase() === 'img') { m.setAttribute('src', BLANK_IMG); }
 }
 
+// Маркеры полей строки (оба префикса), кроме произвольного лексикона.
+var ROW_FIELD_SEL = FIELD_ATTRS.filter(function (a) { return a !== 'data-mpc-lexicon'; })
+    .map(function (a) { return '[' + a + ']'; }).join(',');
+
 // Клон строки-шаблона с очищенными значениями: текстовые поля → пусто (CSS-
 // плейсхолдер), медиа → прозрачный 1x1 (клик = загрузка). Контейнеры вложенных
 // списков НЕ чистим (сохраняем их строки-структуру); их поля чистятся как
@@ -37,11 +42,11 @@ function blankImg(m) {
 function cloneBlankRow(templateRow) {
     var clone = templateRow.cloneNode(true);
     var markers = [];
-    if (clone.matches && clone.matches('[data-mpc-field],[data-mpc-rfield],[data-mpc-tv],[data-mpc-field-1],[data-mpc-field-2],[data-mpc-field-3]')) {
+    if (clone.matches && clone.matches(ROW_FIELD_SEL)) {
         markers.push(clone);
     }
     Array.prototype.push.apply(markers,
-        clone.querySelectorAll('[data-mpc-field],[data-mpc-rfield],[data-mpc-tv],[data-mpc-field-1],[data-mpc-field-2],[data-mpc-field-3]'));
+        clone.querySelectorAll(ROW_FIELD_SEL));
     markers.forEach(function (el) {
         if (isMedia(el)) {
             if (el.tagName.toLowerCase() === 'img') {
@@ -67,7 +72,7 @@ export function openRowsEditor(listEl) {
     // data-mpc-max на контейнере списка → лимит числа строк. Фронт не даёт
     // добавлять сверх лимита (migx тоже ограничивает через extended.maxRecords).
     // 0 / нет атрибута = без лимита.
-    var maxRows = parseInt(listEl.getAttribute('data-mpc-max'), 10) || 0;
+    var maxRows = parseInt(mpcAttr(listEl, 'max'), 10) || 0;
 
     var m = openModal({
         cardClass: 'mpcve-modal__card--wide',

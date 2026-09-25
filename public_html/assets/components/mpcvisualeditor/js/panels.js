@@ -7,7 +7,7 @@
 import { S, lexValue } from './state.js';
 import { api, uploadMedia } from './api.js';
 import { esc, parseRecord, isScalar, fieldLabel, toast, openModal } from './dom.js';
-import { SECTION_STYLE_FIELDS, STRUCTURAL } from './constants.js';
+import { SECTION_STYLE_FIELDS, STRUCTURAL, mpcAttr, mpcSel, closestMpc } from './constants.js';
 import { findSectionInLevel, sectionConfig, sectionKeyOf, rowIndexOf } from './address.js';
 import { createRte, sanitizeHtml } from './editors/rte.js';
 import { openPictureEditor } from './editors/picture.js';
@@ -91,6 +91,25 @@ export function recordKind(rec) {
     return null;
 }
 
+// Ключи, из которых состоит media-ЗАПИСЬ (picture/video/audio/img). Всё, что вне
+// набора, — пользовательское поле строки MIGX-списка.
+export var MEDIA_KEYS = [
+    'MIGX_id', 'src', 'srcset', 'sources', 'img', 'alt', 'title', 'width', 'height',
+    'poster', 'type', 'media', 'class', 'id', 'style', 'loading', 'controls', 'autoplay',
+    'loop', 'muted', 'playsinline', 'preload'
+];
+
+// Список СТРОК, а не media-запись. Media-запись всегда одна (rec.length === 1) и
+// состоит только из MEDIA_KEYS; список строк — либо длиннее одной, либо несёт
+// собственные поля. Проверять ДО recordKind: строка с подполем `img` (частый
+// случай карточки с картинкой) иначе опознаётся как <picture> и список
+// становится нередактируемым.
+export function isRowsRecord(rec) {
+    if (!Array.isArray(rec) || !rec.length || !rec[0] || typeof rec[0] !== 'object') { return false; }
+    if (rec.length > 1) { return true; }
+    return Object.keys(rec[0]).some(function (k) { return MEDIA_KEYS.indexOf(k) === -1; });
+}
+
 // Стилевые поля секции (вкладка «Стили» mpc_base, кроме css_file_path).
 // Показываем ВСЕГДА (даже пустые — чтобы можно было ЗАДАТЬ ещё не существующее
 // значение, напр. CSS-класс для оформления).
@@ -115,11 +134,11 @@ function sectionStyleFields(sectionEl) {
 }
 
 // Имена ВИДИМЫХ top-level полей секции (есть DOM-маркер прямо в этой секции).
-// Контейнер списка несёт data-mpc-field → имя списка тоже «видимо». Под-поля
-// строк (data-mpc-field-N) сюда не попадают — это не top-level ключи конфига.
+// Контейнер списка несёт data-mpc(ve)-field → имя списка тоже «видимо». Под-поля
+// строк (field-N) сюда не попадают — это не top-level ключи конфига.
 function visibleSectionFields(sectionEl) {
     var seen = {};
-    ['data-mpc-field', 'data-mpc-rfield', 'data-mpc-tv'].forEach(function (attr) {
+    ['data-mpc-field', 'data-mpcve-field', 'data-mpc-rfield', 'data-mpc-tv'].forEach(function (attr) {
         sectionEl.querySelectorAll('[' + attr + ']').forEach(function (el) {
             if (el.closest('[data-mpc-section]') === sectionEl) {
                 seen[el.getAttribute(attr)] = true;
@@ -143,6 +162,11 @@ function sectionHidden(sectionEl) {
             if (isSectionExcluded(fname) || visible[fname]) { return; }
             var v = sc.obj[fname];
             var rec = recOf(v);
+            if (isRowsRecord(rec)) {
+                // MIGX-список (строки) → редактор строк (config-driven).
+                out.push(rowsDescriptor(sc.level, sc.section, fname, rec, []));
+                return;
+            }
             if (isImgRecord(rec)) {
                 out.push({
                     level: sc.level, section: sc.section, fieldName: fname,
@@ -161,11 +185,6 @@ function sectionHidden(sectionEl) {
                 });
                 return;
             }
-            if (Array.isArray(rec)) {
-                // MIGX-список (строки) → редактор строк (config-driven).
-                out.push(rowsDescriptor(sc.level, sc.section, fname, rec, []));
-                return;
-            }
             if (!isScalar(v) || rec) { return; } // прочие записи/не-скаляры пока пропускаем
             out.push({
                 level: sc.level, section: sc.section,
@@ -181,21 +200,21 @@ function sectionHidden(sectionEl) {
 function itemInfo(itemEl) {
     var sc = sectionConfig(itemEl.closest('[data-mpc-section]'));
     if (!sc) { return null; }
-    var listEl = itemEl.closest('[data-mpc-field]'); // контейнер списка (предок)
+    var listEl = closestMpc(itemEl, 'field'); // контейнер списка (предок)
     if (!listEl) { return null; }
     return {
         section: sc.section, level: sc.level, obj: sc.obj,
-        parentField: listEl.getAttribute('data-mpc-field'),
-        idx: rowIndexOf(itemEl, 'data-mpc-item')
+        parentField: mpcAttr(listEl, 'field'),
+        idx: rowIndexOf(itemEl, 'item')
     };
 }
 
 // Имена под-полей строки, имеющих DOM-маркер внутри ЭТОГО item (level-1).
 function visibleItemSubs(itemEl) {
     var seen = {};
-    itemEl.querySelectorAll('[data-mpc-field-1]').forEach(function (el) {
-        if (el.closest('[data-mpc-item]') === itemEl) {
-            seen[el.getAttribute('data-mpc-field-1')] = true;
+    itemEl.querySelectorAll(mpcSel('field-1')).forEach(function (el) {
+        if (closestMpc(el, 'item') === itemEl) {
+            seen[mpcAttr(el, 'field-1')] = true;
         }
     });
     return seen;
@@ -214,6 +233,12 @@ function itemHidden(itemEl) {
         if (sub === 'MIGX_id' || STRUCTURAL.indexOf(sub) !== -1 || vis[sub]) { return; }
         var sv = row[sub];
         var rec = recOf(sv);
+        if (isRowsRecord(rec)) {
+            // Вложенный MIGX-список внутри строки → редактор строк с path к этой строке.
+            out.push(rowsDescriptor(info.level, info.section, sub, rec,
+                [{ field: info.parentField, idx: info.idx }]));
+            return;
+        }
         if (isImgRecord(rec)) {
             out.push({
                 level: info.level, section: info.section,
@@ -231,12 +256,6 @@ function itemHidden(itemEl) {
                 type: (kind === 'picture') ? 'picture' : 'media',
                 isVideo: (kind === 'video'), recordEditor: true, label: fieldLabel(sub)
             });
-            return;
-        }
-        if (Array.isArray(rec)) {
-            // Вложенный MIGX-список внутри строки → редактор строк с path к этой строке.
-            out.push(rowsDescriptor(info.level, info.section, sub, rec,
-                [{ field: info.parentField, idx: info.idx }]));
             return;
         }
         if (!isScalar(sv)) { return; } // не-скаляр, не запись — пропускаем
@@ -323,7 +342,7 @@ export function buildHiddenTriggers() {
         return;
     }
     var sections = document.querySelectorAll('[data-mpc-section]');
-    var items = document.querySelectorAll('[data-mpc-item]');
+    var items = document.querySelectorAll(mpcSel('item'));
     var triggers = 0;
     sections.forEach(function (sectionEl) {
         var fields = sectionHidden(sectionEl);

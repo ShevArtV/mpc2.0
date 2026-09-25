@@ -2,9 +2,53 @@
  * mpcVisualEditor — константы (без зависимостей).
  */
 
+// Префиксы маркеров цепочки полей. data-mpc-* читает и нарезка, и редактор;
+// data-mpcve-* — ТОЛЬКО редактор: нарезка их не видит, поэтому ими размечают
+// кастомный вывод (чанк сниппета), который нельзя дублировать цепочкой data-mpc-*
+// (нарезка сочла бы дубль полем и затёрла контент). Схема та же:
+// field > item > field-1 > item-1 > field-2 …, плюс ftype и max; цепочка может
+// быть смешанной. Секция/static/name/res — только data-mpc-*.
+export var MARKER_PREFIXES = ['data-mpc-', 'data-mpcve-'];
+
+// Имя атрибута-маркера `name` (field, item-1, ftype…), которое есть на el, или null.
+export function mpcAttrName(el, name) {
+    if (!el || !el.hasAttribute) { return null; }
+    for (var i = 0; i < MARKER_PREFIXES.length; i++) {
+        if (el.hasAttribute(MARKER_PREFIXES[i] + name)) { return MARKER_PREFIXES[i] + name; }
+    }
+    return null;
+}
+
+export function hasMpc(el, name) {
+    return mpcAttrName(el, name) !== null;
+}
+
+// Значение маркера (data-mpc-* приоритетнее data-mpcve-*), null если нет.
+export function mpcAttr(el, name) {
+    var a = mpcAttrName(el, name);
+    return a ? el.getAttribute(a) : null;
+}
+
+// CSS-селектор маркера в обоих префиксах: [data-mpc-X],[data-mpcve-X].
+export function mpcSel(name) {
+    return MARKER_PREFIXES.map(function (p) { return '[' + p + name + ']'; }).join(',');
+}
+
+// Ближайший предок (вкл. el) с маркером `name` в любом префиксе.
+export function closestMpc(el, name) {
+    return el && el.closest ? el.closest(mpcSel(name)) : null;
+}
+
+// Уровень поля цепочки по имени атрибута: 0 — field, N — field-N, -1 — не поле.
+export function fieldLevelOf(attrName) {
+    var m = /^data-mpc(?:ve)?-field(?:-(\d+))?$/.exec(attrName || '');
+    return m ? (m[1] ? parseInt(m[1], 10) : 0) : -1;
+}
+
 // Атрибуты-маркеры редактируемых полей в DOM (edit-mode сохраняет их в рендере).
 export var FIELD_ATTRS = ['data-mpc-field', 'data-mpc-rfield', 'data-mpc-tv',
     'data-mpc-field-1', 'data-mpc-field-2', 'data-mpc-field-3',
+    'data-mpcve-field', 'data-mpcve-field-1', 'data-mpcve-field-2', 'data-mpcve-field-3',
     // Произвольный лексиконный ключ (data-mpc-lexicon="topic:key") — правится
     // инлайн как текст/HTML, привязки к секции/ресурсу нет.
     'data-mpc-lexicon'];

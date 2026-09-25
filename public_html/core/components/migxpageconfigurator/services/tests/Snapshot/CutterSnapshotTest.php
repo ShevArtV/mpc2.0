@@ -155,6 +155,26 @@ class CutterSnapshotTest extends TestCase
     }
 
     /**
+     * Тест: маркеры только для mpcVE (data-mpcve-*) снимаются тем же strip, что и
+     * data-mpc-*, — при mpc_edit_mode=0 в файлах их не остаётся.
+     */
+    public function testStripPatternRemovesMpcveMarkers(): void
+    {
+        $cutter = new Cutter($this->modx, $this->makeBaseProperties());
+        $prop = (new \ReflectionClass($cutter))->getProperty('properties');
+        $prop->setAccessible(true);
+        $pattern = $prop->getValue($cutter)['pattern'];
+
+        $html = '<div class="grid" data-mpcve-field="routine_products">'
+            . '<a href="#" data-mpcve-item><h4 data-mpcve-field-1="title" data-mpcve-ftype="richtext">T</h4></a></div>';
+        $out = preg_replace($pattern, '', $html);
+
+        $this->assertStringNotContainsString('data-mpcve', $out);
+        $this->assertStringContainsString('<div class="grid">', $out);
+        $this->assertStringContainsString('<h4>T</h4>', $out);
+    }
+
+    /**
      * Тест: img с data-mpc-field получает Fenom-плейсхолдер в src.
      */
     public function testCutterSetsImagePlaceholder(): void

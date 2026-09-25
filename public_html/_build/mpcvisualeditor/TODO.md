@@ -5,6 +5,19 @@
 
 ## ТРЕБУЕТ ПОРТА в линию MODX 3 (репозиторий mpc3)
 
+Ветка `v2.0.0`, релиз mpcVE 1.2.11-rc + mpc 2.6.9-pl (25.09.2026) — разметка `data-mpcve-*`
+для полей только редактора и список строк в панели скрытых полей. JS переносится дословно.
+
+| Что портировать | Подробности |
+|---|---|
+| `js/constants.js` | `MARKER_PREFIXES`, `mpcAttrName/hasMpc/mpcAttr/mpcSel/closestMpc/fieldLevelOf`; `FIELD_ATTRS` с `data-mpcve-field(-N)` |
+| `js/address.js` | `resolveAddress/fieldAddress/buildRowPath/rowIndexOf/listFieldAttr/itemAttrForLevel/isListEl/editorTypeFor/listRows` — через помощники; `rowIndexOf` и `itemAttrForLevel` принимают/отдают имя без префикса (`item`, `item-N`), `listFieldAttr` отдаёт `{attr, name, lvl}` |
+| `js/panels.js`, `js/editors/sectionfields.js` | `MEDIA_KEYS`/`isRowsRecord` переехали в panels.js (экспорт); `sectionHidden`/`itemHidden` проверяют `isRowsRecord` раньше `isImgRecord`/`recordKind`; маркеры через помощники |
+| `js/editors/rows.js`, `image.js`, `listbox.js` | селектор полей из `FIELD_ATTRS`, `max`/`ftype` через `mpcAttr` |
+| mpc `Cutter.php` `pattern` | `data-mpc(?:ve)?-(…)` — strip снимает и `data-mpcve-*` |
+
+## ТРЕБУЕТ ПОРТА в линию MODX 3 (репозиторий mpc3)
+
 Ветка `v2.0.0`, релиз mpcVE 1.2.10-rc (23.09.2026) — метка версии у ассетов редактора,
 карточка mxBoard #2609-228. PHP переносится с учётом пространств имён MODX 3.
 
